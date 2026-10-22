@@ -1,4 +1,5 @@
 import { useMemo, useRef } from 'react'
+import type React from 'react'
 import * as THREE from 'three'
 import { useFrame, useThree } from '@react-three/fiber'
 import { G, game, say } from './state'
@@ -11,7 +12,7 @@ import { flashFace } from './face'
  * 开膛手杰克（Jack the Ripper，1888 年伦敦白教堂）
  * 维多利亚式高礼帽、黑色长披风、惨白面孔、空洞双眼里的红光、手术刀。
  */
-function useKillerParts() {
+export function useKillerParts() {
   return useMemo(() => {
     const coat = new THREE.LatheGeometry(
       [
@@ -349,6 +350,28 @@ export function Killer() {
 
   return (
     <group ref={root}>
+      <RipperBody parts={p} headRef={head} armRef={knifeArm} eyeRef={eyeLight} />
+    </group>
+  )
+}
+
+/** 开膛手杰克的模型本体（游戏与短片共用） */
+export function RipperBody({
+  parts: p,
+  headRef,
+  armRef,
+  eyeRef,
+}: {
+  parts: ReturnType<typeof useKillerParts>
+  headRef?: React.Ref<THREE.Group>
+  armRef?: React.Ref<THREE.Group>
+  eyeRef?: React.Ref<THREE.PointLight>
+}) {
+  const head = headRef
+  const knifeArm = armRef
+  const eyeLight = eyeRef
+  return (
+    <>
       <mesh geometry={p.coat} material={p.coatMat} castShadow />
       <mesh geometry={p.coat} material={p.lining} scale={[0.97, 1, 0.97]} />
       <mesh geometry={p.cape} material={p.coatMat} castShadow />
@@ -392,6 +415,6 @@ export function Killer() {
         </mesh>
       </group>
       <pointLight ref={eyeLight} position={[0, 1.95, 0.3]} color="#ff2a10" distance={5} decay={2} intensity={2} />
-    </group>
+    </>
   )
 }

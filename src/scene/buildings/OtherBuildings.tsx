@@ -213,8 +213,6 @@ export function Gate() {
       <Block size={[7, 4.2, 12]} position={[-1.5, 2.1, 16]} material={white} />
       <Block size={[0.2, 3, 10]} position={[2.05, 2.1, 16]} material={glass} />
       <Block size={[8.5, 0.6, 13.5]} position={[-1.5, 4.5, 16]} material={white} />
-      {/* 电动伸缩门 */}
-      <Block size={[0.6, 1.5, 12]} position={[0.5, 0.75, 3.5]} color="#a7acb1" rough={0.3} metal={0.8} />
       <Block size={[0.4, 0.15, 19]} position={[0.5, 0.02, 0]} color="#2c2c2c" />
       {/* 门前铺装 */}
       <Block size={[16, 0.04, 44]} position={[6, 0.02, 0]} color="#bdb8ae" shadow={false} />

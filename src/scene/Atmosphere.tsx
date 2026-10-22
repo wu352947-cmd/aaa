@@ -118,7 +118,33 @@ export const PRESETS: Record<TimeOfDay, Preset> = {
     env: 0.45,
     bloom: 1.0,
   },
+  // 黎明前的冷蓝：短片尾声
+  dawn: {
+    elev: 4,
+    azim: 95,
+    sunColor: '#c9d6ff',
+    sunI: 1.2,
+    hemiSky: '#9fb2cf',
+    hemiGround: '#3a3e46',
+    hemiI: 1.1,
+    zenith: '#1b2a48',
+    mid: '#4a5f82',
+    horizon: '#a8b6c6',
+    ground: '#2a3038',
+    glow: 0.5,
+    clouds: 0.55,
+    cloudColor: '#8a97aa',
+    stars: 0.05,
+    fog: '#7d8896',
+    fogD: 0.009,
+    night: 0.1,
+    env: 0.6,
+    bloom: 0.6,
+  },
 }
+
+/** 短片导演可覆盖的天空参数（月亮方向、雾浓度） */
+export const atmosOverride = { moonDir: null as THREE.Vector3 | null, fogD: null as number | null, instant: false }
 
 /** 运行时插值中的当前参数（Effects 读取 bloom） */
 export const live = { bloom: PRESETS.day.bloom }
@@ -227,9 +253,9 @@ export function Atmosphere() {
   useFrame(({ clock }, dt) => {
     const P = PRESETS[time]
     const c = cur.current
-    const k = 1 - Math.exp(-dt * 1.8)
+    const k = atmosOverride.instant ? 1 : 1 - Math.exp(-dt * 1.8)
     const lerpC = (key: keyof Preset, u: THREE.Color) => u.lerp(new THREE.Color(P[key] as string), k)
-    c.dir.lerp(sunDir(P.elev, P.azim), k).normalize()
+    c.dir.lerp(atmosOverride.moonDir ?? sunDir(P.elev, P.azim), k).normalize()
     for (const key of ['sunI', 'hemiI', 'glow', 'clouds', 'stars', 'fogD', 'night', 'env', 'bloom'] as const) c[key] += (P[key] - c[key]) * k
 
     const u = sky.uniforms
@@ -259,7 +285,7 @@ export function Atmosphere() {
     const fog = scene.fog as THREE.FogExp2
     if (fog) {
       fog.color.lerp(new THREE.Color(P.fog), k)
-      fog.density = c.fogD
+      fog.density = atmosOverride.fogD ?? c.fogD
     }
     scene.environmentIntensity = c.env
     setNightLevel(c.night)

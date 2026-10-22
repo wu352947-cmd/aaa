@@ -10,7 +10,7 @@ import { textTexture } from '../lib/textures'
 import { flashFace } from './face'
 
 /** 白衣长发女学生的幽灵：低头站立，长发遮脸，靠近或盯着看就会消失 */
-function useGhostParts() {
+export function useGhostParts() {
   return useMemo(() => {
     const dress = new THREE.LatheGeometry(
       [
@@ -34,7 +34,7 @@ function useGhostParts() {
   }, [])
 }
 
-function GhostBody({ parts }: { parts: ReturnType<typeof useGhostParts> }) {
+export function GhostBody({ parts }: { parts: ReturnType<typeof useGhostParts> }) {
   return (
     <group>
       <mesh geometry={parts.dress} material={parts.white} />

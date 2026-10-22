@@ -11,7 +11,7 @@ import { TRACK_CENTER } from '../scene/Sports'
  * 纸扎人：中式民俗恐怖。白纸脸、两团腮红、黑点眼、朱红小嘴，纸糊的长袍。
  * 你看不到它们的时候，它们会转过来对着你；有几个还会悄悄挪近。
  */
-function useParts() {
+export function useEffigyParts() {
   return useMemo(() => {
     const face = textTexture('effigy-face', 256, 256, (c, w, h) => {
       c.fillStyle = '#f3efe6'
@@ -115,7 +115,7 @@ function layout(): Eff[] {
 }
 
 export function Effigies() {
-  const parts = useParts()
+  const parts = useEffigyParts()
   const data = useMemo(layout, [])
   const groups = useRef<(THREE.Group | null)[]>([])
   const runId = useRef(-1)
@@ -169,6 +169,18 @@ export function Effigies() {
     <group>
       {data.map((e, i) => (
         <group key={i} ref={(el) => (groups.current[i] = el)} position={e.pos}>
+          <EffigyBody parts={parts} robe={e.robe} />
+        </group>
+      ))}
+    </group>
+  )
+}
+
+/** 纸扎人模型本体（游戏与短片共用） */
+export function EffigyBody({ parts, robe }: { parts: ReturnType<typeof useEffigyParts>; robe: number }) {
+  const e = { robe }
+  return (
+    <>
           <mesh geometry={parts.body} material={parts.robes[e.robe]} castShadow />
           {/* 纸糊的扁平脸 */}
           <mesh position={[0, 1.42, 0.02]} scale={[1, 1.15, 0.55]} material={parts.paper}>
@@ -189,8 +201,6 @@ export function Effigies() {
               <cylinderGeometry args={[0.045, 0.06, 0.6, 8]} />
             </mesh>
           ))}
-        </group>
-      ))}
-    </group>
+    </>
   )
 }

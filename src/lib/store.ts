@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from 'react'
 
-export type TimeOfDay = 'day' | 'dusk' | 'night' | 'horror'
+export type TimeOfDay = 'day' | 'dusk' | 'night' | 'horror' | 'dawn'
 export type Quality = 'high' | 'low'
 
 export interface AppState {
