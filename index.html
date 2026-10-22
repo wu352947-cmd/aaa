@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#0f1513">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<title>栖湖 · 西湖湖景公寓</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600;700&display=swap">
+<style>
+  /* 布局：全屏 3D 画布 + 四角 HUD；水墨黑半透明面板、青瓷绿点缀、朱砂印章红 */
+  :root {
+    --ink: rgba(14, 18, 17, 0.62);
+    --ink-solid: #0f1513;
+    --paper: #f1ece2;
+    --paper-dim: rgba(241, 236, 226, 0.68);
+    --celadon: #9cc3b2;
+    --seal: #b8392b;
+    --line: rgba(241, 236, 226, 0.16);
+    --serif: "Noto Serif SC", "Songti SC", "STSong", "SimSun", serif;
+    --sans: -apple-system, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", system-ui, sans-serif;
+    color-scheme: dark;
+  }
+  [hidden] { display: none !important; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: var(--ink-solid); color: var(--paper); font-family: var(--sans); -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent; }
+  #app { position: fixed; inset: 0; }
+  #app canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+  #touch { position: absolute; inset: 0; touch-action: none; z-index: 2; }
+  .hud { position: absolute; z-index: 5; pointer-events: none; }
+  .hud * { pointer-events: auto; }
+
+  /* 房间名 */
+  #room { left: max(16px, env(safe-area-inset-left, 0px)); top: calc(env(safe-area-inset-top, 0px) + 14px); pointer-events: none; }
+  #room * { pointer-events: none; }
+  #room .name { font-family: var(--serif); font-size: 26px; font-weight: 600; letter-spacing: 0.12em; text-shadow: 0 1px 12px rgba(0,0,0,0.45); display: flex; align-items: center; gap: 10px; }
+  #room .name .seal { display: inline-grid; place-items: center; width: 22px; height: 22px; background: var(--seal); color: #fff3e6; font-size: 12px; letter-spacing: 0; border-radius: 2px; }
+  #room .meta { margin-top: 4px; font-size: 12px; color: var(--paper-dim); letter-spacing: 0.08em; text-shadow: 0 1px 8px rgba(0,0,0,0.5); font-variant-numeric: tabular-nums; }
+
+  /* 工具栏 */
+  #bar { right: max(12px, env(safe-area-inset-right, 0px)); top: calc(env(safe-area-inset-top, 0px) + 12px); display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; max-width: 70vw; }
+  .btn { appearance: none; border: 1px solid var(--line); background: var(--ink); color: var(--paper); font: 500 13px var(--sans); letter-spacing: 0.06em; height: 38px; min-width: 52px; padding: 0 12px; border-radius: 19px; backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+  .btn:active { transform: scale(0.96); }
+  .btn.on { border-color: var(--celadon); color: var(--celadon); }
+  .btn:focus-visible { outline: 2px solid var(--celadon); outline-offset: 2px; }
+  .btn small { color: var(--paper-dim); font-size: 11px; }
+
+  /* 指南针 */
+  #compass { left: 50%; transform: translateX(-50%); bottom: calc(env(safe-area-inset-bottom, 0px) + 12px); width: 220px; height: 26px; overflow: hidden; pointer-events: none; mask-image: linear-gradient(90deg, transparent, #000 25%, #000 75%, transparent); -webkit-mask-image: linear-gradient(90deg, transparent, #000 25%, #000 75%, transparent); }
+  #compass .strip { position: absolute; top: 0; left: 0; height: 26px; white-space: nowrap; font-family: var(--serif); font-size: 13px; color: var(--paper-dim); text-shadow: 0 1px 6px rgba(0,0,0,0.6); }
+  #compass .strip span { position: absolute; top: 6px; transform: translateX(-50%); }
+  #compass .strip span.major { color: var(--paper); font-weight: 600; }
+  #compass .strip span.lake { color: var(--celadon); }
+  #compass::after { content: ""; position: absolute; left: 50%; top: 0; width: 1px; height: 5px; background: var(--paper); }
+
+  /* 摇杆 */
+  #joy { position: absolute; z-index: 4; width: 128px; height: 128px; margin: -64px 0 0 -64px; border-radius: 50%; border: 1px solid rgba(241,236,226,0.35); background: radial-gradient(circle, rgba(14,18,17,0.18), rgba(14,18,17,0.42)); pointer-events: none; opacity: 0; transition: opacity .2s; }
+  #joy.show { opacity: 1; }
+  #joy .knob { position: absolute; left: 50%; top: 50%; width: 52px; height: 52px; margin: -26px 0 0 -26px; border-radius: 50%; background: rgba(241,236,226,0.85); box-shadow: 0 2px 10px rgba(0,0,0,0.35); }
+  #joyHint { left: max(28px, env(safe-area-inset-left, 0px)); bottom: calc(env(safe-area-inset-bottom, 0px) + 28px); width: 110px; height: 110px; border-radius: 50%; border: 1px dashed rgba(241,236,226,0.3); display: grid; place-items: center; font-size: 12px; color: var(--paper-dim); pointer-events: none; text-align: center; line-height: 1.5; }
+
+  /* 景点标注 */
+  #labels { position: absolute; inset: 0; z-index: 3; pointer-events: none; overflow: hidden; }
+  .lm { position: absolute; transform: translate(-50%, -100%); display: flex; flex-direction: column; align-items: center; gap: 2px; white-space: nowrap; }
+  .lm b { font-family: var(--serif); font-weight: 600; font-size: 13px; letter-spacing: 0.12em; padding: 3px 8px; background: var(--ink); border: 1px solid var(--line); border-radius: 3px; backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
+  .lm i { font-style: normal; font-size: 10px; color: var(--paper-dim); text-shadow: 0 1px 4px rgba(0,0,0,0.8); font-variant-numeric: tabular-nums; }
+  .lm::after { content: ""; width: 1px; height: 18px; background: linear-gradient(var(--paper), transparent); }
+
+  /* 平面图 */
+  #map { position: absolute; z-index: 8; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(560px, calc(100vw - 32px)); max-height: calc(100vh - 40px); overflow: auto; background: rgba(14,18,17,0.88); border: 1px solid var(--line); border-radius: 10px; padding: 16px; box-sizing: border-box; backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); }
+  #map h2 { margin: 0 0 4px; font-family: var(--serif); font-size: 18px; letter-spacing: 0.14em; font-weight: 600; text-wrap: balance; }
+  #map p { margin: 0 0 12px; color: var(--paper-dim); font-size: 12px; }
+  #map canvas { width: 100%; height: auto; display: block; border-radius: 6px; background: #181f1c; touch-action: manipulation; }
+  #map .rooms { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+  #map .rooms .btn { height: 32px; font-size: 12px; }
+  #map .close { position: absolute; right: 12px; top: 12px; }
+
+  /* 设置 */
+  #settings { position: absolute; z-index: 8; right: max(12px, env(safe-area-inset-right, 0px)); top: calc(env(safe-area-inset-top, 0px) + 60px); width: 260px; background: rgba(14,18,17,0.9); border: 1px solid var(--line); border-radius: 10px; padding: 14px; box-sizing: border-box; display: grid; gap: 12px; font-size: 13px; }
+  #settings .row { display: grid; gap: 6px; }
+  #settings .seg { display: flex; gap: 6px; flex-wrap: wrap; }
+  #settings .seg .btn { height: 30px; font-size: 12px; min-width: 0; flex: 1; }
+  #settings input[type=range] { width: 100%; accent-color: var(--celadon); }
+  #settings .fps { color: var(--paper-dim); font-variant-numeric: tabular-nums; font-size: 12px; }
+
+  /* 提示 */
+  #toast { left: 50%; bottom: calc(env(safe-area-inset-bottom, 0px) + 46px); transform: translateX(-50%); padding: 8px 16px; background: var(--ink); border: 1px solid var(--line); border-radius: 18px; font-size: 13px; letter-spacing: 0.04em; transition: opacity .5s; pointer-events: none; text-align: center; max-width: calc(100vw - 260px); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
+
+  /* 载入 */
+  #loader { position: fixed; inset: 0; z-index: 20; display: grid; place-items: center; background: radial-gradient(ellipse at 50% 70%, #24302b 0%, #0f1513 70%); padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); transition: opacity .8s; }
+  #loader .card { display: grid; gap: 14px; justify-items: center; text-align: center; max-width: 520px; }
+  #loader h1 { margin: 0; font-family: var(--serif); font-weight: 700; font-size: clamp(42px, 9vw, 72px); letter-spacing: 0.3em; padding-left: 0.3em; line-height: 1; }
+  #loader h1 .seal { display: inline-grid; place-items: center; vertical-align: middle; width: 0.42em; height: 0.42em; margin-left: 0.18em; font-size: 0.42em; letter-spacing: 0; padding: 0.1em; background: var(--seal); color: #fff1e4; border-radius: 3px; }
+  #loader .sub { font-family: var(--serif); letter-spacing: 0.26em; color: var(--paper-dim); font-size: 14px; }
+  #loader .poem { font-family: var(--serif); font-size: 13px; letter-spacing: 0.3em; color: var(--celadon); writing-mode: horizontal-tb; }
+  #loader .bar { width: min(320px, 70vw); height: 2px; background: rgba(241,236,226,0.12); overflow: hidden; border-radius: 1px; }
+  #loader .bar i { display: block; height: 100%; width: 0%; background: var(--celadon); transition: width .3s; }
+  #loader .status { font-size: 12px; color: var(--paper-dim); letter-spacing: 0.06em; min-height: 1.4em; font-variant-numeric: tabular-nums; }
+  #loader .enter { height: 44px; padding: 0 30px; font-size: 15px; letter-spacing: 0.3em; border-color: var(--celadon); color: var(--celadon); }
+  #loader .tips { font-size: 12px; color: var(--paper-dim); line-height: 1.8; }
+  #rotate { display: none; }
+  @media (orientation: portrait) and (max-width: 700px) {
+    #rotate { display: block; left: 50%; transform: translateX(-50%); bottom: calc(env(safe-area-inset-bottom, 0px) + 150px); font-size: 12px; color: var(--paper-dim); background: var(--ink); padding: 6px 12px; border-radius: 14px; border: 1px solid var(--line); pointer-events: none; white-space: nowrap; }
+    #bar { max-width: 62vw; }
+    #bar .btn { height: 34px; min-width: 44px; padding: 0 10px; font-size: 12px; }
+    #toast { max-width: calc(100vw - 32px); bottom: calc(env(safe-area-inset-bottom, 0px) + 160px); }
+  }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div id="touch"></div>
+<div id="labels"></div>
+<div id="joy"><div class="knob"></div></div>
+
+<div id="room" class="hud"><div class="name"><span class="seal">湖</span><span id="roomName">客厅</span></div><div class="meta" id="roomMeta">54 ㎡ · 正对西湖</div></div>
+<div id="compass" class="hud"><div class="strip" id="compassStrip"></div></div>
+<div id="bar" class="hud">
+  <button class="btn" id="bTime" type="button">夕照</button>
+  <button class="btn" id="bLight" type="button">灯光</button>
+  <button class="btn" id="bView" type="button">第一人称</button>
+  <button class="btn" id="bLabel" type="button">景点</button>
+  <button class="btn" id="bMap" type="button">户型</button>
+  <button class="btn" id="bSet" type="button">设置</button>
+</div>
+<div id="joyHint" class="hud">按住拖动<br>行走</div>
+<div id="rotate" class="hud">横屏观湖视野更开阔</div>
+<div id="toast" class="hud" style="opacity:0"></div>
+
+<div id="map" hidden>
+  <button class="btn close" id="mapClose" type="button">关闭</button>
+  <h2>户型 · 三室两厅</h2>
+  <p>建筑面积约 290 ㎡ · 一梯一户 · 湖景露台 22 ㎡ · 点击房间即可前往</p>
+  <canvas id="mapCanvas" width="1120" height="680"></canvas>
+  <div class="rooms" id="mapRooms"></div>
+</div>
+
+<div id="settings" hidden>
+  <div class="row"><span>画质</span>
+    <div class="seg" id="qSeg">
+      <button class="btn" data-q="low" type="button">流畅</button>
+      <button class="btn" data-q="mid" type="button">标准</button>
+      <button class="btn" data-q="high" type="button">精致</button>
+    </div>
+  </div>
+  <div class="row"><label for="sens">转向灵敏度</label><input id="sens" type="range" min="0.4" max="2" step="0.05" value="1"></div>
+  <div class="row"><span>全屏</span><div class="seg"><button class="btn" id="bFull" type="button">进入全屏</button></div></div>
+  <div class="fps" id="fps">— fps</div>
+</div>
+
+<div id="loader">
+  <div class="card">
+    <h1>栖湖<span class="seal">西湖</span></h1>
+    <div class="sub">西湖 · 湖滨 六层 · 湖景三室两厅</div>
+    <div class="poem">水光潋滟晴方好　山色空蒙雨亦奇</div>
+    <div class="bar"><i id="loadBar"></i></div>
+    <div class="status" id="loadStatus">正在铺设人字拼橡木地板…</div>
+    <button class="btn enter" id="enter" type="button" hidden>入 室</button>
+    <div class="tips">左侧拖动行走 · 右侧滑动环顾 · 走近门扇自动开启<br>电脑：WASD 移动 · 鼠标拖动环顾 · Shift 快走</div>
+  </div>
+</div>
+<script type="module" src="/src/main.js"></script>
+</body>
+</html>

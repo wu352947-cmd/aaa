@@ -1,0 +1,21 @@
+{
+  "name": "westlake-residence",
+  "version": "1.0.0",
+  "description": "西湖畔·湖景精品公寓 3D 漫游（移动端）",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "dev": "vite --host",
+    "build": "vite build",
+    "preview": "vite preview --host",
+    "artifact": "vite build && node scripts/make-artifact.mjs"
+  },
+  "dependencies": {
+    "three": "0.180.0"
+  },
+  "devDependencies": {
+    "playwright-core": "^1.64.1",
+    "vite": "7.1.5",
+    "vite-plugin-singlefile": "2.3.0"
+  }
+}
