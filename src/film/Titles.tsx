@@ -118,8 +118,8 @@ function drawCard(c: CanvasRenderingContext2D, card: Card, t: number, W: number,
       c.font = `500 ${30 * u}px ${FONT.serif}`
       const n = Math.ceil(((t - card.start) / 1.2) * [...zh].length)
       c.fillText([...zh].slice(0, n).join(''), W / 2, y0)
-      c.font = `italic 400 ${21 * u}px ${FONT.old}`
-      c.fillStyle = '#b9ad9c'
+      c.font = `italic 400 ${23 * u}px ${FONT.old}`
+      c.fillStyle = '#d6cbb9'
       c.fillText(en, W / 2, y0 + 36 * u)
       break
     }

@@ -109,7 +109,7 @@ export default function FilmApp() {
       >
         <Suspense fallback={null}>
           <Atmosphere />
-          <Campus />
+          <Campus people={false} />
           <IronGate />
           <GroundFog />
           <Crowd />

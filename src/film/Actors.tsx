@@ -324,7 +324,7 @@ export function EffigyCast() {
   const spots = useMemo<EffSpot[]>(() => {
     const out: EffSpot[] = []
     // S08：林晓站过的地方
-    out.push({ pos: new THREE.Vector3(-12, 0, 62), yaw: 2.4, from: 75.9, to: 80, robe: 2 })
+    out.push({ pos: new THREE.Vector3(-12, 0, 62), yaw: -0.95, from: 75.9, to: 80, robe: 2 })
     // S10：操场中央三排五列，背对镜头“做早操”，101 秒时一起转头
     for (let r = 0; r < 3; r++)
       for (let c = 0; c < 5; c++)
@@ -433,7 +433,7 @@ export function BattleMap() {
       </mesh>
       {DOTS.map(([x, z], i) => (
         <mesh key={i} ref={(el) => (dots.current[i] = el)} position={[x, 2, z]} material={dotMat}>
-          <sphereGeometry args={[1.8, 12, 8]} />
+          <sphereGeometry args={[3.4, 14, 10]} />
         </mesh>
       ))}
     </group>
@@ -467,7 +467,7 @@ export function CloudCredit() {
     const t = film.t
     if (!ref.current) return
     ref.current.visible = between(t, 9, 18)
-    const k = THREE.MathUtils.clamp((t - 10) / 2, 0, 1) * THREE.MathUtils.clamp((16.8 - t) / 1.2, 0, 1)
+    const k = THREE.MathUtils.clamp((t - 9.6) / 1.4, 0, 1) * THREE.MathUtils.clamp((14.2 - t) / 1.2, 0, 1)
     mat.opacity = k * 0.92
     ref.current.lookAt(camera.position)
   })
@@ -707,6 +707,9 @@ export function Whitechapel() {
           <planeGeometry args={[50, 12]} />
         </mesh>
       ))}
+      <mesh position={[0, 6, -34]} material={wallMat}>
+        <planeGeometry args={[8, 12]} />
+      </mesh>
       {/* 煤气灯 */}
       <group position={[-2.6, 0, -8]}>
         <mesh position={[0, 1.8, 0]}>

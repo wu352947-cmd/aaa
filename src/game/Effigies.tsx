@@ -189,6 +189,10 @@ export function EffigyBody({ parts, robe }: { parts: ReturnType<typeof useEffigy
           <mesh position={[0, 1.43, 0.105]} material={parts.faceMat}>
             <circleGeometry args={[0.13, 24]} />
           </mesh>
+          {/* 后脑勺的黑发：转身前后一眼可辨 */}
+          <mesh position={[0, 1.44, 0]} scale={[1.04, 1.2, 0.62]} material={parts.hair}>
+            <sphereGeometry args={[0.155, 16, 12, Math.PI, Math.PI]} />
+          </mesh>
           <mesh position={[0, 1.6, -0.02]} material={parts.hair}>
             <sphereGeometry args={[0.1, 12, 10]} />
           </mesh>

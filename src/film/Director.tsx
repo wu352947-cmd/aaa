@@ -91,6 +91,7 @@ export function Director({ score, onEnd }: { score: Score; onEnd: () => void }) 
     atmosOverride.moonDir = shot.moon ? new THREE.Vector3(...shot.moon).normalize() : null
     atmosOverride.fogD = shot.fog ?? null
     atmosOverride.instant = cut
+    atmosOverride.light = shot.light ?? 0.5
 
     // 东门铁栅：她跑到时自己打开
     haunt.gateOpen = t >= 133.5 && t < 165

@@ -144,7 +144,7 @@ export const PRESETS: Record<TimeOfDay, Preset> = {
 }
 
 /** 短片导演可覆盖的天空参数（月亮方向、雾浓度） */
-export const atmosOverride = { moonDir: null as THREE.Vector3 | null, fogD: null as number | null, instant: false }
+export const atmosOverride = { moonDir: null as THREE.Vector3 | null, fogD: null as number | null, instant: false, light: 1 }
 
 /** 运行时插值中的当前参数（Effects 读取 bloom） */
 export const live = { bloom: PRESETS.day.bloom }
@@ -274,11 +274,11 @@ export function Atmosphere() {
 
     if (sun.current) {
       sun.current.position.copy(target.position).addScaledVector(c.dir, 600)
-      sun.current.intensity = c.sunI
+      sun.current.intensity = c.sunI * atmosOverride.light
       sun.current.color.lerp(new THREE.Color(P.sunColor), k)
     }
     if (hemi.current) {
-      hemi.current.intensity = c.hemiI
+      hemi.current.intensity = c.hemiI * atmosOverride.light
       hemi.current.color.lerp(new THREE.Color(P.hemiSky), k)
       hemi.current.groundColor.lerp(new THREE.Color(P.hemiGround), k)
     }

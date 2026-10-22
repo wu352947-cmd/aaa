@@ -33,6 +33,7 @@ export interface Shot {
   fog?: number
   moon?: V3 // 月亮方向（剪影镜头）
   flashlight?: boolean // 机位自带手电（主观镜头）
+  light?: number // 环境光倍率（默认 0.5，比游戏更暗）
 }
 
 const S = (id: string, start: number, end: number, title: string, keys: CamKey[], o: Partial<Shot> = {}): Shot => ({ id, start, end, title, keys, ...o })
@@ -49,7 +50,7 @@ export const SHOTS: Shot[] = [
       { u: 0.45, p: [165, 360, 470], t: [20, 0, 50], fov: 48 },
       { u: 1, p: [-20, 120, 230], t: [-80, 10, 60], fov: 44, roll: -0.06 },
     ],
-    { ease: 'smooth', fog: 0.0035 },
+    { ease: 'smooth', fog: 0.0035, light: 0.85 },
   ),
   S(
     's03',
@@ -69,8 +70,8 @@ export const SHOTS: Shot[] = [
     50,
     '00:13。低机位横移：升旗广场上挤作一团的学生，手电光乱晃。广播响起。',
     [
-      { u: 0, p: [-34, 1.3, 54], t: [4, 2.6, 10], fov: 40 },
-      { u: 1, p: [-12, 1.5, 47], t: [10, 3, 6], fov: 36 },
+      { u: 0, p: [-34, 1.3, 44.5], t: [4, 2.6, 10], fov: 40 },
+      { u: 1, p: [-14, 1.5, 42], t: [10, 3, 6], fov: 36 },
     ],
     { ease: 'linear', shake: 0.004 },
   ),
@@ -81,7 +82,7 @@ export const SHOTS: Shot[] = [
     '仰拍剪影：笃行楼顶，血月正中站着戴高礼帽的人。荷兰角。',
     [
       { u: 0, p: [7, 1, 27], t: [0, 26, -10], fov: 32, roll: 0.16 },
-      { u: 1, p: [5, 1.1, 24], t: [0, 27.6, -10.4], fov: 22, roll: 0.2 },
+      { u: 1, p: [5, 1.1, 24], t: [0, 27.6, -10.4], fov: 12, roll: 0.2 },
     ],
     { ease: 'in', moon: [-0.12, 0.58, -0.8], fog: 0.008 },
   ),
@@ -102,8 +103,8 @@ export const SHOTS: Shot[] = [
     60,
     '回到楼顶：人已经不见了。',
     [
-      { u: 0, p: [5, 1.1, 24], t: [0, 27.6, -10.4], fov: 22, roll: 0.2 },
-      { u: 1, p: [5, 1.1, 24], t: [0, 27.4, -10.4], fov: 23, roll: 0.2 },
+      { u: 0, p: [5, 1.1, 24], t: [0, 27.6, -10.4], fov: 12, roll: 0.2 },
+      { u: 1, p: [5, 1.1, 24], t: [0, 27.4, -10.4], fov: 13, roll: 0.2 },
     ],
     { moon: [-0.12, 0.58, -0.8], fog: 0.008 },
   ),
@@ -143,7 +144,7 @@ export const SHOTS: Shot[] = [
       { u: 0, p: [12, 560, 62], t: [12, 0, 60], fov: 40, roll: 0 },
       { u: 1, p: [12, 430, 36], t: [12, 0, 34], fov: 40, roll: 0.35 },
     ],
-    { ease: 'linear', fog: 0.0015 },
+    { ease: 'linear', fog: 0.0015, light: 0.9 },
   ),
   S(
     's10',
@@ -155,7 +156,7 @@ export const SHOTS: Shot[] = [
       { u: 0.75, p: [88, 1.6, 79], t: [90, 1.5, 100], fov: 36 },
       { u: 1, p: [92, 1.6, 80], t: [80, 1.6, 95], fov: 28 },
     ],
-    { ease: 'linear', fog: 0.016 },
+    { ease: 'linear', fog: 0.024, light: 0.35 },
   ),
   S(
     's11',
@@ -225,7 +226,7 @@ export const SHOTS: Shot[] = [
       { u: 0, p: [0, 1.7, 46], t: [1.5, 1.4, 21], fov: 38 },
       { u: 1, p: [0, 42, 96], t: [0, 0, 12], fov: 40 },
     ],
-    { ease: 'smooth', time: 'dawn', fog: 0.008 },
+    { ease: 'smooth', time: 'dawn', fog: 0.008, light: 1 },
   ),
 ]
 

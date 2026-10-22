@@ -12,7 +12,7 @@ import { Surroundings } from './Surroundings'
 import { FlagAnimator } from './Flags'
 import { BanyanBenches, People } from './Props'
 
-export function Campus() {
+export function Campus({ people = true }: { people?: boolean }) {
   return (
     <group>
       <FlagAnimator />
@@ -31,7 +31,7 @@ export function Campus() {
       <Plaza />
       <Sports />
       <Vegetation />
-      <People />
+      {people && <People />}
       <BanyanBenches />
       <Surroundings />
     </group>
