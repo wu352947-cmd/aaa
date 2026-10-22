@@ -1,0 +1,603 @@
+<title>小 Clawd 的星空夜</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Silkscreen&family=ZCOOL+KuaiLe&display=swap">
+<style>
+  /* Layout: one framed pixel stage (the hero), a dialog strip, chunky action keys, then the sprite sheet as a spec card. Deliberately single dark night theme. */
+  :root {
+    --night: #120e22;
+    --plum: #1d1734;
+    --frame: #3a2c5c;
+    --ink: #f6ecdc;
+    --muted: #a99bc8;
+    --clay: #d97757;
+    --clay-hi: #eba083;
+    --clay-lo: #b85c3e;
+    --font-display: "ZCOOL KuaiLe", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+    --font-pixel: "Silkscreen", ui-monospace, "SFMono-Regular", Menlo, monospace;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  body {
+    background: var(--night);
+    color: var(--ink);
+    font-family: var(--font-display);
+    padding-block: 28px 48px;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+  }
+  .wrap { max-width: 760px; margin: 0 auto; display: grid; gap: 22px; }
+
+  header { display: grid; gap: 8px; }
+  .eyebrow {
+    font-family: var(--font-pixel);
+    font-size: 11px;
+    letter-spacing: 0.12em;
+    color: var(--clay-hi);
+    text-transform: uppercase;
+  }
+  h1 {
+    margin: 0;
+    font-weight: 400;
+    font-size: clamp(30px, 6vw, 46px);
+    line-height: 1.1;
+    text-wrap: balance;
+  }
+  h1 .tag { color: var(--clay); }
+  header p { margin: 0; color: var(--muted); font-size: 16px; line-height: 1.6; max-width: 60ch; }
+
+  /* stepped pixel frame */
+  .stage {
+    margin: 0;
+    background: var(--plum);
+    padding: 10px;
+    box-shadow:
+      0 -4px 0 0 var(--frame), 0 4px 0 0 var(--frame),
+      -4px 0 0 0 var(--frame), 4px 0 0 0 var(--frame),
+      0 12px 0 0 #0a0815;
+    display: grid;
+    gap: 10px;
+  }
+  #scene {
+    display: block;
+    width: 100%;
+    max-width: 100%;
+    aspect-ratio: 4 / 3;
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+    cursor: pointer;
+    background: #1a1433;
+  }
+  #scene:focus-visible { outline: 3px solid var(--clay-hi); outline-offset: 3px; }
+
+  .dialog {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    background: var(--night);
+    padding: 12px 14px;
+    min-height: 54px;
+    box-shadow: inset 0 0 0 2px var(--frame);
+  }
+  .dialog .who {
+    font-family: var(--font-pixel);
+    font-size: 12px;
+    color: var(--night);
+    background: var(--clay);
+    padding: 3px 8px 4px;
+    flex: none;
+  }
+  .dialog .line { font-size: 18px; min-width: 0; }
+  .dialog .caret {
+    display: inline-block; width: 8px; height: 14px; margin-left: 3px;
+    background: var(--clay-hi); vertical-align: -1px;
+    animation: caret 1s steps(1) infinite;
+  }
+  @keyframes caret { 50% { opacity: 0; } }
+
+  .controls { display: flex; flex-wrap: wrap; gap: 14px 12px; }
+  .key {
+    font-family: var(--font-display);
+    font-size: 17px;
+    color: var(--night);
+    background: var(--clay);
+    border: 0;
+    padding: 10px 16px 9px;
+    cursor: pointer;
+    box-shadow: 0 5px 0 0 var(--clay-lo), inset 0 2px 0 0 var(--clay-hi);
+    transition: transform 60ms steps(1), box-shadow 60ms steps(1);
+    display: inline-flex; align-items: center; gap: 8px;
+  }
+  .key kbd {
+    font-family: var(--font-pixel);
+    font-size: 10px;
+    background: rgba(18, 14, 34, 0.18);
+    padding: 1px 5px;
+  }
+  .key.alt { background: var(--frame); color: var(--ink); box-shadow: 0 5px 0 0 #241a3d, inset 0 2px 0 0 #5a4888; }
+  .key:hover { filter: brightness(1.07); }
+  .key:active { transform: translateY(5px); box-shadow: 0 0 0 0 var(--clay-lo); }
+  .key:focus-visible { outline: 3px solid var(--ink); outline-offset: 4px; }
+
+  .sheet {
+    display: grid;
+    grid-template-columns: minmax(0, 340px) minmax(0, 1fr);
+    gap: 24px;
+    align-items: start;
+    background: var(--plum);
+    padding: 20px;
+    box-shadow: inset 0 0 0 2px var(--frame);
+  }
+  .sheet h2 { margin: 0 0 4px; font-weight: 400; font-size: 22px; }
+  .sheet .spec { font-family: var(--font-pixel); font-size: 11px; color: var(--muted); letter-spacing: 0.06em; }
+  #sprite { width: 100%; max-width: 100%; image-rendering: pixelated; display: block; }
+  .legend { list-style: none; margin: 14px 0 0; padding: 0; display: grid; gap: 9px; }
+  .legend li { display: grid; grid-template-columns: 18px minmax(0, 1fr) auto; gap: 10px; align-items: center; font-size: 15px; }
+  .legend .sw { width: 18px; height: 18px; box-shadow: inset 0 0 0 2px rgba(0,0,0,0.25); }
+  .legend code { font-family: var(--font-pixel); font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+  footer { color: var(--muted); font-size: 13px; line-height: 1.6; }
+
+  @media (max-width: 600px) {
+    .sheet { grid-template-columns: minmax(0, 1fr); }
+    .key { font-size: 16px; padding: 9px 12px 8px; }
+    .key kbd { display: none; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .dialog .caret { animation: none; }
+  }
+</style>
+
+<main class="wrap">
+  <header>
+    <span class="eyebrow">Pixel fan art · 80 × 60 canvas</span>
+    <h1>小 <span class="tag">Clawd</span> 的星空夜</h1>
+    <p>Claude Code 的橙色小家伙在星空下散步、发呆、偷偷看你。点它一下会跳起来，也可以用下面的按钮和它玩。</p>
+  </header>
+
+  <figure class="stage">
+    <canvas id="scene" width="80" height="60" tabindex="0" aria-label="像素场景：橙色的小 Clawd 在星空下的草地上，点击让它跳起来"></canvas>
+    <div class="dialog" aria-live="polite">
+      <span class="who">CLAWD</span>
+      <span class="line"><span id="line"></span><span class="caret"></span></span>
+    </div>
+  </figure>
+
+  <div class="controls" role="group" aria-label="和 Clawd 互动">
+    <button class="key" id="btn-jump" type="button">跳一跳 <kbd>SPACE</kbd></button>
+    <button class="key" id="btn-wave" type="button">挥挥手 <kbd>W</kbd></button>
+    <button class="key" id="btn-love" type="button">比个心 <kbd>H</kbd></button>
+    <button class="key" id="btn-party" type="button">撒花 <kbd>P</kbd></button>
+    <button class="key alt" id="btn-sleep" type="button">晚安 <kbd>S</kbd></button>
+  </div>
+
+  <section class="sheet" aria-label="像素档案">
+    <canvas id="sprite" width="340" height="204" aria-label="Clawd 的 20 × 12 像素原稿"></canvas>
+    <div>
+      <h2>像素档案</h2>
+      <div class="spec">SPRITE 20 × 12 PX · 6 COLORS · 4 LEGS</div>
+      <ul class="legend" id="legend"></ul>
+    </div>
+  </section>
+
+  <footer>粉丝向像素同人，向 Claude Code 里的小吉祥物 Clawd 致敬，非官方作品。</footer>
+</main>
+
+<script>
+(() => {
+  const RM = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const cv = document.getElementById('scene');
+  const ctx = cv.getContext('2d');
+  const W = 80, H = 60, GROUND = 50;
+
+  const C = {
+    O: '#d97757', L: '#eba083', D: '#b85c3e', K: '#2a1a14',
+    B: '#f4a09a', E: '#fff6e0', M: '#8a3b2e'
+  };
+
+  const rect = (c, x, y, w, h, col) => { c.fillStyle = col; c.fillRect(x | 0, y | 0, w, h); };
+  const px = (c, x, y, col) => rect(c, x, y, 1, 1, col);
+
+  // seeded random so the scene is the same every visit
+  let seed = 7;
+  const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+
+  /* ---------- static background ---------- */
+  const bg = document.createElement('canvas');
+  bg.width = W; bg.height = H;
+  const b = bg.getContext('2d');
+  const bands = ['#1a1433', '#211840', '#2a1d4c', '#352257', '#45285e', '#5a2f62', '#73385f'];
+  for (let y = 0; y < GROUND; y++) {
+    const i = Math.min(bands.length - 1, Math.floor(y / 8));
+    for (let x = 0; x < W; x++) {
+      let col = bands[i];
+      if (y % 8 === 7 && i + 1 < bands.length && (x + y) % 2 === 0) col = bands[i + 1];
+      px(b, x, y, col);
+    }
+  }
+  // moon with dithered halo
+  const mx = 66, my = 11;
+  for (let dy = -8; dy <= 8; dy++) for (let dx = -8; dx <= 8; dx++) {
+    const d = dx * dx + dy * dy;
+    if (d <= 26) px(b, mx + dx, my + dy, '#f3e3bb');
+    else if (d <= 50 && (dx + dy) % 2 === 0) px(b, mx + dx, my + dy, '#2f2558');
+  }
+  [[64, 9], [65, 9], [68, 13], [67, 12], [63, 13]].forEach(([x, y]) => px(b, x, y, '#dcc797'));
+  // far and near hills
+  for (let x = 0; x < W; x++) {
+    const h1 = 40 + Math.round(3 * Math.sin(x / 9) + 2 * Math.sin(x / 4 + 1));
+    rect(b, x, h1, 1, GROUND - h1, '#3a2852');
+    const h2 = 45 + Math.round(2 * Math.sin(x / 6 + 2) + Math.sin(x / 3));
+    rect(b, x, h2, 1, GROUND - h2, '#2b1e3e');
+  }
+  // ground
+  rect(b, 0, GROUND, W, H - GROUND, '#3a2a4a');
+  rect(b, 0, GROUND, W, 1, '#6a4f86');
+  rect(b, 0, GROUND + 1, W, 1, '#4b3763');
+  for (let i = 0; i < 70; i++) px(b, Math.floor(rnd() * W), GROUND + 2 + Math.floor(rnd() * 8), '#30223f');
+  for (let i = 0; i < 18; i++) px(b, Math.floor(rnd() * W), GROUND + 3 + Math.floor(rnd() * 7), '#47355c');
+  // tufts of grass and flowers
+  for (let x = 1; x < W; x += 3 + Math.floor(rnd() * 4)) px(b, x, GROUND - 1, '#4e6b58');
+  [[7, '#f4a09a'], [14, '#ffd27a'], [57, '#ffd27a'], [64, '#f4a09a'], [73, '#c8b6ff']].forEach(([x, col]) => {
+    px(b, x, GROUND - 1, '#5f8f5a');
+    px(b, x, GROUND - 2, '#5f8f5a');
+    px(b, x, GROUND - 3, col); px(b, x - 1, GROUND - 3, col); px(b, x + 1, GROUND - 3, col);
+    px(b, x, GROUND - 4, col);
+  });
+  // tiny signpost
+  rect(b, 74, GROUND - 7, 1, 7, '#6b4a3a');
+  rect(b, 71, GROUND - 9, 7, 3, '#8a6248');
+  rect(b, 72, GROUND - 8, 5, 1, '#5a3c2e');
+
+  /* ---------- stars & ambient particles ---------- */
+  const stars = [];
+  while (stars.length < 34) {
+    const x = Math.floor(rnd() * W), y = Math.floor(rnd() * 36);
+    if (Math.hypot(x - mx, y - my) < 10) continue;
+    stars.push({ x, y, ph: rnd() * 6.28, sp: 0.6 + rnd() * 1.6, big: rnd() < 0.15 });
+  }
+  const flies = Array.from({ length: 6 }, () => ({
+    x: rnd() * W, y: 40 + rnd() * 12, ph: rnd() * 6.28, sp: 0.3 + rnd() * 0.5
+  }));
+  let shoot = null, nextShoot = 4000;
+
+  /* ---------- Clawd sprite ---------- */
+  // o: { eyes: open|closed|happy, ex: -1..1, arm: down|up1|up2, mouth: smile|open|sleep, step: 0|1|2, bob: 0|1 }
+  function spriteCells(o) {
+    const cells = new Map();
+    const set = (c, r, col) => cells.set(c + ',' + r, [c, r, col]);
+    const bo = o.bob || 0;
+    // legs: lifted legs stop one pixel short of the ground
+    [4, 6, 13, 15].forEach((c, i) => {
+      const lift = (o.step === 1 && i % 2 === 0) || (o.step === 2 && i % 2 === 1) ? 1 : 0;
+      for (let r = 9 + bo; r <= 11 - lift; r++) set(c, r, C.D);
+    });
+    // body
+    for (let r = 0; r <= 8; r++) for (let c = 3; c <= 16; c++) {
+      let col = C.O;
+      if (r === 0 || c === 3) col = C.L;
+      if (r === 8 || c === 16) col = C.D;
+      set(c, r + bo, col);
+    }
+    // arms
+    set(1, 4 + bo, C.O); set(2, 4 + bo, C.O); set(1, 5 + bo, C.D); set(2, 5 + bo, C.D);
+    if (o.arm === 'up1') { set(17, 4 + bo, C.O); set(18, 3 + bo, C.O); set(18, 2 + bo, C.L); }
+    else if (o.arm === 'up2') { set(17, 4 + bo, C.O); set(18, 3 + bo, C.O); set(19, 2 + bo, C.L); }
+    else { set(17, 4 + bo, C.O); set(18, 4 + bo, C.O); set(17, 5 + bo, C.D); set(18, 5 + bo, C.D); }
+    // face
+    const ex = o.ex || 0;
+    if (o.eyes === 'closed') {
+      [6, 7, 12, 13].forEach(c => set(c + ex, 4 + bo, C.K));
+    } else if (o.eyes === 'happy') {
+      [[5, 4], [6, 3], [7, 4], [12, 4], [13, 3], [14, 4]].forEach(([c, r]) => set(c, r + bo, C.K));
+    } else {
+      [6, 12].forEach(c => {
+        set(c + ex, 3 + bo, C.E); set(c + 1 + ex, 3 + bo, C.K);
+        set(c + ex, 4 + bo, C.K); set(c + 1 + ex, 4 + bo, C.K);
+      });
+    }
+    set(4, 5 + bo, C.B); set(5, 5 + bo, C.B); set(14, 5 + bo, C.B); set(15, 5 + bo, C.B);
+    if (o.mouth === 'open') {
+      set(9, 6 + bo, C.K); set(10, 6 + bo, C.K); set(9, 7 + bo, C.M); set(10, 7 + bo, C.M);
+    } else if (o.mouth === 'sleep') {
+      set(9, 6 + bo, C.D); set(10, 6 + bo, C.D);
+    } else {
+      set(8, 6 + bo, C.K); set(11, 6 + bo, C.K); set(9, 7 + bo, C.K); set(10, 7 + bo, C.K);
+    }
+    return [...cells.values()];
+  }
+
+  // Claude spark, two frames that alternate to twinkle
+  function spark(c, x, y, frame) {
+    const axis = frame ? 3 : 2, diag = frame ? 2 : 3;
+    const pts = [[0, 0]];
+    for (let i = 1; i <= axis; i++) pts.push([i, 0], [-i, 0], [0, i], [0, -i]);
+    for (let i = 1; i <= diag; i++) pts.push([i, i], [-i, i], [i, -i], [-i, -i]);
+    pts.forEach(([dx, dy]) => px(c, x + dx, y + dy, dx || dy ? C.O : C.L));
+  }
+
+  const HEART = ['XX.XX', 'XXXXX', '.XXX.', '..X..'];
+  const ZED = ['XXXX', '..X.', '.X..', 'XXXX'];
+  function glyph(c, rows, x, y, col, hi) {
+    rows.forEach((row, r) => [...row].forEach((ch, i) => { if (ch === 'X') px(c, x + i, y + r, col); }));
+    if (hi) px(c, x + 1, y + 1, hi);
+  }
+
+  /* ---------- state ---------- */
+  const S = {
+    x: 30, dir: 1, target: 30, pauseUntil: 1500,
+    sleeping: false, jumpAt: -1, waveAt: -1, happyUntil: 0,
+    blinkAt: 2500, pointerX: null, lastPointer: -1e9
+  };
+  const parts = [];
+
+  /* ---------- dialog ---------- */
+  const lineEl = document.getElementById('line');
+  let typeTimer = null, lastSay = 0;
+  function say(text) {
+    clearInterval(typeTimer);
+    lastSay = performance.now();
+    if (RM) { lineEl.textContent = text; return; }
+    let i = 0;
+    lineEl.textContent = '';
+    const chars = [...text];
+    typeTimer = setInterval(() => {
+      lineEl.textContent += chars[i++];
+      if (i >= chars.length) clearInterval(typeTimer);
+    }, 45);
+  }
+  const idleLines = [
+    '今晚的星星好多呀。',
+    '在想下一行代码怎么写……',
+    '散步中，请勿打扰（其实可以打扰）。',
+    '（偷偷看你）',
+    '四条腿走路，也是一种工程学。',
+    '要不要一起 debug 到天亮？'
+  ];
+  let idleIdx = 0;
+
+  /* ---------- actions ---------- */
+  function wake(quiet) {
+    if (!S.sleeping) return;
+    S.sleeping = false;
+    sleepBtn.firstChild.textContent = '晚安 ';
+    if (!quiet) say('唔……我醒啦！');
+  }
+  function jump(t) {
+    wake(true);
+    if (S.jumpAt > 0 && t - S.jumpAt < 700) return;
+    S.jumpAt = t;
+    say('嘿咻！');
+  }
+  function hearts(t, n) {
+    wake(true);
+    S.happyUntil = t + 1800;
+    for (let i = 0; i < n; i++) parts.push({
+      k: 'heart', x: S.x + 7 + (rnd() * 8 - 4), y: GROUND - 15, vy: -(6 + rnd() * 5),
+      ph: rnd() * 6.28, born: t + i * 160, life: 2200
+    });
+  }
+  function party(t) {
+    wake(true);
+    S.happyUntil = t + 2600;
+    const cols = [C.O, C.L, '#ffd27a', '#c8b6ff', '#8fd3c1', C.B];
+    for (let i = 0; i < 46; i++) parts.push({
+      k: 'conf', x: rnd() * W, y: -rnd() * 20, vx: rnd() * 6 - 3, vy: 8 + rnd() * 10,
+      col: cols[i % cols.length], born: t, life: 4200
+    });
+    say('撒花！今天也辛苦啦！');
+  }
+  function wave(t) {
+    wake(true);
+    S.waveAt = t;
+    say('嗨～很高兴见到你！');
+  }
+  function toggleSleep(t) {
+    if (S.sleeping) { wake(); return; }
+    S.sleeping = true;
+    S.jumpAt = -1; S.waveAt = -1;
+    sleepBtn.firstChild.textContent = '叫醒 ';
+    say('Zzz……明天见。');
+  }
+
+  const sleepBtn = document.getElementById('btn-sleep');
+  const now = () => performance.now();
+  document.getElementById('btn-jump').addEventListener('click', () => jump(now()));
+  document.getElementById('btn-wave').addEventListener('click', () => wave(now()));
+  document.getElementById('btn-love').addEventListener('click', () => { hearts(now(), 5); say('送你一颗像素爱心 ♥'); });
+  document.getElementById('btn-party').addEventListener('click', () => party(now()));
+  sleepBtn.addEventListener('click', () => toggleSleep(now()));
+
+  cv.addEventListener('click', () => { const t = now(); jump(t); hearts(t, 3); });
+  cv.addEventListener('pointermove', e => {
+    const r = cv.getBoundingClientRect();
+    S.pointerX = (e.clientX - r.left) / r.width * W;
+    S.lastPointer = now();
+  });
+  cv.addEventListener('pointerleave', () => { S.pointerX = null; });
+  document.addEventListener('keydown', e => {
+    if (e.target.closest && e.target.closest('button') && (e.key === ' ' || e.key === 'Enter')) return;
+    const t = now(), k = e.key.toLowerCase();
+    if (k === ' ') { e.preventDefault(); jump(t); }
+    else if (k === 'w') wave(t);
+    else if (k === 'h') { hearts(t, 5); say('送你一颗像素爱心 ♥'); }
+    else if (k === 'p') party(t);
+    else if (k === 's') toggleSleep(t);
+  });
+
+  /* ---------- frame ---------- */
+  let last = now();
+  function frame(t) {
+    const dt = Math.min(0.05, (t - last) / 1000);
+    last = t;
+    ctx.drawImage(bg, 0, 0);
+
+    // stars
+    stars.forEach(s => {
+      const v = RM ? 0.7 : Math.sin(t / 1000 * s.sp + s.ph);
+      if (v < -0.3) return;
+      const col = v > 0.6 ? '#fff4d6' : '#a99bd6';
+      px(ctx, s.x, s.y, col);
+      if (s.big && v > 0.75) {
+        ['#6f5fa0'].forEach(c2 => { px(ctx, s.x - 1, s.y, c2); px(ctx, s.x + 1, s.y, c2); px(ctx, s.x, s.y - 1, c2); px(ctx, s.x, s.y + 1, c2); });
+      }
+    });
+
+    // shooting star
+    if (!RM) {
+      if (!shoot && t > nextShoot) shoot = { x: 50 + rnd() * 25, y: 2 + rnd() * 6, born: t };
+      if (shoot) {
+        const p = (t - shoot.born) / 700;
+        if (p >= 1) { shoot = null; nextShoot = t + 6000 + rnd() * 7000; }
+        else {
+          const hx = shoot.x - p * 28, hy = shoot.y + p * 14;
+          px(ctx, hx, hy, '#fff6e0');
+          px(ctx, hx + 2, hy - 1, '#c9b8ef');
+          px(ctx, hx + 4, hy - 2, '#7d6bb0');
+        }
+      }
+    }
+
+    // fireflies
+    flies.forEach(f => {
+      const fx = RM ? f.x : (f.x + Math.sin(t / 1000 * f.sp + f.ph) * 6 + W) % W;
+      const fy = RM ? f.y : f.y + Math.sin(t / 700 * f.sp + f.ph * 2) * 2;
+      if (RM || Math.sin(t / 400 + f.ph * 3) > -0.2) px(ctx, fx, fy, '#ffe48a');
+    });
+
+    /* --- Clawd behaviour --- */
+    let walking = false;
+    const jumping = S.jumpAt > 0 && t - S.jumpAt < 700;
+    if (!S.sleeping && !jumping && !RM && t > S.pauseUntil) {
+      const d = S.target - S.x;
+      if (Math.abs(d) < 0.3) {
+        S.pauseUntil = t + 2200 + rnd() * 2600;
+        S.target = 14 + Math.floor(rnd() * 30);
+      } else {
+        S.dir = Math.sign(d);
+        S.x += S.dir * Math.min(Math.abs(d), 7 * dt);
+        walking = true;
+      }
+    }
+
+    let jumpH = 0;
+    if (jumping) {
+      const p = (t - S.jumpAt) / 700;
+      jumpH = Math.round(44 * p * (1 - p));
+    } else if (S.jumpAt > 0 && t - S.jumpAt < 760) {
+      // landing puff, spawned once
+      if (!S.puffed) {
+        S.puffed = true;
+        for (let i = 0; i < 6; i++) parts.push({
+          k: 'dust', x: S.x + 9 + (i < 3 ? -6 : 6), y: GROUND - 1, vx: (i < 3 ? -1 : 1) * (4 + rnd() * 6),
+          vy: -(2 + rnd() * 3), born: t, life: 450
+        });
+      }
+    }
+    if (jumping) S.puffed = false;
+
+    const happy = t < S.happyUntil || jumping;
+    const blinking = t > S.blinkAt && t < S.blinkAt + 130;
+    if (t > S.blinkAt + 130) S.blinkAt = t + 2200 + rnd() * 3000;
+
+    let ex = walking ? S.dir : 0;
+    if (S.pointerX !== null && t - S.lastPointer < 3000) {
+      const mid = S.x + 9.5;
+      ex = S.pointerX < mid - 4 ? -1 : S.pointerX > mid + 4 ? 1 : 0;
+    }
+
+    const step = walking ? (Math.floor(t / 180) % 2 ? 1 : 2) : 0;
+    let bob = 0;
+    if (!RM && !jumping) {
+      if (S.sleeping) bob = Math.floor(t / 1200) % 2;
+      else if (walking) bob = step === 1 ? 1 : 0;
+      else bob = Math.floor(t / 650) % 2;
+    }
+    let arm = 'down';
+    if (S.waveAt > 0 && t - S.waveAt < 1600) arm = Math.floor((t - S.waveAt) / 160) % 2 ? 'up2' : 'up1';
+
+    const o = {
+      eyes: S.sleeping || blinking ? 'closed' : happy ? 'happy' : 'open',
+      ex: S.sleeping ? 0 : ex,
+      mouth: S.sleeping ? 'sleep' : happy ? 'open' : 'smile',
+      arm, step, bob
+    };
+
+    const cx = Math.round(S.x), top = GROUND - 12 - jumpH;
+    // ground shadow shrinks while airborne
+    const sw = Math.max(6, 14 - Math.floor(jumpH / 2));
+    rect(ctx, cx + 10 - sw / 2, GROUND, sw, 1, '#2a1d38');
+    spriteCells(o).forEach(([c, r, col]) => px(ctx, cx + c, top + r, col));
+
+    // thought bubble with a twinkling spark while idle
+    if (!S.sleeping && !jumping && !walking && arm === 'down') {
+      const bx = cx + 20, by = top - 15;
+      px(ctx, cx + 18, top - 2, '#f3e9d8');
+      rect(ctx, cx + 19, top - 5, 2, 2, '#f3e9d8');
+      rect(ctx, bx + 1, by, 11, 9, '#f3e9d8');
+      rect(ctx, bx, by + 1, 13, 7, '#f3e9d8');
+      rect(ctx, bx + 1, by + 8, 11, 1, '#d8c8b4');
+      spark(ctx, bx + 6, by + 4, RM ? 1 : Math.floor(t / 500) % 2);
+    }
+
+    // sleeping Zzz
+    if (S.sleeping && !RM && !parts.some(p => p.k === 'z' && t - p.born < 900)) {
+      parts.push({ k: 'z', x: cx + 16, y: top - 3, born: t, life: 2600 });
+    }
+
+    // particles
+    for (let i = parts.length - 1; i >= 0; i--) {
+      const p = parts[i];
+      const age = t - p.born;
+      if (age < 0) continue;
+      if (age > p.life) { parts.splice(i, 1); continue; }
+      const a = age / 1000;
+      if (p.k === 'heart') {
+        const hx = p.x + Math.sin(a * 4 + p.ph) * 2, hy = p.y + p.vy * a;
+        glyph(ctx, HEART, hx, hy, age > p.life - 400 ? '#b84a5e' : '#ff6b81', '#ffd0d8');
+      } else if (p.k === 'conf') {
+        const cxp = p.x + p.vx * a + Math.sin(a * 6 + p.x) * 1.5;
+        const cyp = Math.min(GROUND + 2, p.y + p.vy * a + 4 * a * a);
+        px(ctx, cxp, cyp, p.col);
+        if (Math.floor(a * 8) % 2) px(ctx, cxp + 1, cyp, p.col);
+      } else if (p.k === 'dust') {
+        px(ctx, p.x + p.vx * a, p.y + p.vy * a + 10 * a * a, '#8a7aa8');
+      } else if (p.k === 'z') {
+        glyph(ctx, ZED, p.x + Math.sin(a * 2) * 2 + a * 2, p.y - a * 6, a > 1.8 ? '#6f5fa0' : '#c8b6ff');
+      }
+    }
+
+    // idle chatter
+    if (!S.sleeping && t - lastSay > 7000) say(idleLines[idleIdx++ % idleLines.length]);
+
+    requestAnimationFrame(frame);
+  }
+
+  /* ---------- sprite sheet ---------- */
+  const sp = document.getElementById('sprite');
+  const sc = sp.getContext('2d');
+  const cell = 17;
+  sc.fillStyle = '#120e22';
+  sc.fillRect(0, 0, sp.width, sp.height);
+  for (let r = 0; r < 12; r++) for (let c = 0; c < 20; c++) {
+    sc.fillStyle = (r + c) % 2 ? '#1f1838' : '#241c40';
+    sc.fillRect(c * cell, r * cell, cell - 1, cell - 1);
+  }
+  spriteCells({ eyes: 'open', ex: 0, mouth: 'smile', arm: 'down', step: 0, bob: 0 }).forEach(([c, r, col]) => {
+    sc.fillStyle = col;
+    sc.fillRect(c * cell, r * cell, cell - 1, cell - 1);
+  });
+
+  const legend = [
+    [C.O, '陶土橙 · 身体'], [C.L, '暖杏 · 高光'], [C.D, '赭石 · 阴影与腿'],
+    [C.K, '墨栗 · 眼睛与嘴'], [C.B, '腮红粉'], [C.E, '星光白 · 眼睛反光']
+  ];
+  document.getElementById('legend').innerHTML = legend.map(([col, name]) =>
+    `<li><span class="sw" style="background:${col}"></span><span>${name}</span><code>${col.toUpperCase()}</code></li>`
+  ).join('');
+
+  say('你好呀，我是 Clawd！');
+  requestAnimationFrame(t => { last = t; frame(t); });
+})();
+</script>
