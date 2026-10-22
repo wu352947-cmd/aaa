@@ -18,19 +18,31 @@ function leafTexture(seed: number, hue = 0.28) {
   const c = cv.getContext('2d')!
   const r = mulberry32(seed)
   c.clearRect(0, 0, s, s)
-  for (let i = 0; i < 140; i++) {
+  // 由外向内画：外圈叶子小而稀，中心密，边缘自然破碎
+  for (let i = 0; i < 260; i++) {
     const a = r() * Math.PI * 2
-    const d = Math.sqrt(r()) * s * 0.42
+    const d = Math.pow(r(), 0.7) * s * 0.44
     const x = s / 2 + Math.cos(a) * d
     const y = s / 2 + Math.sin(a) * d
-    const l = 55 + r() * 35
-    c.fillStyle = `hsl(${hue * 360 + (r() - 0.5) * 20},${25 + r() * 25}%,${l}%)`
+    const l = 48 + r() * 42
+    const len = 7 + r() * 6
+    const ang = a + (r() - 0.5) * 1.2
     c.save()
     c.translate(x, y)
-    c.rotate(r() * Math.PI * 2)
+    c.rotate(ang)
+    c.fillStyle = `hsl(${hue * 360 + (r() - 0.5) * 24},${22 + r() * 22}%,${l}%)`
     c.beginPath()
-    c.ellipse(0, 0, 9 + r() * 7, 4 + r() * 3, 0, 0, Math.PI * 2)
+    c.moveTo(-len, 0)
+    c.quadraticCurveTo(0, -len * 0.42, len, 0)
+    c.quadraticCurveTo(0, len * 0.42, -len, 0)
     c.fill()
+    // 叶脉高光
+    c.strokeStyle = `hsla(${hue * 360},30%,${Math.min(95, l + 18)}%,0.5)`
+    c.lineWidth = 0.8
+    c.beginPath()
+    c.moveTo(-len * 0.8, 0)
+    c.lineTo(len * 0.8, 0)
+    c.stroke()
     c.restore()
   }
   const t = new THREE.CanvasTexture(cv)
@@ -38,10 +50,14 @@ function leafTexture(seed: number, hue = 0.28) {
   return t
 }
 
+/** 叶片卡片双面渲染时不翻转法线，保持整团树冠的球面光照 */
+const NORMAL_NO_FLIP = THREE.ShaderChunk.normal_fragment_begin.replace('normal *= faceDirection;', '')
+
 function swayMaterial(params: THREE.MeshStandardMaterialParameters, strength: number) {
   const m = new THREE.MeshStandardMaterial(params)
   m.onBeforeCompile = (sh) => {
     sh.uniforms.uTime = windUniform
+    if (params.side === THREE.DoubleSide) sh.fragmentShader = sh.fragmentShader.replace('#include <normal_fragment_begin>', NORMAL_NO_FLIP)
     sh.vertexShader = sh.vertexShader
       .replace('#include <common>', '#include <common>\nuniform float uTime;')
       .replace(
@@ -82,6 +98,22 @@ function shadeByHeight(g: THREE.BufferGeometry, base: THREE.Color, y0: number, y
   return g
 }
 
+/** 用椭球面法线替代平面法线：整团树冠像一个柔和的体积受光 */
+function ellipsoidNormals(g: THREE.BufferGeometry, cy: number, rx: number, ry: number, keep: number) {
+  const pos = g.getAttribute('position')
+  const nor = g.getAttribute('normal') as THREE.BufferAttribute
+  const v = new THREE.Vector3()
+  const own = new THREE.Vector3()
+  for (let i = 0; i < pos.count; i++) {
+    v.set(pos.getX(i) / (rx * rx), (pos.getY(i) - cy) / (ry * ry), pos.getZ(i) / (rx * rx)).normalize()
+    own.fromBufferAttribute(nor, i)
+    if (own.dot(v) < 0) own.negate()
+    v.lerp(own, keep).normalize()
+    nor.setXYZ(i, v.x, v.y, v.z)
+  }
+  nor.needsUpdate = true
+}
+
 /** 阔叶树：若干扰动球团 + 叶片卡片 */
 function broadleaf(seed: number, o: { R: number; H: number; trunkH: number; blobs: number; cards: number; color: string; flat?: number; trunkR?: number; roots?: number }): TreeGeo {
   const r = mulberry32(seed)
@@ -96,37 +128,43 @@ function broadleaf(seed: number, o: { R: number; H: number; trunkH: number; blob
     const c = new THREE.Vector3(Math.cos(a) * d, o.trunkH + (o.H - o.trunkH) * (0.35 + r() * 0.35) * (1 - (d / o.R) * 0.4), Math.sin(a) * d)
     const rad = o.R * (0.38 + r() * 0.22) * (1 - (d / o.R) * 0.3)
     centers.push({ c, rad })
-    const g = new THREE.IcosahedronGeometry(rad, 2)
+    // 内部填充团块：缩小并压暗，只用来遮住叶片之间的空隙
+    const g = new THREE.IcosahedronGeometry(rad * 0.72, 3)
     const p = g.getAttribute('position') as THREE.BufferAttribute
     for (let k = 0; k < p.count; k++) {
       const v = new THREE.Vector3().fromBufferAttribute(p, k)
-      const disp = 1 + (n.fbm(v.x * 0.5 + i * 3, v.y * 0.5 + v.z * 0.5, 3) - 0.5) * 0.45
+      const disp = 1 + (n.fbm(v.x * 0.5 + i * 3, v.y * 0.5 + v.z * 0.5, 3) - 0.5) * 0.35
       v.multiplyScalar(disp)
       v.y *= 0.82 * flat
       p.setXYZ(k, v.x + c.x, v.y + c.y, v.z + c.z)
     }
-    g.computeVertexNormals()
     blobs.push(g)
   }
-  const blob = shadeByHeight(merge(blobs), base.clone().multiplyScalar(0.8), o.trunkH, o.H, r)
+  const cy = (o.trunkH + o.H) / 2 + (o.H - o.trunkH) * 0.08
+  const ry = ((o.H - o.trunkH) / 2) * flat
+  const blob = shadeByHeight(merge(blobs), base.clone().multiplyScalar(0.55), o.trunkH, o.H, r)
+  ellipsoidNormals(blob, cy, o.R, ry, 0)
 
   const cardGeos: THREE.BufferGeometry[] = []
   const up = new THREE.Vector3(0, 1, 0)
   for (let i = 0; i < o.cards; i++) {
     const b = centers[Math.floor(r() * centers.length)]
-    const dir = new THREE.Vector3(r() * 2 - 1, r() * 1.6 - 0.45, r() * 2 - 1).normalize()
-    const p = b.c.clone().add(dir.clone().multiplyScalar(b.rad * (0.82 + r() * 0.3)))
+    const dir = new THREE.Vector3(r() * 2 - 1, r() * 1.7 - 0.5, r() * 2 - 1).normalize()
+    // 大部分叶片贴近外表面，少量深入内部形成层次
+    const depth = r() < 0.75 ? 0.82 + r() * 0.25 : 0.45 + r() * 0.35
+    const p = b.c.clone().add(dir.clone().multiplyScalar(b.rad * depth))
     p.y = b.c.y + (p.y - b.c.y) * 0.82 * flat
-    const size = o.R * (0.32 + r() * 0.22)
+    const size = o.R * (0.2 + r() * 0.14)
     const g = new THREE.PlaneGeometry(size, size)
-    const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), dir.clone().lerp(up, 0.25).normalize())
+    const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), dir.clone().lerp(up, 0.2).normalize())
     const spin = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), r() * Math.PI * 2)
     g.applyQuaternion(spin)
     g.applyQuaternion(q)
     g.translate(p.x, p.y, p.z)
     cardGeos.push(g)
   }
-  const cards = shadeByHeight(merge(cardGeos), base, o.trunkH, o.H, r, 0.25)
+  const cards = shadeByHeight(merge(cardGeos), base, o.trunkH, o.H, r, 0.3)
+  ellipsoidNormals(cards, cy, o.R, ry, 0.15)
 
   // 树干 + 分枝
   const tr = o.trunkR ?? o.R * 0.07
@@ -145,11 +183,14 @@ function broadleaf(seed: number, o: { R: number; H: number; trunkH: number; blob
   }
   // 气根（古榕）
   for (let i = 0; i < (o.roots ?? 0); i++) {
+    // 气根垂落后入土成“支柱根”：靠近主干、粗细不一、略带倾斜
     const a = r() * Math.PI * 2
-    const d = o.R * (0.15 + r() * 0.55)
-    const h = o.trunkH * (0.8 + r() * 0.5)
-    const rt = new THREE.CylinderGeometry(tr * 0.05 + r() * tr * 0.12, tr * 0.12 + r() * tr * 0.15, h, 5)
-    rt.translate(Math.cos(a) * d, h / 2, Math.sin(a) * d)
+    const d = tr * (1.2 + r() * 3.5)
+    const h = o.trunkH * (1.0 + r() * 0.35)
+    const rt = new THREE.CylinderGeometry(tr * (0.08 + r() * 0.1), tr * (0.15 + r() * 0.25), h, 6)
+    rt.translate(0, h / 2, 0)
+    rt.rotateZ((r() - 0.5) * 0.25)
+    rt.translate(Math.cos(a) * d, 0, Math.sin(a) * d)
     parts.push(rt)
   }
   const tg = merge(parts)
@@ -182,7 +223,7 @@ function cypress(seed: number): TreeGeo {
     const p = g.getAttribute('position') as THREE.BufferAttribute
     for (let k = 0; k < p.count; k++) {
       const v = new THREE.Vector3().fromBufferAttribute(p, k)
-      v.multiplyScalar(1 + (n.fbm(v.x + i, v.y + v.z, 3) - 0.5) * 0.4)
+      v.multiplyScalar(0.78 * (1 + (n.fbm(v.x + i, v.y + v.z, 3) - 0.5) * 0.4))
       v.y *= 1.4
       p.setXYZ(k, v.x + c.x, v.y + c.y, v.z + c.z)
     }
@@ -190,21 +231,24 @@ function cypress(seed: number): TreeGeo {
     parts.push(g)
   }
   const base = new THREE.Color('#2f5a33')
-  const blob = shadeByHeight(merge(parts), base.clone().multiplyScalar(0.85), 0, H, r)
   const cardGeos: THREE.BufferGeometry[] = []
-  for (let i = 0; i < 160; i++) {
+  for (let i = 0; i < 520; i++) {
     const b = centers[Math.floor(r() * centers.length)]
     const dir = new THREE.Vector3(r() * 2 - 1, (r() - 0.5) * 1.2, r() * 2 - 1).normalize()
-    const p = b.c.clone().add(dir.clone().multiplyScalar(b.rad))
-    const g = new THREE.PlaneGeometry(1.3, 1.6)
+    const p = b.c.clone().add(dir.clone().multiplyScalar(b.rad * (0.85 + r() * 0.25)))
+    p.y = b.c.y + (p.y - b.c.y) * 1.4
+    const g = new THREE.PlaneGeometry(0.9, 1.1)
     g.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), dir))
     g.translate(p.x, p.y, p.z)
     cardGeos.push(g)
   }
-  const cards = shadeByHeight(merge(cardGeos), base, 0, H, r, 0.25)
+  const cards = shadeByHeight(merge(cardGeos), base, 0, H, r, 0.3)
+  const blobM = shadeByHeight(merge(parts), base.clone().multiplyScalar(0.6), 0, H, r)
+  ellipsoidNormals(blobM, H * 0.45, 2.2, H * 0.55, 0.2)
+  ellipsoidNormals(cards, H * 0.45, 2.2, H * 0.55, 0.2)
   const trunk = new THREE.CylinderGeometry(0.2, 0.32, 3, 7)
   trunk.translate(0, 1.5, 0)
-  return { trunk: shadeByHeight(trunk, new THREE.Color('#5b4c3e'), 0, 3, r), blob, cards }
+  return { trunk: shadeByHeight(trunk, new THREE.Color('#5b4c3e'), 0, 3, r), blob: blobM, cards }
 }
 
 /** 棕榈：弯曲树干 + 下垂羽状叶 */
@@ -224,7 +268,7 @@ function palm(seed: number) {
   }
   trunk.setAttribute('color', new THREE.Float32BufferAttribute(col, 3))
   const fronds: THREE.BufferGeometry[] = []
-  const N = 14
+  const N = 18
   for (let i = 0; i < N; i++) {
     const L = 3.8 + r() * 1.4
     const g = new THREE.PlaneGeometry(L, 1.5, 10, 1)
@@ -243,7 +287,8 @@ function palm(seed: number) {
     g.translate(lean.x, H, lean.z)
     fronds.push(g)
   }
-  const crown = shadeByHeight(merge(fronds), new THREE.Color('#5d8c3b'), H - 3, H + 1, r, 0.2)
+  const crown = shadeByHeight(merge(fronds), new THREE.Color('#4f7a36'), H - 3, H + 1, r, 0.2)
+  ellipsoidNormals(crown, H - 0.5, 4, 2.5, 0.3)
   return { trunk, crown }
 }
 
@@ -259,36 +304,20 @@ function frondTexture() {
   c.moveTo(0, 32)
   c.lineTo(256, 32)
   c.stroke()
-  for (let x = 4; x < 250; x += 5) {
-    const len = 28 * (1 - x / 300)
+  for (let x = 4; x < 250; x += 3.2) {
+    const len = 29 * Math.sin(Math.PI * Math.min(1, (x + 30) / 290))
     for (const s of [-1, 1]) {
-      c.strokeStyle = `hsl(${85 + Math.random() * 20},40%,${60 + Math.random() * 25}%)`
-      c.lineWidth = 2.4
+      c.strokeStyle = `hsl(${78 + Math.random() * 22},${26 + Math.random() * 14}%,${48 + Math.random() * 22}%)`
+      c.lineWidth = 1.5
       c.beginPath()
       c.moveTo(x, 32)
-      c.lineTo(x + 10, 32 + s * len)
+      c.quadraticCurveTo(x + 5, 32 + s * len * 0.6, x + 12, 32 + s * len)
       c.stroke()
     }
   }
   const t = new THREE.CanvasTexture(cv)
   t.colorSpace = THREE.SRGBColorSpace
   return t
-}
-
-/** 修剪球形灌木 */
-function shrubBall(seed: number) {
-  const r = mulberry32(seed)
-  const n = makeNoise2D(seed)
-  const g = new THREE.IcosahedronGeometry(1, 3)
-  const p = g.getAttribute('position') as THREE.BufferAttribute
-  for (let k = 0; k < p.count; k++) {
-    const v = new THREE.Vector3().fromBufferAttribute(p, k)
-    v.multiplyScalar(1 + (n.fbm(v.x * 3, v.y * 3 + v.z * 3, 3) - 0.5) * 0.18)
-    v.y = v.y * 0.85 + 0.85
-    p.setXYZ(k, v.x, v.y, v.z)
-  }
-  g.computeVertexNormals()
-  return shadeByHeight(g, new THREE.Color('#4f7f36'), 0, 1.7, r, 0.15)
 }
 
 /* ======================= 布点 ======================= */
@@ -399,13 +428,13 @@ export function Vegetation() {
 
   const data = useMemo(() => {
     const r = mulberry32(2024)
-    const camphorA = broadleaf(1, { R: 5, H: 11, trunkH: 3.2, blobs: 7, cards: lite ? 60 : 130, color: '#4d7a35' })
-    const camphorB = broadleaf(2, { R: 4.2, H: 9, trunkH: 2.8, blobs: 6, cards: lite ? 50 : 110, color: '#557f3a' })
-    const roundT = broadleaf(3, { R: 3.6, H: 7.5, trunkH: 2.4, blobs: 5, cards: lite ? 40 : 90, color: '#5f8a3e' })
-    const banyan = broadleaf(4, { R: 14, H: 17, trunkH: 4.5, blobs: 16, cards: lite ? 300 : 700, color: '#3f6e2e', flat: 0.8, trunkR: 1.1, roots: 26 })
+    const camphorA = broadleaf(1, { R: 5, H: 11, trunkH: 3.2, blobs: 7, cards: lite ? 140 : 340, color: '#4d7a35' })
+    const camphorB = broadleaf(2, { R: 4.2, H: 9, trunkH: 2.8, blobs: 6, cards: lite ? 110 : 260, color: '#557f3a' })
+    const roundT = broadleaf(3, { R: 3.6, H: 7.5, trunkH: 2.4, blobs: 5, cards: lite ? 70 : 140, color: '#5f8a3e' })
+    const banyan = broadleaf(4, { R: 14, H: 17, trunkH: 4.5, blobs: 18, cards: lite ? 900 : 2200, color: '#3f6e2e', flat: 0.8, trunkR: 1.3, roots: 14 })
     const cyp = cypress(5)
     const palmA = palm(6)
-    const shrub = shrubBall(7)
+    const shrub = broadleaf(7, { R: 1.15, H: 1.9, trunkH: 0.15, blobs: 3, cards: lite ? 40 : 90, color: '#4f7f36', trunkR: 0.05 })
 
     const inCampus = (x: number, z: number) => inRect(x, z, CAMPUS, -3)
     const freeIn = (x: number, z: number) => inCampus(x, z) && !isBlocked(x, z, 3)
@@ -447,7 +476,6 @@ export function Vegetation() {
     const palms: Inst[] = [
       ...rows(r, [[-146, 96, -146, 124], [-74, 96, -74, 124]], 7),
       ...rows(r, [[168, -54, 168, -44], [168, -8, 168, 2]], 5),
-      ...rows(r, [[-28, 2, -28, 40], [28, 2, 28, 40]], 9.5),
     ]
     // 柏树：钟楼周边（第 5 张实拍中的高大柏树）
     const cypresses: Inst[] = [
@@ -502,7 +530,6 @@ export function Vegetation() {
     }),
     [frond],
   )
-  const shrubMat = useMemo(() => new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9 }), [])
 
   return (
     <group>
@@ -514,7 +541,7 @@ export function Vegetation() {
       <InstancedTree geo={data.cyp} items={data.cypresses} leafMap={leafD} leafColor="#c8d8c0" sway={0.006} />
       <InstancedSimple geo={data.palmA.trunk} mat={palmMats.trunk} items={data.palms} />
       <InstancedSimple geo={data.palmA.crown} mat={palmMats.crown} items={data.palms} />
-      <InstancedSimple geo={data.shrub} mat={shrubMat} items={data.shrubs} />
+      <InstancedTree geo={data.shrub} items={data.shrubs} leafMap={leafB} sway={0.003} />
     </group>
   )
 }

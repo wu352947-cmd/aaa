@@ -15,7 +15,7 @@ export function Effects() {
   const high = quality === 'high'
   return (
     <EffectComposer multisampling={0} enableNormalPass={false}>
-      {high ? <N8AO aoRadius={4} distanceFalloff={1.2} intensity={2.2} quality="medium" halfRes /> : <></>}
+      {high ? <N8AO aoRadius={3.5} distanceFalloff={1} intensity={3.2} quality="high" halfRes /> : <></>}
       <Bloom ref={bloom as never} mipmapBlur intensity={0.35} luminanceThreshold={0.9} luminanceSmoothing={0.2} />
       <ToneMapping mode={ToneMappingMode.AGX} />
       <SMAA />

@@ -208,6 +208,27 @@ export class Painter {
     for (let j = 1; j < rows; j++) this.fill(x, y + (h * j) / rows - fw / 2, w, fw, fc, 0.45, 0.4)
     if (o.transom) this.fill(x, y + o.transom - fw / 2, w, fw, fc, 0.45, 0.4)
     this.frameRect(x, y, w, h, fc, fw * 1.4)
+    this.reveal(x, y, w, h)
+  }
+
+  /** 窗洞进深：上沿与一侧的投影 + 窗台受光边，让玻璃“陷”进墙里 */
+  reveal(x: number, y: number, w: number, h: number) {
+    if (this.layer !== 'color') return
+    const c = this.ctx
+    const d = Math.min(0.32, h * 0.18)
+    let g = c.createLinearGradient(0, this.Y(y + h), 0, this.Y(y + h - d))
+    g.addColorStop(0, 'rgba(0,0,0,0.42)')
+    g.addColorStop(1, 'rgba(0,0,0,0)')
+    c.fillStyle = g
+    c.fillRect(this.X(x), this.Y(y + h), w * this.s, d * this.s)
+    const sd = Math.min(0.16, w * 0.12)
+    g = c.createLinearGradient(this.X(x), 0, this.X(x + sd), 0)
+    g.addColorStop(0, 'rgba(0,0,0,0.28)')
+    g.addColorStop(1, 'rgba(0,0,0,0)')
+    c.fillStyle = g
+    c.fillRect(this.X(x), this.Y(y + h), sd * this.s, h * this.s)
+    c.fillStyle = 'rgba(255,255,255,0.35)'
+    c.fillRect(this.X(x - 0.04), this.Y(y), (w + 0.08) * this.s, Math.max(1, 0.05 * this.s))
   }
 
   /** 拱形窗：矩形 + 半圆顶 */

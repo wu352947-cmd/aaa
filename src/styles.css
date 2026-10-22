@@ -154,8 +154,49 @@ button:focus-visible {
   border: 1px solid var(--panel-line);
   border-radius: var(--radius);
 }
-.places .eyebrow {
-  padding: 0 8px 8px;
+.places {
+  width: auto;
+  min-width: 168px;
+  padding: 6px;
+}
+.places.is-open {
+  width: 228px;
+}
+.places-toggle {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 14px;
+  letter-spacing: 0.08em;
+}
+.places-toggle .mono {
+  font-size: 11px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--chip);
+  color: var(--ink-soft);
+}
+.places-toggle .chev {
+  margin-left: auto;
+  width: 7px;
+  height: 7px;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: rotate(45deg) translateY(-2px);
+  transition: transform 0.2s;
+}
+.places.is-open .places-toggle .chev {
+  transform: rotate(-135deg) translateY(-2px);
+}
+.places ul {
+  margin-top: 4px;
 }
 .places ul {
   list-style: none;
@@ -420,8 +461,14 @@ button:focus-visible {
     overflow-x: auto;
     overflow-y: hidden;
   }
-  .places .eyebrow {
+  .places-toggle {
     display: none;
+  }
+  .places ul[hidden] {
+    display: grid !important;
+  }
+  .places.is-open {
+    width: auto;
   }
   .places ul {
     grid-auto-flow: column;

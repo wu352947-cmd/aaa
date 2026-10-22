@@ -10,6 +10,7 @@ import { Plaza } from './Plaza'
 import { Vegetation } from './Vegetation'
 import { Surroundings } from './Surroundings'
 import { FlagAnimator } from './Flags'
+import { BanyanBenches, People } from './Props'
 
 export function Campus() {
   return (
@@ -30,6 +31,8 @@ export function Campus() {
       <Plaza />
       <Sports />
       <Vegetation />
+      <People />
+      <BanyanBenches />
       <Surroundings />
     </group>
   )

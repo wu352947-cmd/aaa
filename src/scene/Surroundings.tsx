@@ -142,8 +142,8 @@ function Mountains() {
     const n = makeNoise2D(9)
     const SEG = 260
     const RINGS = 16
-    const R0 = 900
-    const R1 = 3400
+    const R0 = 1500
+    const R1 = 4200
     const pos: number[] = []
     const col: number[] = []
     const idx: number[] = []
@@ -157,7 +157,7 @@ function Mountains() {
         const env = Math.sin(Math.PI * Math.min(1, t * 1.25)) ** 0.8
         // 北、西北方向山更高（实拍远景的山脊）
         const dirBoost = 0.65 + 0.55 * Math.max(0, -Math.sin(a + 0.4))
-        const h = env * dirBoost * (n.fbm(Math.cos(a) * 3 + t * 2, Math.sin(a) * 3 + t * 2, 6) * 2 - 0.35) * 520
+        const h = env * dirBoost * (n.fbm(Math.cos(a) * 3 + t * 2, Math.sin(a) * 3 + t * 2, 6) * 2 - 0.35) * 420
         const x = Math.cos(a) * rr
         const z = Math.sin(a) * rr
         pos.push(x, Math.max(-10, h), z)

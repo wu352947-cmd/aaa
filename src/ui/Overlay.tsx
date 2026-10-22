@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { PLACES, placeById } from '../data/places'
 import { store, useStore, type TimeOfDay } from '../lib/store'
 
@@ -24,10 +25,15 @@ function Plaque() {
 
 function PlaceList() {
   const selected = useStore((s) => s.selected)
+  const [open, setOpen] = useState(false)
   return (
-    <nav className="places" aria-label="校园建筑">
-      <p className="eyebrow">校园建筑 · {PLACES.length} 处</p>
-      <ul>
+    <nav className={`places${open ? ' is-open' : ''}`} aria-label="校园建筑">
+      <button type="button" className="places-toggle" aria-expanded={open} onClick={() => setOpen(!open)}>
+        <span>建筑名录</span>
+        <span className="mono">{PLACES.length}</span>
+        <span className="chev" aria-hidden="true" />
+      </button>
+      <ul hidden={!open}>
         {PLACES.map((p) => (
           <li key={p.id}>
             <button
