@@ -5,6 +5,7 @@ import { G, game, say } from './state'
 import { blockedAt, lineOfSight, resolve } from './collision'
 import { sfx } from './audio'
 import { textTexture } from '../lib/textures'
+import { flashFace } from './face'
 
 /**
  * 开膛手杰克（Jack the Ripper，1888 年伦敦白教堂）
@@ -101,6 +102,7 @@ export function Killer() {
   const root = useRef<THREE.Group>(null)
   const knifeArm = useRef<THREE.Group>(null)
   const eyeLight = useRef<THREE.PointLight>(null)
+  const head = useRef<THREE.Group>(null)
   const { camera } = useThree()
   const s = useRef({
     mode: 'stalk' as Mode,
@@ -112,6 +114,10 @@ export function Killer() {
     flicker: 0,
     seenLatch: false,
     chaseNoticed: false,
+    stare: 0,
+    tilt: 0,
+    behindArmed: false,
+    stepT: 0,
     runId: -1,
     t: 0,
   })
@@ -161,7 +167,8 @@ export function Killer() {
     // 感知：看见手电光、听见奔跑、近距离直接发现
     const detectR = 16 + aggr * 3 + (G.flashlightOn ? 12 : 0)
     const hearR = 24 + aggr * 3
-    const detected = !grace && ((los && dist < detectR) || (G.sprinting && dist < hearR) || dist < 7)
+    // 潜伏阶段他喜欢“玩弄”你：只在你奔跑或靠得太近时才扑上来
+    const detected = !grace && ((st.mode !== 'stalk' && los && dist < detectR) || (G.sprinting && dist < hearR) || dist < 8)
     if (detected) {
       if (st.mode !== 'chase') {
         st.chaseNoticed = true
@@ -192,7 +199,25 @@ export function Killer() {
     } else if (st.mode === 'search') {
       goal = st.lastSeen
       speed = 3
-    } else if (dist < 34) speed = 0.6 // 潜伏：保持距离，远远看着你
+    } else if (!grace) {
+      // “木头人”：被你看着时一动不动，一转开视线就迅速逼近
+      if (G.killerSeen) {
+        speed = 0
+        st.stare += dt
+        if (st.stare > 0.4 && st.stare - dt <= 0.4 && dist < 40) sfx.laugh()
+        // 盯得太久，他会扑过来
+        if (st.stare > 3.2 && dist < 24) {
+          st.mode = 'chase'
+          st.lastSeen.copy(G.player)
+          sfx.stinger(1)
+          flashFace(140, 'ripper', 0.8)
+          G.scare = 1
+        }
+      } else {
+        st.stare = Math.max(0, st.stare - dt * 0.5)
+        speed = dist > 13 ? 5.6 + aggr * 0.3 : 0.4
+      }
+    } else if (dist < 34) speed = 0.6
 
     const dir = new THREE.Vector3().subVectors(goal, pos).setY(0)
     if (dir.lengthSq() > 0.04) {
@@ -224,7 +249,8 @@ export function Killer() {
     st.nextTeleport -= dt * (1 + aggr * 0.35)
     if (st.nextTeleport <= 0 && st.mode === 'stalk' && !grace) {
       st.nextTeleport = 30 + Math.random() * 30
-      if (teleportNear(11, 15, true)) {
+      if (teleportNear(7, 11, true)) {
+        st.behindArmed = true
         sfx.phantomSteps(5, (Math.random() - 0.5) * 1.4)
         say('身后……好像有脚步声。', 3500)
       }
@@ -235,6 +261,14 @@ export function Killer() {
     const toK = new THREE.Vector3().subVectors(pos, G.player).setY(0).normalize()
     const facing = fwd.x * toK.x + fwd.z * toK.z
     G.killerSeen = los && facing > 0.88 && dist < 50 && g.visible
+    if (G.killerSeen && st.behindArmed && dist < 20) {
+      // 你回头的那一瞬间
+      st.behindArmed = false
+      flashFace(320, 'ripper', 1)
+      sfx.stinger(1.2)
+      sfx.laugh()
+      G.scare = 1
+    }
     if (G.killerSeen && !st.seenLatch) {
       st.seenLatch = true
       if (st.mode !== 'chase') {
@@ -260,6 +294,21 @@ export function Killer() {
     if (knifeArm.current) knifeArm.current.rotation.x = st.mode === 'chase' ? -0.9 + Math.sin(st.t * 9) * 0.5 : -0.15
     if (eyeLight.current) eyeLight.current.intensity = 2 + Math.random() * 1.5
 
+    // 被注视时脖子慢慢歪到一个不自然的角度
+    st.tilt += ((G.killerSeen && st.mode !== 'chase' ? Math.min(1.25, 0.3 + st.stare * 0.4) : Math.sin(st.t * 0.7) * 0.08) - st.tilt) * Math.min(1, dt * 3)
+    if (head.current) {
+      head.current.rotation.z = st.tilt + (Math.random() < 0.03 ? (Math.random() - 0.5) * 0.3 : 0)
+      head.current.rotation.y = Math.sin(st.t * 13) * (st.mode === 'chase' ? 0.06 : 0)
+    }
+    // 方位声
+    sfx.spatial(camera.position, G.look, pos, st.mode === 'chase', dist < 45)
+    const moving = speed > 1 && dir.lengthSq() > 0
+    st.stepT -= dt
+    if (moving && st.stepT <= 0) {
+      st.stepT = st.mode === 'chase' ? 0.3 : 0.48
+      sfx.killerStep(st.mode === 'chase')
+    }
+
     // 恐惧值
     const target = THREE.MathUtils.clamp((st.mode === 'chase' ? 0.55 : 0) + (1 - dist / 45) * 0.7 + (G.killerSeen ? 0.25 : 0), 0, 1)
     G.fear += (target - G.fear) * Math.min(1, dt * 1.5)
@@ -269,6 +318,7 @@ export function Killer() {
     // 抓住
     if (dist < 1.15 && !grace) {
       G.caughtAt = performance.now()
+      flashFace(1500, 'ripper', 1)
       sfx.scream()
       sfx.stopAll()
       G.scare = 1
@@ -302,7 +352,9 @@ export function Killer() {
       <mesh geometry={p.coat} material={p.coatMat} castShadow />
       <mesh geometry={p.coat} material={p.lining} scale={[0.97, 1, 0.97]} />
       <mesh geometry={p.cape} material={p.coatMat} castShadow />
-      {/* 头 */}
+      {/* 头（含礼帽），可歪头 */}
+      <group ref={head} position={[0, 1.8, 0]}>
+      <group position={[0, -1.8, 0]}>
       <mesh position={[0, 1.93, 0.01]} scale={[1, 1.18, 1]} material={p.faceMat} rotation={[0, -Math.PI / 2, 0]}>
         <sphereGeometry args={[0.13, 32, 24]} />
       </mesh>
@@ -313,6 +365,8 @@ export function Killer() {
       <mesh position={[0, 2.2, 0]} material={p.hatMat} castShadow>
         <cylinderGeometry args={[0.135, 0.125, 0.27, 32]} />
       </mesh>
+      </group>
+      </group>
       {/* 左臂：垂在身侧，指节细长 */}
       <group position={[-0.28, 1.62, 0]} rotation={[0.1, 0, 0.12]}>
         <mesh position={[0, -0.42, 0]} material={p.coatMat}>

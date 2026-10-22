@@ -391,6 +391,197 @@ class HorrorAudio {
     }
   }
 
+  /* ---------- 杀手的 3D 方位声：喘息、脚步、低笑 ---------- */
+  private kPan: PannerNode | null = null
+  private kBreath: GainNode | null = null
+
+  private killerBus() {
+    if (!this.ctx) return null
+    if (this.kPan) return this.kPan
+    const c = this.ctx
+    const p = c.createPanner()
+    p.panningModel = 'HRTF'
+    p.distanceModel = 'inverse'
+    p.refDistance = 2.5
+    p.rolloffFactor = 1.4
+    p.maxDistance = 80
+    p.connect(this.master)
+    // 喘息：带通噪声 × 慢速 LFO（吸—呼）
+    const n = this.noise(true)
+    const bp = c.createBiquadFilter()
+    bp.type = 'bandpass'
+    bp.frequency.value = 650
+    bp.Q.value = 1.2
+    const amp = c.createGain()
+    amp.gain.value = 0
+    const lfo = c.createOscillator()
+    lfo.frequency.value = 0.32
+    const lg = c.createGain()
+    lg.gain.value = 0.5
+    const off = c.createConstantSource()
+    off.offset.value = 0.5
+    lfo.connect(lg).connect(amp.gain)
+    off.connect(amp.gain)
+    const breath = c.createGain()
+    breath.gain.value = 0
+    n.connect(bp).connect(amp).connect(breath).connect(p)
+    n.start()
+    lfo.start()
+    off.start()
+    this.kPan = p
+    this.kBreath = breath
+    return p
+  }
+
+  /** 每帧：同步听者与杀手位置 */
+  spatial(cam: { x: number; y: number; z: number }, fwd: { x: number; y: number; z: number }, killer: { x: number; z: number }, chasing: boolean, active: boolean) {
+    const p = this.killerBus()
+    if (!p || !this.ctx) return
+    const L = this.ctx.listener
+    const t = this.ctx.currentTime
+    if (L.positionX) {
+      L.positionX.setTargetAtTime(cam.x, t, 0.05)
+      L.positionY.setTargetAtTime(cam.y, t, 0.05)
+      L.positionZ.setTargetAtTime(cam.z, t, 0.05)
+      L.forwardX.setTargetAtTime(fwd.x, t, 0.05)
+      L.forwardY.setTargetAtTime(fwd.y, t, 0.05)
+      L.forwardZ.setTargetAtTime(fwd.z, t, 0.05)
+      L.upX.value = 0
+      L.upY.value = 1
+      L.upZ.value = 0
+      p.positionX.setTargetAtTime(killer.x, t, 0.05)
+      p.positionY.setTargetAtTime(1.8, t, 0.05)
+      p.positionZ.setTargetAtTime(killer.z, t, 0.05)
+    }
+    this.kBreath?.gain.setTargetAtTime(active ? (chasing ? 0.9 : 0.45) : 0, t, 0.3)
+  }
+
+  killerStep(heavy: boolean) {
+    const p = this.killerBus()
+    if (!p || !this.ctx) return
+    const c = this.ctx
+    const t = c.currentTime
+    const n = this.noise()
+    const f = c.createBiquadFilter()
+    f.type = 'lowpass'
+    f.frequency.value = heavy ? 420 : 300
+    const g = c.createGain()
+    this.env(g, t, 0.004, heavy ? 1.2 : 0.6, 0.14)
+    n.connect(f).connect(g).connect(p)
+    n.start(t, Math.random())
+    n.stop(t + 0.25)
+  }
+
+  /** 低沉的笑声：嗬、嗬、嗬 */
+  laugh() {
+    const p = this.killerBus()
+    if (!p || !this.ctx) return
+    const c = this.ctx
+    const t = c.currentTime
+    const o = c.createOscillator()
+    o.type = 'sawtooth'
+    o.frequency.setValueAtTime(105, t)
+    o.frequency.linearRampToValueAtTime(82, t + 1.6)
+    const f1 = c.createBiquadFilter()
+    f1.type = 'bandpass'
+    f1.frequency.value = 600
+    f1.Q.value = 4
+    const g = c.createGain()
+    g.gain.value = 0
+    for (let i = 0; i < 6; i++) {
+      const st = t + i * 0.24
+      g.gain.setTargetAtTime(0.9, st, 0.01)
+      g.gain.setTargetAtTime(0, st + 0.12, 0.03)
+    }
+    o.connect(f1).connect(g).connect(p)
+    o.start(t)
+    o.stop(t + 1.8)
+  }
+
+  /** 远处的尖叫（低通、随机声像） */
+  distantScream() {
+    if (!this.ctx) return
+    const c = this.ctx
+    const t = c.currentTime
+    const pan = c.createStereoPanner()
+    pan.pan.value = (Math.random() - 0.5) * 1.8
+    const lp = c.createBiquadFilter()
+    lp.type = 'lowpass'
+    lp.frequency.value = 1400
+    const g = c.createGain()
+    this.env(g, t, 0.08, 0.22, 2.2)
+    g.connect(lp).connect(pan).connect(this.master)
+    const o = c.createOscillator()
+    o.type = 'sawtooth'
+    o.frequency.setValueAtTime(700, t)
+    o.frequency.linearRampToValueAtTime(980, t + 0.3)
+    o.frequency.linearRampToValueAtTime(420, t + 2.2)
+    const vib = c.createOscillator()
+    vib.frequency.value = 7
+    const vg = c.createGain()
+    vg.gain.value = 30
+    vib.connect(vg).connect(o.frequency)
+    o.connect(g)
+    o.start(t)
+    vib.start(t)
+    o.stop(t + 2.5)
+    vib.stop(t + 2.5)
+  }
+
+  /** 突然的撞门声 */
+  slam() {
+    if (!this.ctx) return
+    const c = this.ctx
+    const t = c.currentTime
+    const pan = c.createStereoPanner()
+    pan.pan.value = (Math.random() - 0.5) * 1.6
+    pan.connect(this.master)
+    const n = this.noise()
+    const lp = c.createBiquadFilter()
+    lp.type = 'lowpass'
+    lp.frequency.value = 900
+    const g = c.createGain()
+    this.env(g, t, 0.002, 1, 0.5)
+    n.connect(lp).connect(g).connect(pan)
+    n.start(t)
+    n.stop(t + 0.6)
+    const o = c.createOscillator()
+    o.frequency.setValueAtTime(90, t)
+    o.frequency.exponentialRampToValueAtTime(40, t + 0.3)
+    const og = c.createGain()
+    this.env(og, t, 0.002, 0.9, 0.35)
+    o.connect(og).connect(pan)
+    o.start(t)
+    o.stop(t + 0.4)
+  }
+
+  /** 尖锐短促的惊叫（幽灵扑脸） */
+  shriek() {
+    if (!this.ctx) return
+    const c = this.ctx
+    const t = c.currentTime
+    const g = c.createGain()
+    this.env(g, t, 0.005, 0.7, 0.7)
+    g.connect(this.master)
+    for (const f of [1300, 1750, 2350]) {
+      const o = c.createOscillator()
+      o.type = 'square'
+      o.frequency.setValueAtTime(f, t)
+      o.frequency.linearRampToValueAtTime(f * 0.7, t + 0.7)
+      const og = c.createGain()
+      og.gain.value = 0.18
+      o.connect(og).connect(g)
+      o.start(t)
+      o.stop(t + 0.8)
+    }
+    const n = this.noise()
+    const ng = c.createGain()
+    this.env(ng, t, 0.003, 0.5, 0.4)
+    n.connect(ng).connect(this.master)
+    n.start(t)
+    n.stop(t + 0.5)
+  }
+
   stopAll() {
     this.musicBox(false)
     try {

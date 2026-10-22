@@ -7,6 +7,7 @@ import { freeSpotNear, haunt } from './Events'
 import { lineOfSight, GATE_Z } from './collision'
 import { BLOOD_WORDS } from './story'
 import { textTexture } from '../lib/textures'
+import { flashFace } from './face'
 
 /** 白衣长发女学生的幽灵：低头站立，长发遮脸，靠近或盯着看就会消失 */
 function useGhostParts() {
@@ -59,12 +60,13 @@ interface Ghost {
   alive: boolean
   stare: number
   respawn: number
+  lunge: boolean
 }
 
 export function Ghosts() {
   const parts = useGhostParts()
   const groups = useRef<(THREE.Group | null)[]>([])
-  const ghosts = useRef<Ghost[]>(Array.from({ length: 6 }, () => ({ pos: new THREE.Vector3(), alive: false, stare: 0, respawn: 6 + Math.random() * 20 })))
+  const ghosts = useRef<Ghost[]>(Array.from({ length: 6 }, () => ({ pos: new THREE.Vector3(), alive: false, stare: 0, respawn: 6 + Math.random() * 20, lunge: false })))
 
   useFrame((_, dt) => {
     const playing = game.get().phase === 'playing'
@@ -86,6 +88,7 @@ export function Ghosts() {
             g.pos.copy(p)
             g.alive = true
             g.stare = 0
+            g.lunge = false
           }
         }
       }
@@ -95,8 +98,24 @@ export function Ghosts() {
         const to = new THREE.Vector3().subVectors(g.pos, G.player).setY(0).normalize()
         const looking = G.look.x * to.x + G.look.z * to.z > 0.93 && lineOfSight(G.player, g.pos)
         if (looking) g.stare += dt
+        // 盯着她看太久：一半概率尖叫着扑到你脸上
+        if (!g.lunge && g.stare > 1.1 && Math.random() < 0.55) {
+          g.lunge = true
+          sfx.shriek()
+        }
+        if (g.lunge) {
+          const step = Math.min(d, 17 * dt)
+          g.pos.addScaledVector(new THREE.Vector3().subVectors(G.player, g.pos).setY(0).normalize(), step)
+          if (d < 1.1) {
+            flashFace(380, 'girl', 1)
+            sfx.stinger(1)
+            G.scare = 1
+            g.alive = false
+            g.respawn = 20 + Math.random() * 25
+          }
+        }
         // 被盯太久或靠得太近：伴随低语消失
-        if (d < (swarm ? 4 : 8) || g.stare > 1.4 || d > 60) {
+        else if (d < (swarm ? 4 : 8) || g.stare > 1.6 || d > 60) {
           g.alive = false
           g.respawn = 8 + Math.random() * 25
           if (d < 20) {
@@ -107,7 +126,7 @@ export function Ghosts() {
         obj.position.copy(g.pos)
         // 转身面向玩家，身体轻微漂浮、偶尔一抖
         obj.rotation.y = Math.atan2(G.player.x - g.pos.x, G.player.z - g.pos.z)
-        obj.position.y = 0.05 + Math.sin(performance.now() / 600 + i) * 0.04
+        obj.position.y = g.lunge ? 0.25 : 0.05 + Math.sin(performance.now() / 600 + i) * 0.04
         obj.visible = Math.random() > 0.06
         if (Math.random() < 0.02) obj.rotation.z = (Math.random() - 0.5) * 0.4
         else obj.rotation.z *= 0.8

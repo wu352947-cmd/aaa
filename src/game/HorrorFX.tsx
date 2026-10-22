@@ -20,7 +20,7 @@ export function HorrorFX() {
       ca.current.offset.set(o * (Math.random() < 0.5 ? 1 : -1), o * 0.6)
     }
     if (glitch.current) glitch.current.mode = s > 0.35 ? GlitchMode.CONSTANT_WILD : f > 0.75 && Math.random() < 0.02 ? GlitchMode.CONSTANT_MILD : GlitchMode.DISABLED
-    if (vig.current) vig.current.darkness = 0.72 + f * 0.25
+    if (vig.current) vig.current.darkness = 0.55 + f * 0.3
   })
   return (
     <EffectComposer multisampling={0} enableNormalPass={false}>
@@ -29,7 +29,7 @@ export function HorrorFX() {
       <ChromaticAberration ref={ca as never} offset={new THREE.Vector2(0.001, 0.0006)} radialModulation={false} modulationOffset={0} />
       <Glitch ref={glitch as never} delay={new THREE.Vector2(0.3, 1.2)} duration={new THREE.Vector2(0.1, 0.4)} strength={new THREE.Vector2(0.2, 0.6)} active />
       <HueSaturation saturation={-0.35} hue={-0.03} />
-      <BrightnessContrast brightness={-0.02} contrast={0.18} />
+      <BrightnessContrast brightness={0.02} contrast={0.16} />
       <ToneMapping mode={ToneMappingMode.AGX} />
       <Noise premultiply blendFunction={BlendFunction.SCREEN} opacity={0.35} />
       <Vignette ref={vig as never} darkness={0.75} offset={0.22} />

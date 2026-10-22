@@ -6,6 +6,7 @@ import { sfx } from './audio'
 import { power } from '../lib/materials'
 import { blockedAt } from './collision'
 import { TRACK_CENTER } from '../scene/Sports'
+import { flashFace } from './face'
 
 /** 剧情事件与随机灵异事件 */
 const fx = {
@@ -96,12 +97,19 @@ export function Events() {
 
     if (ui.phase !== 'playing') return
 
+    // 潜意识闪现：恐惧越高，越容易在一帧之间看到那张脸
+    if (G.fear > 0.5 && Math.random() < dt * 0.06 * G.fear) flashFace(60 + Math.random() * 50, Math.random() < 0.7 ? 'ripper' : 'girl', 0.5)
+
     // 随机灵异事件
     fx.nextAmbient -= dt
     if (fx.nextAmbient <= 0) {
-      fx.nextAmbient = 16 + Math.random() * 22
+      fx.nextAmbient = 12 + Math.random() * 16
       const r = Math.random()
-      if (r < 0.3) sfx.whisper(2.5)
+      if (r < 0.14) sfx.distantScream()
+      else if (r < 0.24) {
+        sfx.slam()
+        G.scare = Math.max(G.scare, 0.4)
+      } else if (r < 0.3) sfx.whisper(2.5)
       else if (r < 0.5) {
         sfx.radio(1.8)
         if (Math.random() < 0.5) window.setTimeout(() => sfx.speak(['回教室去', '还没到放学时间', '最后一个人，请锁好门'][Math.floor(Math.random() * 3)]), 600)

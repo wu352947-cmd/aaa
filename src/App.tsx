@@ -10,6 +10,8 @@ import { Pages } from './game/Pages'
 import { Ghosts, BloodWriting, IronGate } from './game/Ghosts'
 import { Events } from './game/Events'
 import { HorrorFX } from './game/HorrorFX'
+import { Effigies } from './game/Effigies'
+import { GroundFog, Dust } from './game/Atmos'
 import { HUD } from './ui/HUD'
 import { store, useStore } from './lib/store'
 
@@ -50,6 +52,9 @@ export default function App() {
           <Ghosts />
           <BloodWriting />
           <IronGate />
+          <Effigies />
+          <GroundFog />
+          <Dust />
           <Events />
           <Player />
           <HorrorFX />

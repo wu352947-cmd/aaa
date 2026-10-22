@@ -15,7 +15,7 @@ const RUN = 6.4
 /** 第一人称：指针锁定视角、移动、碰撞、头部晃动、手电筒 */
 export function Player() {
   const { camera, gl } = useThree()
-  const yaw = useRef(Math.PI) // 面向北（-z）
+  const yaw = useRef(0) // 面向北（-z），正对钟楼
   const pitch = useRef(-0.08)
   const bob = useRef(0)
   const lastStep = useRef(0)
@@ -76,7 +76,7 @@ export function Player() {
     if (ui.runId !== runId.current) {
       runId.current = ui.runId
       G.player.copy(SPAWN)
-      yaw.current = Math.PI
+      yaw.current = 0
       pitch.current = -0.08
     }
     if (!target.parent) scene.add(target)
@@ -133,7 +133,7 @@ export function Player() {
       light.current.position.copy(camera.position).addScaledVector(right, 0.25).add(new THREE.Vector3(0, -0.25, 0))
       target.position.copy(camera.position).addScaledVector(G.look, 10)
       light.current.target = target
-      light.current.intensity = THREE.MathUtils.lerp(light.current.intensity, (ui.phase === 'caught' ? 6 : 140) * lum, 0.5)
+      light.current.intensity = THREE.MathUtils.lerp(light.current.intensity, (ui.phase === 'caught' ? 8 : 260) * lum, 0.5)
     }
     if (fill.current) {
       fill.current.position.copy(camera.position)

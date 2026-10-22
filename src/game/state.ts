@@ -112,4 +112,4 @@ export function resetRun() {
 }
 
 // 调试钩子：便于在浏览器控制台里查看或跳转状态
-;(window as unknown as { __horror: unknown }).__horror = { G, game }
+Object.assign(((window as unknown as { __horror?: Record<string, unknown> }).__horror ??= {}), { G, game })

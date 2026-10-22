@@ -5,6 +5,7 @@ import { sfx } from '../game/audio'
 import { input } from '../game/input'
 import { resetHaunt } from '../game/Events'
 import { store, useStore } from '../lib/store'
+import { flash, scareFace } from '../game/face'
 
 function start() {
   sfx.start()
@@ -137,6 +138,39 @@ function FearOverlay() {
     return () => cancelAnimationFrame(id)
   }, [])
   return <div ref={ref} className="fear" aria-hidden="true" />
+}
+
+/** 全屏鬼脸闪现：抖动、缩放、偶尔反色 */
+function FaceFlash() {
+  const img = useRef<HTMLImageElement>(null)
+  useEffect(() => {
+    // 预先生成两张脸，避免第一次闪现时卡顿
+    scareFace('ripper')
+    scareFace('girl')
+    let id = 0
+    let shown = ''
+    const loop = () => {
+      const el = img.current
+      if (el) {
+        const on = performance.now() < flash.until
+        if (on) {
+          const src = scareFace(flash.variant)
+          if (shown !== src) {
+            el.src = src
+            shown = src
+          }
+          const k = flash.strength
+          el.style.opacity = String(0.75 + Math.random() * 0.25)
+          el.style.transform = `translate(${(Math.random() - 0.5) * 40 * k}px, ${(Math.random() - 0.5) * 30 * k}px) scale(${1.05 + Math.random() * 0.25 * k}) rotate(${(Math.random() - 0.5) * 4 * k}deg)`
+          el.style.filter = Math.random() < 0.12 ? 'invert(1) contrast(1.6)' : `contrast(${1.2 + Math.random() * 0.6}) saturate(${0.6 + Math.random()})`
+        } else el.style.opacity = '0'
+      }
+      id = requestAnimationFrame(loop)
+    }
+    loop()
+    return () => cancelAnimationFrame(id)
+  }, [])
+  return <img ref={img} className="faceflash" alt="" aria-hidden="true" />
 }
 
 function TouchControls() {
@@ -273,6 +307,7 @@ export function HUD() {
   return (
     <div className={`hud phase-${phase}`}>
       <FearOverlay />
+      <FaceFlash />
       {phase === 'menu' && <Menu />}
       {phase === 'playing' && (
         <>
