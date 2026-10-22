@@ -19,6 +19,7 @@ const t0 = Date.now();
 await page.waitForFunction(() => window.__qihu, null, { timeout: 240000 }).catch(() => {});
 console.log('loaded in', (Date.now() - t0) / 1000, 's');
 await page.waitForTimeout(1500);
+if (process.env.RESIZE) { const [rw, rh] = process.env.RESIZE.split('x').map(Number); await page.setViewportSize({ width: rw, height: rh }); await page.waitForTimeout(800); }
 for (const v of views) {
   await page.evaluate((v) => {
     const q = window.__qihu;
@@ -30,7 +31,7 @@ for (const v of views) {
     if (v.doors) q.doors.forEach((d) => { d.open = 1; d.pivot.rotation.y = d.sign * Math.PI * 0.5; });
   }, v);
   const tt = Date.now();
-  await page.evaluate(() => { window.__qihu.frame(); window.__qihu.frame(); });
+  await page.evaluate((n) => { for (let i = 0; i < n; i++) window.__qihu.frame(); }, +(process.env.FRAMES || 2));
   console.log('render ms', Date.now() - tt, await page.evaluate(() => { const i = window.__qihu.renderer.info.render; return `calls ${i.calls} tris ${i.triangles}`; }));
   await page.screenshot({ path: `${out}/${v.name}.png`, timeout: 300000 });
   console.log('shot', v.name);

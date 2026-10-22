@@ -6,6 +6,8 @@ import { rng } from './textures.js';
 
 const PI = Math.PI;
 let R = rng(2024);
+// 镜面位置（由 main.js 创建实时反射镜）
+export const MIRRORS = [];
 
 /* ======================= 基础几何 ======================= */
 function leafShape(len = 0.3, wid = 0.18, tip = 0.5) {
@@ -529,7 +531,7 @@ function foyer(B, M) {
   }
   // 全身镜
   B.box(M.brass, 1.58, 0.1, 8.7, 0.02, 1.9, 0.62);
-  B.box(M.mirror, 1.59, 0.13, 8.7, 0.004, 1.84, 0.56);
+  MIRRORS.push({ x: 1.596, y: 1.05, z: 8.7, w: 0.56, h: 1.84, ry: PI / 2 });
 }
 
 /* ======================= 厨房 ======================= */
@@ -707,7 +709,7 @@ function masterBath(B, M) {
     B.box(M.brass, vx - 0.02, 1.12, z + 0.1, 0.03, 0.05, 0.05);
     // 背光圆镜
     B.add(new THREE.CylinderGeometry(0.38, 0.38, 0.02, 48), M.lightStrip, vx - 0.005, 1.75, z, 0, 0, PI / 2);
-    B.add(new THREE.CylinderGeometry(0.36, 0.36, 0.02, 48), M.mirror, vx - 0.025, 1.75, z, 0, 0, PI / 2);
+    MIRRORS.push({ x: vx - 0.036, y: 1.75, z, r: 0.36, ry: -PI / 2 });
   }
   B.collide(vx - 0.6, 7.9, vx, 10.3);
   vase(B, M, vx - 0.3, 0.84, 9.1, M.blackCeramic, 0.5);
@@ -783,7 +785,7 @@ function closet(B, M) {
   B.box(M.walnut, -7.0, 0.6, 8.75, 1.0, 0.18, 0.4);
   B.box(M.tvMarble, -7.0, 0.78, 8.75, 1.02, 0.02, 0.42);
   B.box(M.brass, -7.0, 1.0, 8.93, 0.82, 1.2, 0.02);
-  B.box(M.mirror, -7.0, 1.03, 8.915, 0.78, 1.14, 0.004);
+  MIRRORS.push({ x: -7.0, y: 1.6, z: 8.912, w: 0.78, h: 1.14, ry: PI });
   B.rbox(M.velvetGreen, -7.0, 0, 8.3, 0.46, 0.46, 0.36, 0.08);
   vase(B, M, -7.35, 0.8, 8.8, M.ceramic, 0.4);
   B.box(M.leather, -6.7, 0.8, 8.8, 0.2, 0.06, 0.14);
@@ -906,7 +908,7 @@ function bath2(B, M) {
   lathe(B, M.ceramic, [[0, 0], [0.14, 0], [0.18, 0.12], [0.17, 0.12], [0.13, 0.02], [0, 0.02]], vx + 0.27, 0.83, 7.6, 32);
   tube(B, M.chrome, [[vx + 0.02, 1.15, 7.6], [vx + 0.14, 1.15, 7.6], [vx + 0.16, 1.12, 7.6]], 0.01, 8, 8);
   B.box(M.chrome, vx + 0.005, 1.25, 7.6, 0.02, 0.9, 1.0);
-  B.box(M.mirror, vx + 0.016, 1.27, 7.6, 0.003, 0.86, 0.96);
+  MIRRORS.push({ x: vx + 0.019, y: 1.7, z: 7.6, w: 0.96, h: 0.86, ry: PI / 2 });
   B.collide(vx, 7.0, vx + 0.52, 8.2);
   // 淋浴
   B.add(new THREE.PlaneGeometry(1.0, 2.0), M.glass, 11.4, 1.0, 7.5, 0, 0, 0);
@@ -980,6 +982,7 @@ function terrace(B, M) {
 /* ======================= 入口 ======================= */
 export function buildFurniture(scene, M, layer) {
   R = rng(2024);
+  MIRRORS.length = 0;
   const B = new Builder();
   livingRoom(B, M);
   diningRoom(B, M);

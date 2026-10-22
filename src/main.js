@@ -3,7 +3,8 @@ import './atmosphere.js';
 import { setMaxAnisotropy } from './textures.js';
 import { createMaterials, interiorMaterials } from './materials.js';
 import { buildApartment, INTERIOR_LAYER } from './apartment.js';
-import { buildFurniture } from './furniture.js';
+import { buildFurniture, MIRRORS } from './furniture.js';
+import { Reflector } from 'three/examples/jsm/objects/Reflector.js';
 import { buildWestLake, LANDMARKS, windUniforms, DETAIL_LAYER } from './westlake.js';
 import { Environment, PRESETS } from './env.js';
 import { Player } from './player.js';
@@ -28,7 +29,9 @@ async function step(pct, msg) {
 async function init() {
   const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance', stencil: false });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, QUALITY[quality].pr));
-  renderer.setSize(window.innerWidth, window.innerHeight);
+  const appEl = $('app');
+  const viewW = () => appEl.clientWidth || window.innerWidth, viewH = () => appEl.clientHeight || window.innerHeight;
+  renderer.setSize(viewW(), viewH());
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.shadowMap.enabled = true;
@@ -38,7 +41,7 @@ async function init() {
   setMaxAnisotropy(Math.min(8, renderer.capabilities.getMaxAnisotropy()));
 
   const scene = new THREE.Scene();
-  const camera = new THREE.PerspectiveCamera(isMobile ? 72 : 66, window.innerWidth / window.innerHeight, 0.1, 12000);
+  const camera = new THREE.PerspectiveCamera(isMobile ? 72 : 66, viewW() / viewH(), 0.1, 12000);
   camera.layers.enable(INTERIOR_LAYER);
   camera.layers.enable(DETAIL_LAYER);
   scene.add(camera);
@@ -58,6 +61,46 @@ async function init() {
 
   const player = new Player(camera, colliders, M);
   scene.add(player.character);
+
+  // 实时镜面反射：只更新离玩家最近、且在视野内的一面镜子，其余保持上一帧画面
+  const mirrorRes = quality === 'high' ? 1024 : quality === 'low' ? 384 : 640;
+  const mirrors = MIRRORS.map((m) => {
+    const geo = m.r ? new THREE.CircleGeometry(m.r, 48) : new THREE.PlaneGeometry(m.w, m.h);
+    const ref = new Reflector(geo, { textureWidth: mirrorRes, textureHeight: mirrorRes, color: 0xd2d6d8, clipBias: 0.003, multisample: quality === 'low' ? 0 : 4 });
+    ref.position.set(m.x, m.y, m.z);
+    ref.rotation.y = m.ry;
+    ref.layers.set(INTERIOR_LAYER);
+    ref.camera.layers.enable(INTERIOR_LAYER);
+    ref.camera.layers.enable(DETAIL_LAYER);
+    const draw = ref.onBeforeRender;
+    ref.onBeforeRender = (r, sc, cam) => {
+      if (ref !== activeMirror || cam !== camera) return;
+      const vis = player.character.visible;
+      player.character.visible = true; // 镜中能看到自己
+      if (player.mode === 'first') { player.character.position.set(player.pos.x, player.pos.y < 0 ? -0.02 : 0, player.pos.y); player.character.rotation.y = player.yaw + Math.PI; }
+      draw.call(ref, r, sc, cam);
+      player.character.visible = vis;
+    };
+    ref.updateMatrixWorld();
+    scene.add(ref);
+    return ref;
+  });
+  let activeMirror = null, mirrorTick = 0;
+  const _mv = new THREE.Vector3(), _mn = new THREE.Vector3(), _mp = new THREE.Vector3();
+  function pickMirror() {
+    // 视野内 8 米以内的镜子轮流刷新（每帧只多渲染一次场景）
+    const cand = [];
+    for (const m of mirrors) {
+      _mv.subVectors(camera.position, m.position);
+      const d = _mv.length();
+      _mn.set(0, 0, 1).applyQuaternion(m.quaternion);
+      if (d > 8 || _mv.dot(_mn) <= 0) continue; // 在镜子背面
+      _mp.copy(m.position).project(camera);
+      if (_mp.z > 1 || Math.abs(_mp.x) > 1.3 || Math.abs(_mp.y) > 1.3) continue;
+      cand.push(m);
+    }
+    activeMirror = cand.length ? cand[mirrorTick++ % cand.length] : null;
+  }
   const s0 = spots.living;
   player.teleport(s0.x, s0.z, s0.yaw);
 
@@ -123,10 +166,12 @@ async function init() {
     player.character.visible = false;
     lake.water.enabled = false;
     lake.group.visible = true;
+    const am = activeMirror; activeMirror = null;
     cubeCam.position.set(0.5, 1.45, 3.2);
     cubeCam.update(renderer, scene);
     lake.water.enabled = true;
     player.character.visible = wasVis;
+    activeMirror = am;
     if (probeEnv) probeEnv.dispose();
     probeEnv = pmrem.fromCubemap(probeRT.texture);
     for (const m of interiorMaterials) { m.envMap = probeEnv.texture; }
@@ -219,11 +264,20 @@ async function init() {
     } catch { toast('当前浏览器不支持全屏'); }
   });
 
-  window.addEventListener('resize', () => {
-    camera.aspect = window.innerWidth / window.innerHeight;
+  // 尺寸自适应：容器尺寸变化（平板旋转、预览窗口展开、全屏切换等）时同步画布
+  let lastW = 0, lastH = 0;
+  function syncSize() {
+    const w = viewW(), h = viewH();
+    if (w === lastW && h === lastH) return;
+    lastW = w; lastH = h;
+    camera.aspect = w / h;
     camera.updateProjectionMatrix();
-    renderer.setSize(window.innerWidth, window.innerHeight);
-  });
+    renderer.setSize(w, h);
+  }
+  window.addEventListener('resize', syncSize);
+  window.visualViewport?.addEventListener('resize', syncSize);
+  if (window.ResizeObserver) new ResizeObserver(syncSize).observe(appEl);
+  syncSize();
 
   // 进入
   $('loadBar').style.width = '100%';
@@ -283,7 +337,7 @@ async function init() {
     const r = roomAt(player.pos.x, player.pos.y);
     if (r) { hud.setRoom(r); fmap.curRoom = r.id; }
     hud.setYaw(player.yaw);
-    landmarks.update(camera, window.innerWidth, window.innerHeight, (p) => {
+    landmarks.update(camera, lastW, lastH, (p) => {
       if (!lake.group.visible) return true;
       const cx = camera.position.x, cz = camera.position.z, dx = p.x - cx, dz = p.z - cz, d = Math.hypot(dx, dz);
       return player.raycast(cx, cz, dx / d, dz / d, 40, true) !== null;
@@ -292,6 +346,8 @@ async function init() {
     if (!$('map').hidden && mapTimer > 0.2) { fmap.draw(player); mapTimer = 0; }
     if (lakeVisible()) lakeHold = 0.4; else lakeHold -= dt;
     lake.group.visible = lakeHold > 0;
+    syncSize();
+    pickMirror();
     renderer.render(scene, camera);
     fpsAcc += dt; fpsN++;
     // 自适应分辨率：持续低帧率时降低像素比，帧率充裕时恢复
