@@ -121,7 +121,9 @@ export function CurvedBuilding() {
   return (
     <Selectable id="hulou">
       <FacadeBox size={[14, H, LEN]} position={[-158, 0, 62]} right={face} left={back} front={end} back={end} roof={solid('#b0aca4', 0.95)} />
-      <Parapet w={14} d={LEN} y={H} h={0.9} color="#efefeb" />
+      <group position={[-158, 0, 62]}>
+        <Parapet w={14} d={LEN} y={H} h={0.9} color="#efefeb" />
+      </group>
       <group position={[-158, 0, 62]}>
         <Block size={[14.5, 0.3, LEN + 0.5]} position={[0, H, 0]} color="#e9e8e3" />
       </group>

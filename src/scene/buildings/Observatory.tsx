@@ -88,7 +88,9 @@ export function Observatory() {
     <Selectable id="observatory">
       {/* 躬行楼（新实验楼） */}
       <FacadeBox size={[40, 21, 20]} position={[90, 0, -27]} front={lab} back={lab} left={labSide} right={labSide} roof={solid('#a7a5a0', 0.95)} />
-      <Parapet w={40} d={20} y={21} h={0.9} material={gray} />
+      <group position={[90, 0, -27]}>
+        <Parapet w={40} d={20} y={21} h={0.9} material={gray} />
+      </group>
       <group position={[90, 0, -27]}>
         <RoofClutter w={36} d={16} y={21} seed={21} />
       </group>

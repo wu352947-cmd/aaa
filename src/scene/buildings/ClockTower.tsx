@@ -119,7 +119,9 @@ export function ClockTower() {
     <Selectable id="zhuangyuan">
       {/* 主楼：x -142..-78，前立面 z=80 */}
       <FacadeBox size={[64, 19, 16]} position={[-110, 0, 72]} front={main} back={mainBack} left={mainSide} right={mainSide} roof={solid('#b3afa6', 0.95)} />
-      <Parapet w={64} d={16} y={19} h={1} color={CREAM} />
+      <group position={[-110, 0, 72]}>
+        <Parapet w={64} d={16} y={19} h={1} color={CREAM} />
+      </group>
       <group position={[-110, 0, 72]}>
         <Block size={[64.6, 0.35, 16.6]} position={[0, 19, 0]} material={cream} />
       </group>
@@ -127,7 +129,9 @@ export function ClockTower() {
 
       {/* 右侧高翼楼 */}
       <FacadeBox size={[16, 26, 30]} position={[-70, 0, 70]} front={wing} back={wing} left={wingSide} right={wingSide} roof={solid('#b3afa6', 0.95)} />
-      <Parapet w={16} d={30} y={26} h={1} color={CREAM} />
+      <group position={[-70, 0, 70]}>
+        <Parapet w={16} d={30} y={26} h={1} color={CREAM} />
+      </group>
       <group position={[-70, 0, 70]}>
         <Block size={[16.6, 0.4, 30.6]} position={[0, 26, 0]} material={cream} />
         {/* 底部红色基座 */}
