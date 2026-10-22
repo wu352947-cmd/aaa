@@ -298,7 +298,7 @@ export function RipperActor() {
     g.rotation.z = Math.sin(t * 2.2) * 0.02
     if (head.current) head.current.rotation.z = s.tilt + (Math.random() < 0.02 ? (Math.random() - 0.5) * 0.25 : 0)
     if (arm.current) arm.current.rotation.x = s.knife
-    if (eye.current) eye.current.intensity = (t >= 156 ? 5 : 2) + Math.random()
+    if (eye.current) eye.current.intensity = (t >= 158.5 ? 1.4 : 0.35) + Math.random() * 0.2
   })
   return (
     <group ref={root}>
@@ -331,7 +331,7 @@ export function EffigyCast() {
         out.push({ pos: new THREE.Vector3(TRACK_CENTER[0] - 14 + c * 7, 0, TRACK_CENTER[2] - 6 + r * 5.5), yaw: 0, from: 92, to: 104, turnAt: 101, turnTo: Math.PI, robe: (r + c) % 3 })
     // S14：东门大道上的方阵，面向她
     for (let r = 0; r < 3; r++)
-      for (let c = 0; c < 4; c++) out.push({ pos: new THREE.Vector3(118 + r * 7, 0, -31 + c * 3.8), yaw: Math.PI / 2, from: 144, to: 156, robe: (r * 4 + c) % 3 })
+      for (let c = 0; c < 4; c++) out.push({ pos: new THREE.Vector3(138 + r * 6, 0, -31 + c * 3.8), yaw: Math.PI / 2, from: 144, to: 156, robe: (r * 4 + c) % 3 })
     // S17：旗杆下的第十三个
     out.push({ pos: new THREE.Vector3(2.2, 0, 22.6), yaw: 0, from: 170, to: 999, robe: 2 })
     return out

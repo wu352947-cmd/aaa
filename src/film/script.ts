@@ -189,8 +189,8 @@ export const SHOTS: Shot[] = [
     144,
     '东门：对称构图。铁门自己缓缓打开，她向镜头奔来。',
     [
-      { u: 0, p: [214, 1.6, -25.5], t: [150, 3.5, -25.5], fov: 34 },
-      { u: 1, p: [200, 1.6, -25.5], t: [150, 2.8, -25.5], fov: 30 },
+      { u: 0, p: [196, 1.5, -25.5], t: [150, 3.2, -25.5], fov: 30 },
+      { u: 1, p: [186, 1.5, -25.5], t: [150, 2.2, -25.5], fov: 24 },
     ],
     { ease: 'linear', fog: 0.017 },
   ),
@@ -200,8 +200,8 @@ export const SHOTS: Shot[] = [
     156,
     '反打：她在门口回头。整条大道站满了纸人，杰克站在最前面。第十三声钟响。',
     [
-      { u: 0, p: [177.5, 1.75, -23.9], t: [130, 1.6, -25.5], fov: 40 },
-      { u: 1, p: [176.6, 1.7, -24.4], t: [140, 1.7, -25.5], fov: 30 },
+      { u: 0, p: [177.5, 1.75, -23.9], t: [140, 1.6, -25.5], fov: 38 },
+      { u: 1, p: [176.4, 1.7, -24.4], t: [150, 1.7, -25.5], fov: 28 },
     ],
     { ease: 'linear', fog: 0.02 },
   ),
@@ -223,8 +223,8 @@ export const SHOTS: Shot[] = [
     187,
     '尾声：黎明前的冷蓝。升机位从空旷的广场升起，旗杆下站着第十三个纸人。片尾字幕。',
     [
-      { u: 0, p: [0, 1.7, 46], t: [1.5, 1.4, 21], fov: 38 },
-      { u: 1, p: [0, 42, 96], t: [0, 0, 12], fov: 40 },
+      { u: 0, p: [0.5, 1.7, 40], t: [1.8, 1.4, 21], fov: 36 },
+      { u: 1, p: [0, 48, 36], t: [0, 0, 10], fov: 42 },
     ],
     { ease: 'smooth', time: 'dawn', fog: 0.008, light: 1 },
   ),
@@ -323,8 +323,8 @@ export function ripperAt(t: number): { x: number; y: number; z: number; yaw: num
   }
   if (t >= 118 && t < 132) return { x: -10.2, y: 0, z: 76.6, yaw: Math.PI * 0.08 + (t > 127 ? Math.min(1, (t - 127) / 1.5) * Math.PI * 0.9 : 0), visible: t > 121, tilt: t > 126 ? Math.min(1.2, (t - 126) * 0.5) : 0, knife: -0.3 }
   if (t >= 144 && t < 156) {
-    const walk = Math.max(0, t - 150) * 1.1
-    return { x: 146 + walk, y: 0, z: -25.5, yaw: Math.PI / 2, visible: true, tilt: 0.25, knife: -0.5 }
+    const walk = Math.max(0, t - 150) * 0.33
+    return { x: 160 + walk, y: 0, z: -25.5, yaw: Math.PI / 2, visible: true, tilt: 0.25, knife: -0.5 }
   }
   if (t >= 156 && t < 162) {
     const d = THREE_lerp(9, 0.9, Math.min(1, (t - 156) / 4.4))
