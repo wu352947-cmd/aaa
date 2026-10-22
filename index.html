@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#14110d">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<title>巴黎圣母院 1482</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="stylesheet" href="style.css">
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.169.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.169.0/examples/jsm/"
+} }
+</script>
+</head>
+<body>
+<canvas id="c"></canvas>
+
+<!-- 开始界面 -->
+<div id="start" class="screen">
+  <div class="start-inner">
+    <div class="ornament">✠</div>
+    <h1>巴黎圣母院</h1>
+    <div class="sub">NOTRE-DAME DE PARIS · MCCCCLXXXII</div>
+    <p class="lead">回到维克多·雨果笔下 1482 年的巴黎：彩绘未褪的门洞、二十八王像、尚未拆除的中世纪尖塔、悬着大钟“玛丽”的南钟楼，以及河滩广场、圣母桥与西岱宫。</p>
+
+    <div class="choice-label">游览方式</div>
+    <div class="choices" id="modeChoices">
+      <button class="choice sel" data-mode="tour"><b>漫步游览</b><span>操控人物自由行走、登塔、敲钟</span></button>
+      <button class="choice" data-mode="admire"><b>纯粹欣赏</b><span>自由环绕镜头与电影式漫游</span></button>
+    </div>
+
+    <div class="choice-label">扮演角色</div>
+    <div class="choices small" id="skinChoices">
+      <button class="choice sel" data-skin="pilgrim"><b>朝圣者</b></button>
+      <button class="choice" data-skin="gringoire"><b>甘果瓦</b></button>
+      <button class="choice" data-skin="esmeralda"><b>爱斯梅拉达</b></button>
+      <button class="choice" data-skin="quasimodo"><b>卡西莫多</b></button>
+    </div>
+
+    <div class="choice-label">画质</div>
+    <div class="choices small" id="qualityChoices">
+      <button class="choice" data-q="low"><b>流畅</b></button>
+      <button class="choice" data-q="medium"><b>均衡</b></button>
+      <button class="choice" data-q="high"><b>精美</b></button>
+    </div>
+
+    <button id="startBtn" class="primary">进入 1482 年的巴黎</button>
+    <div class="hint" id="ctrlHint">左下拖动摇杆移动 · 右侧滑动转动视角 · 双指缩放</div>
+  </div>
+</div>
+
+<!-- 加载 -->
+<div id="loading" class="screen hidden">
+  <div class="load-inner">
+    <div class="ananke">ἈΝΆΓΚΗ</div>
+    <div class="bar"><div id="barFill"></div></div>
+    <div id="loadText">正在凿刻石块……</div>
+    <p class="load-quote">“几年以前，笔者在参观圣母院时，在一座钟楼的阴暗角落里，发现墙上有这样一个手刻的单词……”</p>
+  </div>
+</div>
+
+<!-- 游戏界面 -->
+<div id="hud" class="hidden">
+  <div id="topbar">
+    <div id="placeBox"><div id="placeName">巴黎</div><div id="clockText">15:30</div></div>
+    <div class="tb-btns">
+      <button class="icon" id="btnPOI" title="地点">⌖<span>地点</span></button>
+      <button class="icon" id="btnTime" title="时间">☀<span>时间</span></button>
+      <button class="icon" id="btnPhoto" title="隐藏界面">◰<span>隐藏</span></button>
+      <button class="icon" id="btnMenu" title="菜单">☰<span>菜单</span></button>
+    </div>
+  </div>
+  <canvas id="minimap" width="300" height="300"></canvas>
+
+  <div id="tourUI">
+    <div id="joystick"><div id="knob"></div></div>
+    <div id="joyHint">移动</div>
+    <div id="actions">
+      <button class="act" id="btnJump">跳</button>
+      <button class="act" id="btnCam">视角</button>
+      <button class="act" id="btnRun">奔跑</button>
+    </div>
+    <div id="interact"></div>
+  </div>
+
+  <div id="admireUI" class="hidden">
+    <button class="pill" id="btnAuto">自动环绕</button>
+    <button class="pill" id="btnCine">电影漫游</button>
+    <button class="pill" id="btnToTour">下地漫步</button>
+  </div>
+  <div id="caption"></div>
+</div>
+
+<button id="btnShowUI" class="hidden">显示界面</button>
+
+<!-- 面板 -->
+<div id="poiPanel" class="panel hidden">
+  <div class="panel-head"><b>名胜导览</b><button class="close" data-close="poiPanel">✕</button></div>
+  <div id="poiList" class="panel-body"></div>
+</div>
+
+<div id="timePanel" class="panel hidden">
+  <div class="panel-head"><b>时间与季节</b><button class="close" data-close="timePanel">✕</button></div>
+  <div class="panel-body">
+    <label class="row">时刻 <span id="timeVal">15:30</span></label>
+    <input type="range" id="timeSlider" min="4" max="23.9" step="0.05" value="15.5">
+    <div class="presets">
+      <button data-h="6.6">晨曦</button><button data-h="10">上午</button><button data-h="13">正午</button><button data-h="17.6">黄昏</button><button data-h="21.5">夜晚</button>
+    </div>
+    <label class="row">季节</label>
+    <div class="presets" id="seasonBtns">
+      <button data-s="epiphany">主显节·1月6日</button><button data-s="spring" class="sel">春·3月</button><button data-s="summer">夏·6月</button>
+    </div>
+    <label class="row check"><input type="checkbox" id="timeFlow"> 时间流逝（每现实秒 = 1 分钟）</label>
+  </div>
+</div>
+
+<div id="menuPanel" class="panel hidden">
+  <div class="panel-head"><b>菜单</b><button class="close" data-close="menuPanel">✕</button></div>
+  <div class="panel-body">
+    <button class="wide" id="mSwitch">切换到欣赏模式</button>
+    <button class="wide" id="mSound">声音：开</button>
+    <button class="wide" id="mHelp">操作说明</button>
+    <button class="wide" id="mAbout">关于本作与史料</button>
+    <div class="stats" id="stats"></div>
+  </div>
+</div>
+
+<div id="info" class="card hidden">
+  <button class="close" id="infoClose">✕</button>
+  <div class="card-title" id="infoTitle"></div>
+  <div class="card-fr" id="infoFr"></div>
+  <div class="card-text" id="infoText"></div>
+  <div class="card-quote" id="infoQuote"></div>
+  <div class="card-btns" id="infoBtns"></div>
+</div>
+
+<div id="mapOverlay" class="hidden">
+  <canvas id="bigmap"></canvas>
+  <button class="close" id="mapClose">✕</button>
+  <div class="map-hint">点击地图上的地点即可前往</div>
+</div>
+
+<div id="toast"></div>
+
+<script type="module" src="src/main.js"></script>
+</body>
+</html>
