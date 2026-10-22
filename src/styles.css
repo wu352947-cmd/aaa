@@ -1,0 +1,573 @@
+/* 布局：全屏第一人称画面；HUD 贴四角，菜单与结局为居中全屏幕布。整体单一暗色调，刻意不跟随系统浅色主题。 */
+:root {
+  --ink: #e9e1d4; /* 旧纸白 */
+  --ink-dim: #9c9187;
+  --blood: #a3120e; /* 干涸血色 */
+  --blood-hi: #e2261c;
+  --night: #07050a;
+  --fog: rgba(20, 14, 18, 0.72);
+  --paper: #d8c9a4;
+  --paper-ink: #3a0907;
+  --font-brush: 'Zhi Mang Xing', 'Ma Shan Zheng', 'STKaiti', 'KaiTi', serif;
+  --font-old: 'IM Fell English', 'Times New Roman', serif;
+  --font-body: 'Noto Serif SC', 'Songti SC', 'STSong', serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, Menlo, monospace;
+  --gutter: max(16px, env(safe-area-inset-left, 0px));
+  --gutter-r: max(16px, env(safe-area-inset-right, 0px));
+  color-scheme: dark;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+body {
+  margin: 0;
+  background: var(--night);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: 14px;
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.app {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+.stage {
+  position: absolute !important;
+  inset: 0;
+  touch-action: none;
+}
+.mono {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+button {
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+button:focus-visible {
+  outline: 2px solid var(--blood-hi);
+  outline-offset: 3px;
+}
+
+.hud {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  padding-left: var(--gutter);
+  padding-right: var(--gutter-r);
+}
+.hud .menu,
+.hud .caught,
+.hud .escaped,
+.hud .letter,
+.hud .stick,
+.hud .lookpad,
+.hud .touch-btns {
+  pointer-events: auto;
+}
+
+/* ---------- 恐惧红晕 ---------- */
+.fear {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  background:
+    radial-gradient(ellipse at center, transparent 22%, rgba(110, 0, 0, 0.6) 62%, rgba(15, 0, 0, 0.98) 100%);
+  mix-blend-mode: multiply;
+}
+
+/* ---------- 全屏鬼脸 ---------- */
+.faceflash {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0;
+  z-index: 40;
+  pointer-events: none;
+  mix-blend-mode: normal;
+}
+
+/* ---------- 开场菜单 ---------- */
+.menu {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  overflow-y: auto;
+  background:
+    radial-gradient(ellipse at 50% 120%, rgba(120, 10, 10, 0.35), transparent 60%),
+    linear-gradient(180deg, rgba(5, 3, 6, 0.55), rgba(5, 3, 6, 0.92));
+  padding: calc(24px + env(safe-area-inset-top, 0px)) var(--gutter-r) calc(24px + env(safe-area-inset-bottom, 0px)) var(--gutter);
+}
+.menu-inner {
+  max-width: 560px;
+  display: grid;
+  gap: 14px;
+}
+.menu-kicker {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.2em;
+  color: var(--ink-dim);
+}
+.menu-title {
+  margin: 0;
+  font-family: var(--font-brush);
+  font-weight: 400;
+  font-size: clamp(64px, 14vw, 128px);
+  line-height: 0.95;
+  color: var(--blood-hi);
+  text-shadow:
+    0 0 24px rgba(200, 10, 10, 0.45),
+    0 2px 0 #300;
+  animation: breathe 5s ease-in-out infinite;
+}
+.menu-title span {
+  font-family: var(--font-old);
+  font-size: 0.42em;
+  color: var(--ink);
+  margin-left: 0.3em;
+  letter-spacing: 0.06em;
+  text-shadow: none;
+  vertical-align: 0.4em;
+}
+.menu-sub {
+  margin: -4px 0 6px;
+  font-size: 18px;
+  letter-spacing: 0.5em;
+  color: var(--ink);
+}
+.menu-story p {
+  margin: 0 0 6px;
+  line-height: 1.85;
+  color: var(--ink);
+  max-width: 34em;
+  opacity: 0.25;
+  animation: reveal 1.2s ease forwards;
+}
+.menu-story p:nth-child(4) {
+  font-family: var(--font-old);
+  font-style: italic;
+  font-size: 22px;
+  color: var(--blood-hi);
+}
+.menu-keys {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+  color: var(--ink-dim);
+  font-size: 13px;
+}
+kbd {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  padding: 2px 7px;
+  margin-right: 6px;
+  border: 1px solid rgba(233, 225, 212, 0.35);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  color: var(--ink);
+}
+.menu-tip {
+  margin: 0;
+  color: var(--ink-dim);
+  line-height: 1.7;
+  font-size: 13px;
+}
+.menu-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 6px;
+}
+.btn-blood {
+  border: 0;
+  padding: 14px 30px;
+  font-family: var(--font-brush);
+  font-size: 26px;
+  letter-spacing: 0.15em;
+  color: #fff3ea;
+  background: linear-gradient(180deg, #b3140f, #6b0805);
+  border-radius: 2px;
+  box-shadow:
+    0 0 0 1px rgba(255, 80, 60, 0.25) inset,
+    0 10px 30px rgba(150, 0, 0, 0.35);
+  transition: transform 0.15s, filter 0.15s;
+}
+.btn-blood:hover {
+  transform: translateY(-1px);
+  filter: brightness(1.15);
+}
+.btn-blood:disabled {
+  filter: grayscale(0.8) brightness(0.7);
+  cursor: progress;
+}
+.btn-ghost {
+  border: 1px solid rgba(233, 225, 212, 0.25);
+  background: transparent;
+  padding: 10px 18px;
+  font-size: 13px;
+  color: var(--ink-dim);
+  border-radius: 2px;
+}
+.menu-warn {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: #c75a52;
+}
+
+/* ---------- 游戏中 HUD ---------- */
+.pages {
+  position: absolute;
+  top: calc(16px + env(safe-area-inset-top, 0px));
+  left: var(--gutter);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  letter-spacing: 0.12em;
+  color: var(--ink);
+  text-shadow: 0 1px 4px #000;
+}
+.pages-label {
+  font-family: var(--font-brush);
+  font-size: 22px;
+  color: var(--blood-hi);
+}
+.pages-dots {
+  display: flex;
+  gap: 5px;
+}
+.dot {
+  width: 10px;
+  height: 13px;
+  border: 1px solid rgba(233, 225, 212, 0.4);
+  transform: rotate(-6deg);
+}
+.dot.on {
+  background: var(--paper);
+  border-color: var(--paper);
+  box-shadow: inset 0 -5px 0 var(--blood);
+}
+.location {
+  position: absolute;
+  top: calc(18px + env(safe-area-inset-top, 0px));
+  right: var(--gutter-r);
+  margin: 0;
+  font-family: var(--font-brush);
+  font-size: 24px;
+  color: rgba(233, 225, 212, 0.75);
+  text-shadow: 0 2px 8px #000;
+}
+.crosshair {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 4px;
+  height: 4px;
+  margin: -2px 0 0 -2px;
+  border-radius: 50%;
+  background: rgba(233, 225, 212, 0.55);
+}
+.bars {
+  position: absolute;
+  left: var(--gutter);
+  bottom: calc(18px + env(safe-area-inset-bottom, 0px));
+  display: grid;
+  gap: 8px;
+  width: min(220px, 45vw);
+}
+.bar {
+  display: grid;
+  grid-template-columns: 4.5em 1fr;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--ink-dim);
+  text-shadow: 0 1px 3px #000;
+}
+.bar-track {
+  height: 4px;
+  background: rgba(233, 225, 212, 0.15);
+  overflow: hidden;
+}
+.bar-fill {
+  display: block;
+  height: 100%;
+  transform-origin: left center;
+  transition: transform 0.15s linear;
+}
+.bar-fill.stamina {
+  background: var(--ink);
+}
+.bar-fill.battery {
+  background: #e8c36a;
+}
+.bar-fill.battery.low {
+  background: var(--blood-hi);
+  animation: blink 0.7s steps(2) infinite;
+}
+.subtitle {
+  position: absolute;
+  left: 50%;
+  bottom: calc(80px + env(safe-area-inset-bottom, 0px));
+  transform: translateX(-50%);
+  margin: 0;
+  max-width: min(640px, calc(100% - 32px));
+  text-align: center;
+  font-size: 17px;
+  line-height: 1.6;
+  letter-spacing: 0.06em;
+  color: var(--ink);
+  text-shadow:
+    0 0 8px #000,
+    0 2px 2px #000;
+  animation: reveal 0.5s ease;
+}
+
+/* ---------- 信件 ---------- */
+.letter {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: rgba(5, 2, 3, 0.45);
+  padding: 16px var(--gutter-r) 16px var(--gutter);
+}
+.letter-paper {
+  width: min(440px, 100%);
+  padding: 26px 28px 20px;
+  color: var(--paper-ink);
+  background:
+    radial-gradient(circle at 80% 20%, rgba(120, 10, 5, 0.35) 0 22px, transparent 24px),
+    radial-gradient(circle at 15% 85%, rgba(120, 10, 5, 0.25) 0 30px, transparent 34px),
+    linear-gradient(170deg, #e2d4b0, #b39b6f);
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.8);
+  transform: rotate(-1.5deg);
+  animation: paperIn 0.6s cubic-bezier(0.2, 0.9, 0.3, 1.2);
+}
+.letter-paper h2 {
+  margin: 0 0 12px;
+  font-family: var(--font-brush);
+  font-weight: 400;
+  font-size: 30px;
+  color: #7a0b07;
+}
+.letter-paper p {
+  margin: 0;
+  font-family: var(--font-brush);
+  font-size: 20px;
+  line-height: 1.55;
+}
+.letter-paper .letter-hint {
+  margin-top: 14px;
+  font-family: var(--font-body);
+  font-size: 11px;
+  color: rgba(58, 9, 7, 0.6);
+}
+
+/* ---------- 触屏 ---------- */
+.stick {
+  position: absolute;
+  left: calc(var(--gutter) + 8px);
+  bottom: calc(70px + env(safe-area-inset-bottom, 0px));
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  border: 1px solid rgba(233, 225, 212, 0.25);
+  display: grid;
+  place-items: center;
+  touch-action: none;
+}
+.stick-knob {
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  background: rgba(233, 225, 212, 0.25);
+}
+.lookpad {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 55%;
+  touch-action: none;
+}
+.touch-btns {
+  position: absolute;
+  right: calc(var(--gutter-r) + 6px);
+  bottom: calc(90px + env(safe-area-inset-bottom, 0px));
+  display: grid;
+  gap: 12px;
+}
+.tbtn {
+  width: 58px;
+  height: 58px;
+  border-radius: 50%;
+  border: 1px solid rgba(233, 225, 212, 0.35);
+  background: rgba(20, 8, 10, 0.5);
+  font-family: var(--font-brush);
+  font-size: 22px;
+  touch-action: none;
+}
+
+/* ---------- 结局 ---------- */
+.caught,
+.escaped {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 16px var(--gutter-r) 16px var(--gutter);
+}
+.caught-flash {
+  position: absolute;
+  inset: 0;
+  background: #b00;
+  mix-blend-mode: multiply;
+  animation: flash 1.7s steps(1) forwards;
+}
+.caught.show {
+  background: radial-gradient(ellipse at center, rgba(60, 0, 0, 0.85), rgba(5, 0, 0, 0.98));
+  transition: background 1s;
+}
+.escaped {
+  background: linear-gradient(180deg, rgba(40, 44, 52, 0.75), rgba(200, 196, 190, 0.85));
+  color: #1c1517;
+  animation: dawn 3s ease forwards;
+}
+.end-inner {
+  position: relative;
+  max-width: 520px;
+  display: grid;
+  gap: 12px;
+  text-align: center;
+  justify-items: center;
+  animation: reveal 1.2s ease;
+}
+.end-title {
+  margin: 0;
+  font-family: var(--font-brush);
+  font-weight: 400;
+  font-size: clamp(64px, 16vw, 120px);
+  color: var(--blood-hi);
+  text-shadow: 0 0 30px rgba(200, 0, 0, 0.6);
+}
+.end-title.pale {
+  color: #3a2a2a;
+  text-shadow: none;
+}
+.end-text {
+  margin: 0;
+  font-size: 16px;
+  line-height: 1.8;
+}
+.end-sub {
+  margin: 0 0 8px;
+  font-size: 13px;
+  opacity: 0.75;
+}
+
+@keyframes reveal {
+  from {
+    opacity: 0;
+    filter: blur(4px);
+  }
+  to {
+    opacity: 1;
+    filter: none;
+  }
+}
+@keyframes breathe {
+  0%,
+  100% {
+    opacity: 0.92;
+  }
+  47% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.55;
+  }
+  53% {
+    opacity: 1;
+  }
+}
+@keyframes blink {
+  50% {
+    opacity: 0.2;
+  }
+}
+@keyframes paperIn {
+  from {
+    transform: rotate(-8deg) translateY(30px) scale(0.9);
+    opacity: 0;
+  }
+}
+@keyframes flash {
+  0% {
+    opacity: 0.9;
+  }
+  8% {
+    opacity: 0;
+  }
+  16% {
+    opacity: 0.8;
+  }
+  24% {
+    opacity: 0.1;
+  }
+  60% {
+    opacity: 0.4;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+@keyframes dawn {
+  from {
+    opacity: 0;
+  }
+}
+
+@media (max-width: 760px) {
+  .location {
+    font-size: 18px;
+  }
+  .bars {
+    left: auto;
+    right: var(--gutter-r);
+    top: calc(52px + env(safe-area-inset-top, 0px));
+    bottom: auto;
+    width: 150px;
+  }
+  .subtitle {
+    font-size: 15px;
+    bottom: calc(210px + env(safe-area-inset-bottom, 0px));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .menu-title,
+  .bar-fill.battery.low {
+    animation: none;
+  }
+  .menu-story p {
+    opacity: 1;
+    animation: none;
+  }
+}
