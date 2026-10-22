@@ -16,7 +16,7 @@ const RUN = 6.4
 export function Player() {
   const { camera, gl } = useThree()
   const yaw = useRef(Math.PI) // 面向北（-z）
-  const pitch = useRef(0.05)
+  const pitch = useRef(-0.08)
   const bob = useRef(0)
   const lastStep = useRef(0)
   const light = useRef<THREE.SpotLight>(null)
@@ -77,7 +77,7 @@ export function Player() {
       runId.current = ui.runId
       G.player.copy(SPAWN)
       yaw.current = Math.PI
-      pitch.current = 0.05
+      pitch.current = -0.08
     }
     if (!target.parent) scene.add(target)
 
@@ -127,17 +127,17 @@ export function Player() {
     if (G.flashlightOn) G.battery = Math.max(0, G.battery - dt / 260)
     let lum = G.flashlightOn ? (G.battery > 0 ? 1 : 0.08) : 0
     if (G.battery < 0.15 && G.flashlightOn) lum *= Math.random() < 0.08 ? 0.1 : 0.55 + G.battery * 3
-    if (G.killerDist < 26 && Math.random() < 0.25 + (26 - G.killerDist) / 40) lum *= Math.random() * 0.6
+    if (G.killerDist < 26 && Math.random() < 0.12 + (26 - G.killerDist) / 90) lum *= 0.25 + Math.random() * 0.5
     if (G.scare > 0.5) lum *= Math.random()
     if (light.current) {
       light.current.position.copy(camera.position).addScaledVector(right, 0.25).add(new THREE.Vector3(0, -0.25, 0))
       target.position.copy(camera.position).addScaledVector(G.look, 10)
       light.current.target = target
-      light.current.intensity = THREE.MathUtils.lerp(light.current.intensity, 160 * lum, 0.5)
+      light.current.intensity = THREE.MathUtils.lerp(light.current.intensity, (ui.phase === 'caught' ? 6 : 140) * lum, 0.5)
     }
     if (fill.current) {
       fill.current.position.copy(camera.position)
-      fill.current.intensity = 1.2 + lum * 2
+      fill.current.intensity = 2.5 + lum * 2
     }
 
     // 地点提示

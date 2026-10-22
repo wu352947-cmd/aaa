@@ -134,12 +134,14 @@ export function Killer() {
     if (ui.phase === 'caught') {
       const fwd = new THREE.Vector3()
       camera.getWorldDirection(fwd)
-      g.position.copy(camera.position).addScaledVector(fwd, 0.62)
-      g.position.y = camera.position.y - 1.9
+      fwd.y = 0
+      fwd.normalize()
+      g.position.copy(camera.position).addScaledVector(fwd, 0.95)
+      g.position.y = camera.position.y - 1.97
       g.lookAt(camera.position.x, g.position.y, camera.position.z)
       g.visible = Math.random() > 0.08
       if (knifeArm.current) knifeArm.current.rotation.x = -2.2 + Math.sin(performance.now() / 40) * 0.3
-      if (eyeLight.current) eyeLight.current.intensity = 6
+      if (eyeLight.current) eyeLight.current.intensity = 1.2
       return
     }
     if (ui.phase !== 'playing') {
