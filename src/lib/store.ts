@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from 'react'
 
-export type TimeOfDay = 'day' | 'dusk' | 'night'
+export type TimeOfDay = 'day' | 'dusk' | 'night' | 'horror'
 export type Quality = 'high' | 'low'
 
 export interface AppState {
@@ -15,7 +15,7 @@ export interface AppState {
 }
 
 let state: AppState = {
-  time: 'day',
+  time: 'horror',
   quality: 'high',
   labels: true,
   selected: null,

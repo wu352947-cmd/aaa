@@ -5,6 +5,8 @@ import type { FacadeTextures } from './painter'
 const glowing = new Set<THREE.MeshStandardMaterial>()
 const glowBase = new WeakMap<THREE.Material, number>()
 let nightLevel = 0
+/** 供电系数：恐怖事件里用来制造整片断电、闪烁 */
+export const power = { level: 1 }
 
 export function registerGlow(m: THREE.MeshStandardMaterial, base = 1) {
   glowing.add(m)
@@ -14,8 +16,8 @@ export function registerGlow(m: THREE.MeshStandardMaterial, base = 1) {
 }
 
 export function setNightLevel(v: number) {
-  nightLevel = v
-  glowing.forEach((m) => (m.emissiveIntensity = (glowBase.get(m) ?? 1) * v))
+  nightLevel = v * power.level
+  glowing.forEach((m) => (m.emissiveIntensity = (glowBase.get(m) ?? 1) * nightLevel))
 }
 
 export function facadeMaterial(t: FacadeTextures, o: { glow?: number; envMapIntensity?: number } = {}) {

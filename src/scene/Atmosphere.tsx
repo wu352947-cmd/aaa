@@ -95,6 +95,29 @@ export const PRESETS: Record<TimeOfDay, Preset> = {
     env: 0.35,
     bloom: 1.1,
   },
+  // 血月午夜：浓雾、暗红天幕、巨大的红月
+  horror: {
+    elev: 24,
+    azim: -150,
+    sunColor: '#ff3b26',
+    sunI: 0.22,
+    hemiSky: '#3a2430',
+    hemiGround: '#0c0a0c',
+    hemiI: 0.16,
+    zenith: '#030204',
+    mid: '#160a10',
+    horizon: '#2a1a20',
+    ground: '#0a0809',
+    glow: 0.9,
+    clouds: 0.75,
+    cloudColor: '#3c1c20',
+    stars: 0.25,
+    fog: '#1d1418',
+    fogD: 0.034,
+    night: 0.16,
+    env: 0.12,
+    bloom: 1.3,
+  },
 }
 
 /** 运行时插值中的当前参数（Effects 读取 bloom） */
@@ -110,7 +133,7 @@ void main() {
 
 const skyFrag = /* glsl */ `
 uniform vec3 uZenith, uMid, uHorizon, uGround, uSunDir, uSunColor, uCloudColor;
-uniform float uGlow, uClouds, uStars, uTime;
+uniform float uGlow, uClouds, uStars, uTime, uMoon;
 varying vec3 vDir;
 float hash(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
 float noise(vec2 p){
@@ -128,6 +151,11 @@ void main(){
   col = mix(col, uGround, smoothstep(0.0, -0.12, h));
   float sd = max(dot(d, normalize(uSunDir)), 0.0);
   col += uSunColor * (pow(sd, 1600.0) * 30.0 + pow(sd, 60.0) * 0.6 + pow(sd, 6.0) * 0.25 * uGlow);
+  // 血月：大圆盘 + 表面斑驳
+  float md = smoothstep(0.9975 - uMoon * 0.004, 0.9985 - uMoon * 0.004, sd);
+  float spots = 0.75 + 0.25 * noise(d.xy * 420.0 + d.z * 90.0);
+  col = mix(col, uSunColor * 2.6 * spots, md * uMoon);
+  col += uSunColor * uMoon * pow(sd, 120.0) * 1.2;
   // 地平线附近的太阳余晖
   col += uSunColor * uGlow * 0.35 * pow(1.0 - abs(h), 8.0) * (0.4 + 0.6 * pow(sd, 2.0));
   if (h > 0.0) {
@@ -166,6 +194,7 @@ function makeSkyMaterial() {
       uClouds: { value: p.clouds },
       uStars: { value: p.stars },
       uTime: { value: 0 },
+      uMoon: { value: 0 },
     },
   })
 }
@@ -215,6 +244,7 @@ export function Atmosphere() {
     u.uClouds.value = c.clouds
     u.uStars.value = c.stars
     u.uTime.value = clock.elapsedTime
+    u.uMoon.value += ((time === 'horror' ? 1 : 0) - u.uMoon.value) * k
 
     if (sun.current) {
       sun.current.position.copy(target.position).addScaledVector(c.dir, 600)
@@ -249,10 +279,10 @@ export function Atmosphere() {
       </Environment>
       <hemisphereLight ref={hemi} args={['#cfe2ff', '#7a7560', 0.85]} />
       <directionalLight
-        key={mapSize}
+        key={mapSize + time}
         ref={sun}
         target={target}
-        castShadow
+        castShadow={time !== 'horror'}
         intensity={3.4}
         shadow-mapSize={[mapSize, mapSize]}
         shadow-bias={-0.0004}

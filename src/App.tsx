@@ -4,13 +4,16 @@ import { Canvas, useThree } from '@react-three/fiber'
 import { AdaptiveDpr } from '@react-three/drei'
 import { Campus } from './scene/Campus'
 import { Atmosphere } from './scene/Atmosphere'
-import { Effects } from './scene/Effects'
-import { CameraRig } from './scene/CameraRig'
-import { Labels } from './scene/Labels'
-import { Overlay } from './ui/Overlay'
+import { Player } from './game/Player'
+import { Killer } from './game/Killer'
+import { Pages } from './game/Pages'
+import { Ghosts, BloodWriting, IronGate } from './game/Ghosts'
+import { Events } from './game/Events'
+import { HorrorFX } from './game/HorrorFX'
+import { HUD } from './ui/HUD'
 import { store, useStore } from './lib/store'
 
-/** 场景首帧渲染完成后撤掉加载页 */
+/** 场景首帧渲染完成后才允许开始 */
 function Ready() {
   const { gl } = useThree()
   useEffect(() => {
@@ -33,22 +36,28 @@ export default function App() {
       <Canvas
         className="stage"
         shadows={{ type: THREE.PCFSoftShadowMap }}
-        dpr={quality === 'high' ? [1, 2] : [0.75, 1.25]}
-        camera={{ fov: 42, near: 0.5, far: 12000, position: [-150, 400, 520] }}
+        dpr={quality === 'high' ? [1, 1.75] : [0.6, 1]}
+        camera={{ fov: 72, near: 0.08, far: 900, position: [-110, 1.6, 120] }}
         gl={{ antialias: false, toneMapping: THREE.NoToneMapping, powerPreference: 'high-performance', preserveDrawingBuffer: true }}
-        onPointerMissed={() => store.set({ selected: null })}
+        // 第一人称不需要场景点击拾取，关闭事件系统以免每帧对上万片树叶做射线检测
+        onCreated={(s) => s.setEvents({ enabled: false })}
       >
         <Suspense fallback={null}>
           <Atmosphere />
           <Campus />
-          <Labels />
-          <CameraRig />
-          <Effects />
+          <Pages />
+          <Killer />
+          <Ghosts />
+          <BloodWriting />
+          <IronGate />
+          <Events />
+          <Player />
+          <HorrorFX />
           <Ready />
         </Suspense>
         <AdaptiveDpr pixelated={false} />
       </Canvas>
-      <Overlay />
+      <HUD />
     </div>
   )
 }
