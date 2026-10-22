@@ -41,12 +41,17 @@ export function Player() {
       dragging = true
     }
     const onUp = () => (dragging = false)
+    // 刚进入/退出指针锁定时浏览器常会送来一次巨大的位移，丢弃这类跳变
+    let lockChangedAt = 0
+    const onLock = () => (lockChangedAt = performance.now())
     const onMove = (e: MouseEvent) => {
-      if (document.pointerLockElement === el || dragging) {
-        input.lookDX += e.movementX
-        input.lookDY += e.movementY
-      }
+      if (document.pointerLockElement !== el && !dragging) return
+      if (performance.now() - lockChangedAt < 200) return
+      if (Math.abs(e.movementX) > 250 || Math.abs(e.movementY) > 250) return
+      input.lookDX += e.movementX
+      input.lookDY += e.movementY
     }
+    document.addEventListener('pointerlockchange', onLock)
     el.addEventListener('mousedown', onDown)
     window.addEventListener('mouseup', onUp)
     window.addEventListener('mousemove', onMove)
@@ -54,6 +59,7 @@ export function Player() {
       el.removeEventListener('mousedown', onDown)
       window.removeEventListener('mouseup', onUp)
       window.removeEventListener('mousemove', onMove)
+      document.removeEventListener('pointerlockchange', onLock)
     }
   }, [gl])
 
