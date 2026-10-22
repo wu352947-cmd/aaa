@@ -1,0 +1,740 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<!--ARTIFACT-HEAD-->
+<title>渔阳鼙鼓动地来</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="description" content="安史之乱（755—763）沉浸式水墨科普长卷">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Ma+Shan+Zheng&family=Zhi+Mang+Xing&family=Noto+Serif+SC:wght@400;600;900&display=swap">
+<style>
+/* 布局：一幅从右向左展开的水墨长卷。固定的 WebGL 山河作底，正文是一段段"卷"，战事年表在桌面端横向展开 */
+:root{
+  --ink:#0c0a09;        /* 松烟墨 */
+  --ink-2:#16110e;
+  --paper:#ece2cc;      /* 宣纸 */
+  --paper-dim:#9d907a;
+  --gold:#c9a35b;       /* 盛唐金 */
+  --cinnabar:#c0392b;   /* 朱砂印泥 */
+  --ember:#ff7a3c;      /* 烽火 */
+  --veil:rgba(12,10,9,.62);
+  --line:rgba(236,226,204,.16);
+  --f-brush:"Ma Shan Zheng","STXingkai","KaiTi","Kaiti SC",serif;
+  --f-wild:"Zhi Mang Xing","Ma Shan Zheng","STXingkai","KaiTi",serif;
+  --f-body:"Noto Serif SC","Songti SC","SimSun","Source Han Serif SC",serif;
+  color-scheme:dark;
+}
+*,*::before,*::after{box-sizing:border-box}
+html{scroll-behavior:smooth;background:var(--ink)}
+body{margin:0;background:var(--ink);color:var(--paper);font-family:var(--f-body);font-size:17px;line-height:1.85;overflow-x:clip;-webkit-font-smoothing:antialiased}
+::selection{background:var(--cinnabar);color:var(--paper)}
+a{color:var(--gold)}
+:focus-visible{outline:2px solid var(--gold);outline-offset:4px}
+
+#sky,#ash{position:fixed;inset:0;width:100%;height:100%;display:block;pointer-events:none}
+#sky{z-index:0;background:radial-gradient(120% 80% at 70% 30%,#5b3d1d 0%,#1b120c 55%,var(--ink) 100%)}
+#ash{z-index:1}
+main{position:relative;z-index:2}
+
+.wrap{padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));max-width:1240px;margin-inline:auto}
+.eyebrow{font-size:.78rem;letter-spacing:.32em;color:var(--gold);margin:0}
+h2{font-family:var(--f-brush);font-weight:400;font-size:clamp(2.4rem,6vw,4.2rem);line-height:1.1;margin:0;text-wrap:balance;letter-spacing:.04em}
+.sec{padding-block:clamp(72px,12vw,150px)}
+.sec-head{display:flex;flex-direction:column;gap:14px;max-width:40rem;margin-bottom:clamp(36px,6vw,64px)}
+.sec-head p:not(.eyebrow){color:var(--paper-dim);margin:0}
+.big-glyph{font-family:var(--f-wild);color:var(--cinnabar);font-size:1.1em}
+
+/* ———— 卷首 ———— */
+.hero{padding-block:clamp(48px,9vw,110px) clamp(56px,8vw,96px)}
+.hero-grid{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:clamp(20px,4vw,56px);align-items:start}
+.hero-side{display:flex;flex-direction:column;gap:26px;padding-top:clamp(20px,8vw,120px);max-width:30rem;min-width:0}
+.hero-side .lede{font-size:clamp(1.05rem,1.6vw,1.22rem);margin:0;text-shadow:0 2px 18px rgba(0,0,0,.7)}
+.hero-title{writing-mode:vertical-rl;font-family:var(--f-brush);font-weight:400;font-size:clamp(5rem,13vw,10.5rem);line-height:1;margin:0;letter-spacing:.02em;text-shadow:0 0 40px rgba(0,0,0,.65),0 0 2px rgba(0,0,0,.9);transform:translate(var(--shx,0),var(--shy,0))}
+.hero-title span{display:inline-block;animation:inkIn 1.3s cubic-bezier(.2,.7,.2,1) both}
+.hero-title span:nth-child(2){animation-delay:.18s}
+.hero-title span:nth-child(3){animation-delay:.36s;font-size:.62em;color:var(--paper-dim);margin-block:.12em}
+.hero-title span:nth-child(4){animation-delay:.54s;color:var(--paper)}
+@keyframes inkIn{from{opacity:0;filter:blur(14px);transform:translateY(-.15em) scale(1.08)}to{opacity:1;filter:blur(0);transform:none}}
+.hero-verse{writing-mode:vertical-rl;font-family:var(--f-brush);font-size:clamp(1.25rem,2.2vw,1.7rem);letter-spacing:.35em;margin:0;color:var(--paper);opacity:.88;padding-top:clamp(40px,10vw,150px);text-shadow:0 2px 14px rgba(0,0,0,.8)}
+.hero-verse em{font-style:normal;color:var(--ember)}
+.seal{display:inline-grid;place-items:center;width:4.4rem;height:4.4rem;background:var(--cinnabar);color:var(--paper);font-family:var(--f-brush);font-size:1.15rem;line-height:1.05;text-align:center;border-radius:6px;transform:rotate(-4deg);box-shadow:inset 0 0 0 3px var(--cinnabar),inset 0 0 0 5px rgba(236,226,204,.75);filter:url(#rough)}
+.hero-actions{display:flex;flex-wrap:wrap;gap:14px 22px;align-items:center}
+.btn{font:inherit;font-size:.95rem;letter-spacing:.12em;cursor:pointer;border:1px solid var(--gold);background:rgba(12,10,9,.4);color:var(--paper);padding:.7em 1.4em;border-radius:2px;transition:background .3s,color .3s;text-decoration:none;display:inline-flex;gap:.6em;align-items:center}
+.btn:hover,.btn[aria-pressed="true"]{background:var(--gold);color:var(--ink)}
+.scroll-hint{font-size:.85rem;letter-spacing:.2em;color:var(--paper-dim);text-decoration:none}
+
+/* ———— 隙 · 盛世裂痕 ———— */
+.causes{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:clamp(16px,2.4vw,28px)}
+.cause{background:var(--veil);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);border-top:1px solid var(--gold);padding:28px 26px 30px;display:flex;flex-direction:column;gap:12px;min-width:0}
+.cause .num{font-family:var(--f-brush);font-size:clamp(2.8rem,5vw,3.8rem);line-height:1;color:var(--gold);font-variant-numeric:tabular-nums}
+.cause .num small{font-size:.42em;margin-left:.2em;color:var(--paper-dim)}
+.cause h3{margin:0;font-size:1.15rem;font-weight:600;letter-spacing:.08em}
+.cause p{margin:0;color:var(--paper-dim);font-size:.95rem}
+
+/* ———— 卷 · 烽火七年（年表） ———— */
+#roll{position:relative;padding-block:clamp(72px,10vw,120px)}
+.roll-bar{height:2px;background:var(--line);margin-top:28px;overflow:hidden}
+.roll-bar i{display:block;height:100%;background:linear-gradient(90deg,var(--gold),var(--cinnabar),var(--ember));transform-origin:0 50%;transform:scaleX(1)}
+.track{display:grid;grid-template-columns:minmax(0,1fr);gap:18px}
+.panel{position:relative;background:var(--veil);backdrop-filter:blur(5px);-webkit-backdrop-filter:blur(5px);border:1px solid var(--line);padding:30px 28px 30px 30px;display:grid;grid-template-columns:auto minmax(0,1fr);gap:6px 24px;align-items:start;min-width:0}
+.panel .glyph{grid-row:span 3;font-family:var(--f-wild);font-size:clamp(4.4rem,8vw,6.4rem);line-height:.9;color:var(--cinnabar);text-shadow:0 0 30px rgba(192,57,43,.35)}
+.panel .when{font-size:.8rem;letter-spacing:.18em;color:var(--gold);display:flex;flex-wrap:wrap;gap:4px 12px}
+.panel .when b{font-weight:600;color:var(--paper);font-variant-numeric:tabular-nums}
+.panel h3{margin:0;font-family:var(--f-brush);font-weight:400;font-size:1.9rem;line-height:1.25;letter-spacing:.06em}
+.panel p{margin:0;color:var(--paper-dim);font-size:.95rem}
+.panel p strong{color:var(--paper);font-weight:600}
+.panel.turn{border-color:rgba(192,57,43,.55)}
+.panel.end{border-color:var(--gold)}
+.panel.end .glyph{color:var(--gold)}
+/* 桌面端由脚本开启横向卷轴 */
+.js-h #roll{height:100vh;overflow:hidden;display:flex;flex-direction:column;justify-content:center;padding-block:0}
+.js-h .track{display:flex;width:max-content;gap:26px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));will-change:transform}
+.js-h .panel{width:min(31rem,74vw);flex:none}
+.js-h .roll-head{margin-bottom:34px}
+
+/* ———— 图 · 铁骑南下 ———— */
+.map-wrap{display:grid;grid-template-columns:minmax(0,1fr) 17rem;gap:clamp(20px,3vw,40px);align-items:start}
+.map-box{position:relative;background:var(--veil);border:1px solid var(--line);overflow-x:auto;min-width:0}
+.map-box svg{display:block;width:100%;min-width:560px;height:auto}
+.legend{display:flex;flex-direction:column;gap:18px;margin:0;padding:0;list-style:none}
+.legend li{display:grid;grid-template-columns:28px minmax(0,1fr);gap:12px;align-items:start;font-size:.92rem;color:var(--paper-dim)}
+.legend li b{display:block;color:var(--paper);font-weight:600;letter-spacing:.06em}
+.legend i{display:block;height:3px;margin-top:.8em;border-radius:2px}
+.map-note{font-size:.78rem;color:var(--paper-dim);margin-top:14px;letter-spacing:.06em}
+.city text{font-family:var(--f-body);font-size:15px;fill:var(--paper);paint-order:stroke;stroke:var(--ink);stroke-width:4px}
+.city circle.dot{fill:var(--paper)}
+.city.capital circle.dot{fill:var(--gold)}
+.city circle.pulse{fill:none;stroke:var(--gold);stroke-width:1.2;transform-box:fill-box;transform-origin:center;animation:pulse 2.6s ease-out infinite}
+@keyframes pulse{from{transform:scale(.6);opacity:.9}to{transform:scale(3.2);opacity:0}}
+.river{fill:none;stroke:#4d6b7a;stroke-width:2.2;opacity:.75;stroke-linecap:round}
+.river-label{font-family:var(--f-brush);font-size:22px;fill:#7f9aa6;opacity:.85}
+.route{fill:none;stroke-linecap:round;stroke-linejoin:round}
+
+/* ———— 数 · 户口之殇 ———— */
+.census{display:grid;grid-template-columns:18rem minmax(0,1fr);gap:clamp(24px,4vw,56px);align-items:start}
+.census-stats{display:flex;flex-direction:column;gap:26px}
+.stat{border-left:2px solid var(--gold);padding-left:18px;display:flex;flex-direction:column;gap:2px}
+.stat.after{border-color:var(--cinnabar)}
+.stat .k{font-size:.8rem;letter-spacing:.16em;color:var(--paper-dim)}
+.stat .v{font-family:var(--f-brush);font-size:clamp(2.4rem,4.4vw,3.2rem);line-height:1.1;font-variant-numeric:tabular-nums}
+.stat .s{font-size:.88rem;color:var(--paper-dim)}
+.dots-box{background:var(--veil);border:1px solid var(--line);padding:22px;min-width:0}
+#dots{display:block;width:100%;height:auto}
+.dots-key{display:flex;flex-wrap:wrap;gap:8px 22px;font-size:.85rem;color:var(--paper-dim);margin-top:14px}
+.dots-key span{display:inline-flex;gap:8px;align-items:center}
+.dots-key i{width:10px;height:10px;border-radius:50%;display:inline-block}
+.caveat{font-size:.88rem;color:var(--paper-dim);max-width:44rem;margin:22px 0 0}
+
+/* ———— 人 · 风云人物 ———— */
+.people{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+.person{position:relative;overflow:hidden;background:var(--veil);border:1px solid var(--line);padding:24px 22px 26px;display:flex;flex-direction:column;gap:8px;min-width:0;isolation:isolate}
+.person::before{content:"";position:absolute;inset:0;z-index:-1;background:radial-gradient(circle at var(--mx,50%) var(--my,50%),rgba(192,57,43,.55),rgba(192,57,43,0) 60%);opacity:0;transform:scale(.6);transition:opacity .45s,transform .7s cubic-bezier(.2,.7,.2,1)}
+.person:hover::before,.person:focus-within::before{opacity:1;transform:scale(1.4)}
+.person .nm{font-family:var(--f-brush);font-size:2.1rem;line-height:1.15;letter-spacing:.06em}
+.person .tag{font-size:.75rem;letter-spacing:.2em;color:var(--gold)}
+.person.rebel .tag{color:var(--ember)}
+.person p{margin:0;font-size:.9rem;color:var(--paper-dim)}
+
+/* ———— 诗 · 春望 ———— */
+.poem-sec{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:clamp(24px,5vw,80px);align-items:center}
+.poem{writing-mode:vertical-rl;font-family:var(--f-brush);font-size:clamp(1.9rem,4.4vw,3.3rem);line-height:1.75;letter-spacing:.22em;margin:0;justify-self:center;max-width:100%;overflow-x:auto}
+.poem .ch{color:var(--paper);transition:text-shadow .3s}
+.poem .sign{font-size:.42em;color:var(--gold);letter-spacing:.3em;padding-top:2em}
+.poem-side{display:flex;flex-direction:column;gap:18px;max-width:28rem;min-width:0}
+.poem-side p{margin:0;color:var(--paper-dim)}
+.quote{font-family:var(--f-brush);font-size:1.5rem;color:var(--paper);line-height:1.6}
+
+/* ———— 跋 · 余波 ———— */
+.after{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:clamp(14px,2vw,24px)}
+.after article{display:flex;flex-direction:column;gap:10px;padding-top:20px;border-top:1px solid var(--line);min-width:0}
+.after .g{font-family:var(--f-wild);font-size:3.4rem;line-height:1;color:var(--gold)}
+.after h3{margin:0;font-size:1.08rem;letter-spacing:.08em;font-weight:600}
+.after p{margin:0;color:var(--paper-dim);font-size:.93rem}
+.coda{margin-top:clamp(70px,10vw,120px);display:flex;flex-direction:column;align-items:center;gap:22px;text-align:center}
+.coda .line{font-family:var(--f-brush);font-size:clamp(1.8rem,4.6vw,3rem);letter-spacing:.2em;text-wrap:balance}
+footer{padding-block:48px 64px;border-top:1px solid var(--line);font-size:.82rem;color:var(--paper-dim);display:flex;flex-direction:column;gap:8px}
+footer p{margin:0}
+
+/* ———— 鼓 ———— */
+.drum-fab{position:fixed;z-index:20;right:calc(18px + env(safe-area-inset-right,0px));bottom:calc(18px + env(safe-area-inset-bottom,0px));width:58px;height:58px;border-radius:50%;border:1px solid var(--gold);background:rgba(12,10,9,.7);color:var(--paper);font-family:var(--f-brush);font-size:1.6rem;cursor:pointer;backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);transition:background .3s,color .3s,transform .1s}
+.drum-fab[aria-pressed="true"]{background:var(--cinnabar);border-color:var(--cinnabar)}
+.drum-fab.hit{transform:scale(1.12)}
+
+@media (min-width:1100px){.people{grid-template-columns:repeat(5,minmax(0,1fr))}}
+@media (max-width:980px){.after{grid-template-columns:repeat(2,minmax(0,1fr))}.map-wrap{grid-template-columns:minmax(0,1fr)}.census{grid-template-columns:minmax(0,1fr)}.census-stats{flex-direction:row;flex-wrap:wrap}.stat{flex:1 1 14rem}}
+@media (max-width:760px){
+  .hero-verse{grid-column:2;grid-row:1}
+  .hero-title{grid-column:3;grid-row:1}
+  .hero-side{grid-column:1/-1;grid-row:2;padding-top:0}
+  .causes{grid-template-columns:minmax(0,1fr)}
+  .poem-sec{grid-template-columns:minmax(0,1fr)}
+  .poem{justify-self:end}
+}
+@media (max-width:520px){.people,.after{grid-template-columns:minmax(0,1fr)}.panel{grid-template-columns:minmax(0,1fr)}.panel .glyph{grid-row:auto;font-size:4rem}}
+@media (prefers-reduced-motion:reduce){
+  html{scroll-behavior:auto}
+  .hero-title span{animation:none}
+  .city circle.pulse{animation:none;opacity:0}
+}
+</style>
+<!--/ARTIFACT-HEAD-->
+</head>
+<body>
+<!--ARTIFACT-BODY-->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <filter id="rough"><feTurbulence type="fractalNoise" baseFrequency=".9" numOctaves="2" seed="7"/><feDisplacementMap in="SourceGraphic" scale="3"/></filter>
+</svg>
+<canvas id="sky" aria-hidden="true"></canvas>
+<canvas id="ash" aria-hidden="true"></canvas>
+
+<main>
+  <header class="hero wrap">
+    <div class="hero-grid">
+      <div class="hero-side">
+        <span class="seal" aria-label="印：天宝十四载">天宝<br>十四载</span>
+        <p class="eyebrow">公元 755 — 763 · 唐</p>
+        <p class="lede">天宝十四载冬，范阳的战鼓惊破了长安的霓裳羽衣曲。此后七年零两个月，烽火从河北一路烧到关中，两京相继陷落，天子出奔。唐朝从盛世的顶点跌落，再也没能回去。</p>
+        <div class="hero-actions">
+          <button class="btn" id="drumHero" type="button" aria-pressed="false">击鼓 · 听渔阳鼙鼓</button>
+          <a class="scroll-hint" href="#cause">向下展卷 ↓</a>
+        </div>
+      </div>
+      <p class="hero-verse">渔阳鼙鼓<em>动地来</em><br>惊破霓裳羽衣曲</p>
+      <h1 class="hero-title" id="heroTitle"><span>安</span><span>史</span><span>之</span><span>乱</span></h1>
+    </div>
+  </header>
+
+  <section class="sec wrap" id="cause">
+    <div class="sec-head">
+      <p class="eyebrow">隙 · 盛世的裂痕</p>
+      <h2>开元盛世之下，<span class="big-glyph">裂</span>缝早已张开</h2>
+      <p>安禄山能在一夜之间掀翻半个天下，靠的不是运气。兵权、人事、君心，三道裂缝在天宝年间同时变宽。</p>
+    </div>
+    <div class="causes">
+      <article class="cause">
+        <div class="num">49<small>万</small></div>
+        <h3>外重内轻</h3>
+        <p>天宝元年，沿边十节度使共统镇兵约四十九万，精兵尽在边陲，中央禁军却久不习战。府兵制瓦解后，军队只认节度使，不认朝廷。</p>
+      </article>
+      <article class="cause">
+        <div class="num">3<small>镇</small></div>
+        <h3>一人兼领三镇</h3>
+        <p>安禄山身兼平卢、范阳、河东三镇节度使，拥兵近二十万，还兼管河北的民政与财赋。他以讨好玄宗、认杨贵妃为养母的姿态，换来了几乎不受约束的权力。</p>
+      </article>
+      <article class="cause">
+        <div class="num">19<small>年</small></div>
+        <h3>君怠臣专</h3>
+        <p>李林甫居相位十九年，排斥异己，又奏请多用胡将镇边。继任的杨国忠与安禄山势同水火，屡言其必反，反倒把矛盾一步步逼向摊牌。晚年的玄宗，已无心过问。</p>
+      </article>
+    </div>
+  </section>
+
+  <div id="rollWrap">
+  <section id="roll" aria-labelledby="rollTitle">
+    <div class="wrap roll-head">
+      <p class="eyebrow">卷 · 烽火七年</p>
+      <h2 id="rollTitle">从范阳起兵到史朝义自缢</h2>
+      <div class="roll-bar" aria-hidden="true"><i id="rollBar"></i></div>
+    </div>
+    <div class="track" id="track">
+      <article class="panel">
+        <div class="glyph">起</div>
+        <div class="when"><span>天宝十四载 · 十一月</span><b>755</b></div>
+        <h3>范阳起兵</h3>
+        <p>安禄山以"奉密诏讨杨国忠"为名，发所部及同罗、奚、契丹、室韦兵<strong>十五万，号称二十万</strong>，自范阳南下。承平日久，河北州县望风瓦解。</p>
+      </article>
+      <article class="panel">
+        <div class="glyph">陷</div>
+        <div class="when"><span>天宝十四载 · 十二月</span><b>755</b></div>
+        <h3>东都陷落</h3>
+        <p>叛军渡过黄河，封常清仓促招募的新兵一败再败，<strong>洛阳失守</strong>。玄宗听信监军宦官边令诚之言，将封常清、高仙芝斩于潼关军中，自毁长城。</p>
+      </article>
+      <article class="panel">
+        <div class="glyph">僭</div>
+        <div class="when"><span>天宝十五载 · 正月</span><b>756</b></div>
+        <h3>大燕称帝</h3>
+        <p>安禄山在洛阳自称<strong>"大燕皇帝"</strong>，改元圣武。同月常山城破，太守颜杲卿被押至洛阳，骂贼不绝而死。其从弟颜真卿据平原坚守，河北一度十七郡归唐。</p>
+      </article>
+      <article class="panel turn">
+        <div class="glyph">溃</div>
+        <div class="when"><span>天宝十五载 · 六月</span><b>756</b></div>
+        <h3>潼关失守</h3>
+        <p>哥舒翰据险固守潼关半年。杨国忠疑其拥兵图己，玄宗连遣使者催战。灵宝西原一战，<strong>唐军近二十万覆没</strong>，长安门户洞开。</p>
+      </article>
+      <article class="panel turn">
+        <div class="glyph">缢</div>
+        <div class="when"><span>天宝十五载 · 六月</span><b>756</b></div>
+        <h3>马嵬兵变</h3>
+        <p>玄宗弃长安西奔，至马嵬驿，饥疲的禁军哗变。陈玄礼率众<strong>诛杀杨国忠</strong>，又逼玄宗赐死杨贵妃。"六军不发无奈何，宛转蛾眉马前死。"</p>
+      </article>
+      <article class="panel">
+        <div class="glyph">立</div>
+        <div class="when"><span>至德元载 · 七月</span><b>756</b></div>
+        <h3>灵武即位</h3>
+        <p>父子在马嵬分道。太子李亨北上灵武即位，是为<strong>唐肃宗</strong>，遥尊入蜀的玄宗为太上皇。郭子仪、李光弼率朔方军南下，平叛有了新的中枢。</p>
+      </article>
+      <article class="panel">
+        <div class="glyph">弑</div>
+        <div class="when"><span>至德二载 · 正月</span><b>757</b></div>
+        <h3>父子相残</h3>
+        <p>安禄山双目失明，暴躁多疑，鞭挞左右。其子<strong>安庆绪</strong>与宦官李猪儿趁夜将他杀死于帐中。大燕起兵不过一年多，便开始从内部腐烂。</p>
+      </article>
+      <article class="panel">
+        <div class="glyph">守</div>
+        <div class="when"><span>至德二载 · 正月至十月</span><b>757</b></div>
+        <h3>睢阳孤城</h3>
+        <p>张巡、许远以<strong>不足七千</strong>之众，抵挡十余万叛军近十个月，城中粮尽，罗雀掘鼠。睢阳最终陷落，但它挡住了叛军南下江淮的道路，保住了朝廷的钱粮来源。</p>
+      </article>
+      <article class="panel">
+        <div class="glyph">复</div>
+        <div class="when"><span>至德二载 · 九月至十月</span><b>757</b></div>
+        <h3>收复两京</h3>
+        <p>广平王李俶为元帅、郭子仪为副，借回纥骑兵，香积寺一战斩首六万，<strong>收复长安</strong>；十月再克洛阳。代价是答应回纥：城破之日，子女玉帛任其掳掠。</p>
+      </article>
+      <article class="panel turn">
+        <div class="glyph">围</div>
+        <div class="when"><span>乾元二年 · 三月</span><b>759</b></div>
+        <h3>邺城溃围</h3>
+        <p>九节度使号称六十万围攻邺城，却不设主帅，只派宦官鱼朝恩为观军容使，号令不一，被史思明击溃。史思明随后杀安庆绪，<strong>再称大燕皇帝</strong>，又陷洛阳。</p>
+      </article>
+      <article class="panel">
+        <div class="glyph">戕</div>
+        <div class="when"><span>上元二年 · 三月</span><b>761</b></div>
+        <h3>重演弑父</h3>
+        <p>史思明偏爱幼子，长子<strong>史朝义</strong>惧被废，遣部将将其缢杀。叛军两代君主皆死于亲子之手，部将离心，大燕已是强弩之末。</p>
+      </article>
+      <article class="panel end">
+        <div class="glyph">终</div>
+        <div class="when"><span>广德元年 · 正月</span><b>763</b></div>
+        <h3>叛乱平定</h3>
+        <p>唐军与回纥再收洛阳，史朝义一路北逃，部将田承嗣、李怀仙相继降唐，他走投无路，<strong>自缢于林中</strong>。战乱至此结束，但朝廷无力清算，降将摇身一变，成了新的节度使。</p>
+      </article>
+    </div>
+  </section>
+  </div>
+
+  <section class="sec wrap" id="map">
+    <div class="sec-head">
+      <p class="eyebrow">图 · 铁骑南下</p>
+      <h2>一条叛军的路，一条天子的路</h2>
+      <p>叛军沿太行山东麓南下，渡黄河、破洛阳、叩潼关；玄宗则向西南翻越秦岭蜀道入蜀，太子北上灵武。向下滚动，看路线一笔笔画出来。</p>
+    </div>
+    <div class="map-wrap">
+      <div class="map-box"><svg id="mapSvg" viewBox="0 0 1020 720" role="img" aria-label="安史之乱进军与出逃路线示意图"></svg></div>
+      <div>
+        <ul class="legend">
+          <li><i style="background:var(--ember)"></i><span><b>叛军南下</b>范阳 → 渡河 → 洛阳 → 潼关 → 长安，755 年冬至 756 年夏</span></li>
+          <li><i style="background:var(--gold)"></i><span><b>玄宗西狩</b>长安 → 马嵬驿 → 散关 → 剑门 → 成都</span></li>
+          <li><i style="background:var(--paper)"></i><span><b>太子北上</b>马嵬驿 → 平凉 → 灵武即位</span></li>
+          <li><i style="background:#6fa38a"></i><span><b>唐军反攻</b>凤翔 → 长安 → 洛阳，757 年收复两京</span></li>
+        </ul>
+        <p class="map-note">示意图，城市位置按今经纬度近似标注，黄河取唐代河道大致走向。</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="sec wrap" id="census">
+    <div class="sec-head">
+      <p class="eyebrow">数 · 户口之殇</p>
+      <h2>五年之间，账册上少了三千六百万人</h2>
+      <p>这是安史之乱留下的最冷的一组数字。每一个点代表约二十万口在籍人口。</p>
+    </div>
+    <div class="census">
+      <div class="census-stats">
+        <div class="stat"><span class="k">天宝十四载 · 755</span><span class="v">5292<small style="font-size:.45em">万口</small></span><span class="s">约 891 万户，唐代户口的最高纪录</span></div>
+        <div class="stat after"><span class="k">乾元三年 · 760</span><span class="v">1699<small style="font-size:.45em">万口</small></span><span class="s">约 193 万户，在籍人口不到战前三分之一</span></div>
+      </div>
+      <div class="dots-box">
+        <canvas id="dots" width="900" height="420" aria-label="点阵图：265 个点中只剩 85 个仍在籍"></canvas>
+        <div class="dots-key"><span><i style="background:var(--gold)"></i>仍在籍 ≈ 85 点</span><span><i style="border:1px solid var(--paper-dim)"></i>从户籍上消失 ≈ 180 点</span><span>每点 ≈ 20 万口</span></div>
+      </div>
+    </div>
+    <p class="caveat">数据见《通典·食货七》。这个落差并不全是死亡：大量百姓逃亡、依附豪强，或身处藩镇控制区而不再向朝廷申报。但它准确地说明了一件事，战后的朝廷已经失去了对一半以上人口和赋税的掌控。</p>
+  </section>
+
+  <section class="sec wrap" id="people">
+    <div class="sec-head">
+      <p class="eyebrow">人 · 风云人物</p>
+      <h2>十个人，撑起这场大乱的骨架</h2>
+    </div>
+    <div class="people">
+      <article class="person" tabindex="0"><span class="tag">唐 · 皇帝</span><span class="nm">唐玄宗</span><p>李隆基。前半生开创开元盛世，晚年倦政，宠信权臣，终至仓皇西狩，被儿子"尊"为太上皇。</p></article>
+      <article class="person" tabindex="0"><span class="tag">唐 · 贵妃</span><span class="nm">杨玉环</span><p>马嵬坡下香消玉殒。白居易《长恨歌》之后，她成了诗文里盛唐挽歌的符号。</p></article>
+      <article class="person rebel" tabindex="0"><span class="tag">燕 · 首叛</span><span class="nm">安禄山</span><p>营州柳城胡人，通六蕃语，兼领三镇。起兵一年即称帝，又一年死于亲子之手。</p></article>
+      <article class="person rebel" tabindex="0"><span class="tag">燕 · 继叛</span><span class="nm">史思明</span><p>安禄山同乡旧部。降唐之后复叛，邺城大败九节度使，再陷洛阳，最终同样被儿子所杀。</p></article>
+      <article class="person" tabindex="0"><span class="tag">唐 · 权相</span><span class="nm">杨国忠</span><p>杨贵妃族兄，身兼四十余职。与安禄山交恶，给了对方起兵的口实，死于马嵬乱兵刀下。</p></article>
+      <article class="person" tabindex="0"><span class="tag">唐 · 元帅</span><span class="nm">郭子仪</span><p>朔方节度使，收复两京，史称"再造唐室"。后来又凭一人之威退回纥、吐蕃联军。</p></article>
+      <article class="person" tabindex="0"><span class="tag">唐 · 名将</span><span class="nm">李光弼</span><p>与郭子仪齐名。太原以万人拒十万，河阳屡挫史思明，治军号令严整，史称"战功推为中兴第一"。</p></article>
+      <article class="person" tabindex="0"><span class="tag">唐 · 平原太守</span><span class="nm">颜真卿</span><p>联络河北诸郡抗燕。侄子颜季明死于常山之难，他写下"天下第二行书"《祭侄文稿》。</p></article>
+      <article class="person" tabindex="0"><span class="tag">唐 · 睢阳守将</span><span class="nm">张巡</span><p>以一县之兵转战孤城，守睢阳近十月，城破不屈而死，替江淮挡下了叛军的兵锋。</p></article>
+      <article class="person" tabindex="0"><span class="tag">唐 · 潼关主帅</span><span class="nm">哥舒翰</span><p>曾大败吐蕃的名将。病中被逼出关，灵宝大败后为部下所执，降燕后仍遭杀害。</p></article>
+    </div>
+  </section>
+
+  <section class="sec wrap" id="poem">
+    <div class="poem-sec">
+      <div class="poem-side">
+        <p class="eyebrow">诗 · 国破山河在</p>
+        <h2>诗人在沦陷的长安写下《春望》</h2>
+        <p>至德二载春，杜甫被叛军困在长安。城里宫阙残破、草木疯长，家人远在鄜州，音讯全无。四十个字，写尽了一个盛世的倒塌在一个普通人身上的分量。</p>
+        <p class="quote">"朱门酒肉臭，路有冻死骨。"</p>
+        <p>这句诗写在起兵前夕的天宝十四载冬，杜甫从长安赴奉先省亲途中。后来的"三吏""三别"，则记下了战争中被抓走的丁壮与留下的老妇。他因此被称作"诗史"。</p>
+      </div>
+      <p class="poem" id="poemText" aria-label="杜甫《春望》：国破山河在，城春草木深。感时花溅泪，恨别鸟惊心。烽火连三月，家书抵万金。白头搔更短，浑欲不胜簪。">国破山河在<br>城春草木深<br>感时花溅泪<br>恨别鸟惊心<br>烽火连三月<br>家书抵万金<br>白头搔更短<br>浑欲不胜簪<br><span class="sign">杜甫 · 春望</span></p>
+    </div>
+  </section>
+
+  <section class="sec wrap" id="after">
+    <div class="sec-head">
+      <p class="eyebrow">跋 · 余波百年</p>
+      <h2>战乱结束了，后果才刚刚开始</h2>
+    </div>
+    <div class="after">
+      <article><span class="g">衰</span><h3>由盛转衰</h3><p>唐朝又延续了一百四十多年，却再也没有恢复开元时的国力。安史之乱因此被视为唐代乃至中国古代史的分水岭。</p></article>
+      <article><span class="g">割</span><h3>藩镇割据</h3><p>为尽快结束战争，朝廷任命叛军降将为节度使。卢龙、成德、魏博"河朔三镇"自署官吏、父死子继，与朝廷貌合神离。</p></article>
+      <article><span class="g">失</span><h3>西北失地</h3><p>河西、陇右的精兵内调平叛，吐蕃乘虚尽取其地。广德元年冬，吐蕃甚至攻入长安，唐代宗又一次出逃。</p></article>
+      <article><span class="g">南</span><h3>重心南移</h3><p>北方残破，人口大量南迁，江淮成为朝廷的钱袋子。韩愈说"赋出天下，而江南居十九"，经济重心从此加速南移。</p></article>
+    </div>
+    <div class="coda">
+      <span class="seal" aria-hidden="true">盛唐<br>落日</span>
+      <p class="line">天长地久有时尽<br>此恨绵绵无绝期</p>
+    </div>
+  </section>
+
+  <footer class="wrap">
+    <p>主要依据：《资治通鉴》卷二一七至二二二、《旧唐书》、《新唐书》、《通典·食货七》。年月均为唐代纪年（农历），公元年份按纪年对应标注。</p>
+    <p>技术：WebGL 实时水墨着色器 · GSAP ScrollTrigger 横向卷轴与路径描绘 · Canvas 余烬粒子与点阵图 · Web Audio 合成战鼓 · CSS 竖排书法版式</p>
+  </footer>
+</main>
+
+<button class="drum-fab" id="drumFab" type="button" aria-pressed="false" aria-label="击鼓：开启或关闭战鼓声">鼓</button>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js"></script>
+<script>
+(() => {
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const state = { p: 0, pTarget: 0, beat: 0, mx: .5, my: .5, t0: performance.now() };
+  const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+  const smooth = (a, b, x) => { const t = clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
+
+  /* ——— 战火进度：随卷轴位置从盛唐金过渡到烽火红 ——— */
+  const rollWrap = document.getElementById('rollWrap');
+  const poemSec = document.getElementById('poem');
+  function updateTarget() {
+    const y = scrollY, h = innerHeight;
+    const rTop = rollWrap.getBoundingClientRect().top + y;
+    const pTop = poemSec.getBoundingClientRect().top + y;
+    const rise = smooth(rTop - 1.4 * h, rTop, y);
+    const fall = smooth(pTop - 1.1 * h, pTop, y);
+    state.pTarget = rise * (1 - .5 * fall);
+  }
+  addEventListener('scroll', updateTarget, { passive: true });
+  addEventListener('resize', updateTarget);
+  addEventListener('pointermove', e => { state.mx = e.clientX / innerWidth; state.my = 1 - e.clientY / innerHeight; }, { passive: true });
+
+  /* ——— WebGL 水墨山河 ——— */
+  const sky = document.getElementById('sky');
+  const gl = sky.getContext('webgl', { antialias: false, alpha: false, preserveDrawingBuffer: false });
+  let U = null;
+  if (gl) {
+    const vs = 'attribute vec2 a;void main(){gl_Position=vec4(a,0.,1.);}';
+    const fs = `precision mediump float;
+uniform vec2 R;uniform float T;uniform float P;uniform float B;uniform vec2 M;
+float h(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}
+float n(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);
+ return mix(mix(h(i),h(i+vec2(1.,0.)),f.x),mix(h(i+vec2(0.,1.)),h(i+vec2(1.,1.)),f.x),f.y);}
+float fbm(vec2 p){float v=0.,a=.5;for(int i=0;i<5;i++){v+=a*n(p);p=p*2.02+vec2(3.1,1.7);a*=.5;}return v;}
+void main(){
+ vec2 uv=gl_FragCoord.xy/R;float asp=R.x/R.y;vec2 q=vec2(uv.x*asp,uv.y);
+ vec3 skyTop=mix(vec3(.035,.04,.055),vec3(.07,.015,.012),P);
+ vec3 skyLow=mix(vec3(.46,.33,.16),vec3(.62,.11,.035),P);
+ vec3 col=mix(skyLow,skyTop,smoothstep(.05,.85,uv.y));
+ vec2 sp=vec2(asp*.7,.66-.14*P);float d=length(q-sp);
+ vec3 sun=mix(vec3(.97,.8,.5),vec3(1.,.3,.09),P);
+ col=mix(col,sun,smoothstep(.112,.102,d)*.85);col+=sun*.22*exp(-d*5.);
+ float cl=fbm(q*1.6+vec2(T*.015,T*.004));
+ vec3 smoke=mix(vec3(.7,.62,.5)*.25,vec3(.1,.025,.02),P);
+ col=mix(col,smoke,smoothstep(.5,.85,cl)*(.3+.55*P)*smoothstep(.15,.7,uv.y));
+ for(int i=0;i<5;i++){float fi=float(i);
+  float ridge=.56-fi*.095+.22*(fbm(vec2(q.x*(1.1+fi*.45)+fi*7.3+T*.004*(fi+1.),fi*3.1))-.5);
+  float shape=smoothstep(ridge+.003,ridge-.003,uv.y);
+  float depth=(fi+1.)/5.;
+  vec3 far=mix(skyLow*.5,vec3(.2,.05,.03),P*.6);
+  vec3 near=mix(vec3(.03,.03,.035),vec3(.05,.012,.01),P);
+  vec3 mc=mix(far,near,depth);
+  float mist=smoothstep(ridge-.2,ridge,uv.y);
+  mc=mix(mix(far,mc,.45),mc,mist);
+  col=mix(col,mc,shape);
+ }
+ float fire=fbm(vec2(q.x*3.,uv.y*2.-T*.35))*pow(1.-uv.y,2.5);
+ col+=vec3(1.,.35,.08)*fire*P*1.5;
+ col+=vec3(.9,.18,.04)*B*.3*(1.-uv.y);
+ vec2 mq=vec2(M.x*asp,M.y);float md=length(q-mq);
+ col*=1.-.26*exp(-md*7.)*(.65+.35*sin(md*42.-T*3.));
+ col+=(h(gl_FragCoord.xy+fract(T))-.5)*.035;
+ vec2 v=uv-.5;col*=1.-dot(v,v)*.9;
+ gl_FragColor=vec4(col,1.);
+}`;
+    const sh = (type, src) => { const s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s); return gl.getShaderParameter(s, gl.COMPILE_STATUS) ? s : null; };
+    const v = sh(gl.VERTEX_SHADER, vs), f = sh(gl.FRAGMENT_SHADER, fs);
+    if (v && f) {
+      const pr = gl.createProgram(); gl.attachShader(pr, v); gl.attachShader(pr, f); gl.linkProgram(pr);
+      if (gl.getProgramParameter(pr, gl.LINK_STATUS)) {
+        gl.useProgram(pr);
+        const buf = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
+        const loc = gl.getAttribLocation(pr, 'a'); gl.enableVertexAttribArray(loc); gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
+        U = { R: gl.getUniformLocation(pr, 'R'), T: gl.getUniformLocation(pr, 'T'), P: gl.getUniformLocation(pr, 'P'), B: gl.getUniformLocation(pr, 'B'), M: gl.getUniformLocation(pr, 'M') };
+      }
+    }
+  }
+  const SCALE = .5; // 半分辨率渲染，水墨本就柔和
+  function sizeSky() {
+    const dpr = Math.min(devicePixelRatio || 1, 2);
+    sky.width = Math.max(1, Math.round(innerWidth * dpr * SCALE));
+    sky.height = Math.max(1, Math.round(innerHeight * dpr * SCALE));
+    if (gl) gl.viewport(0, 0, sky.width, sky.height);
+  }
+
+  /* ——— Canvas 余烬 / 金尘 ——— */
+  const ash = document.getElementById('ash'), cx = ash.getContext('2d');
+  const parts = Array.from({ length: 150 }, () => ({ x: Math.random(), y: Math.random(), s: .4 + Math.random() * 1.8, v: .2 + Math.random() * .8, ph: Math.random() * 6.28 }));
+  function sizeAsh() { const dpr = Math.min(devicePixelRatio || 1, 2); ash.width = innerWidth * dpr; ash.height = innerHeight * dpr; cx.setTransform(dpr, 0, 0, dpr, 0, 0); }
+  function drawAsh(t, dt) {
+    const W = innerWidth, H = innerHeight, p = state.p;
+    cx.clearRect(0, 0, W, H);
+    cx.globalCompositeOperation = 'lighter';
+    const n = Math.round(30 + 120 * p);
+    for (let i = 0; i < n; i++) {
+      const o = parts[i];
+      if (!reduce) {
+        o.y -= o.v * dt * (0.012 + 0.05 * p) * (1 + state.beat);
+        o.x += Math.sin(t * .0007 + o.ph) * dt * 0.00003;
+        if (o.y < -0.05) { o.y = 1.05; o.x = Math.random(); }
+      }
+      const flick = .55 + .45 * Math.sin(t * .004 + o.ph * 3);
+      const r = Math.round(201 + (255 - 201) * p), g = Math.round(163 + (110 - 163) * p), b = Math.round(91 + (40 - 91) * p);
+      const rad = o.s * (1 + 1.2 * p);
+      const gx = o.x * W, gy = o.y * H;
+      const grd = cx.createRadialGradient(gx, gy, 0, gx, gy, rad * 4);
+      grd.addColorStop(0, `rgba(${r},${g},${b},${(.5 + .4 * p) * flick})`);
+      grd.addColorStop(1, `rgba(${r},${g},${b},0)`);
+      cx.fillStyle = grd; cx.beginPath(); cx.arc(gx, gy, rad * 4, 0, 6.283); cx.fill();
+    }
+    cx.globalCompositeOperation = 'source-over';
+  }
+
+  /* ——— 主循环 ——— */
+  const title = document.getElementById('heroTitle');
+  let last = performance.now();
+  function frame(now) {
+    const dt = Math.min(64, now - last); last = now;
+    state.p += (state.pTarget - state.p) * Math.min(1, dt * .004);
+    state.beat *= Math.pow(.9, dt / 16);
+    const t = (now - state.t0) / 1000;
+    if (U) {
+      gl.uniform2f(U.R, sky.width, sky.height); gl.uniform1f(U.T, reduce ? 12 : t);
+      gl.uniform1f(U.P, state.p); gl.uniform1f(U.B, state.beat); gl.uniform2f(U.M, state.mx, state.my);
+      gl.drawArrays(gl.TRIANGLES, 0, 3);
+    }
+    drawAsh(now, dt);
+    if (!reduce && state.beat > .02) {
+      title.style.setProperty('--shx', ((Math.random() - .5) * 8 * state.beat).toFixed(2) + 'px');
+      title.style.setProperty('--shy', ((Math.random() - .5) * 8 * state.beat).toFixed(2) + 'px');
+    }
+    requestAnimationFrame(frame);
+  }
+  function resize() { sizeSky(); sizeAsh(); updateTarget(); }
+  addEventListener('resize', resize);
+  resize(); requestAnimationFrame(frame);
+
+  /* ——— Web Audio 渔阳鼙鼓 ——— */
+  let ac = null, master = null, timer = null, nextTime = 0, step = 0, noiseBuf = null;
+  const pattern = [1, 0, .55, 0, 1, .55, .7, 0, 1, 0, .55, 0, 1, .8, .8, .8];
+  const fab = document.getElementById('drumFab'), heroBtn = document.getElementById('drumHero');
+  function hit(time, k) {
+    const o = ac.createOscillator(), g = ac.createGain();
+    o.type = 'sine';
+    o.frequency.setValueAtTime(70 + 50 * k, time);
+    o.frequency.exponentialRampToValueAtTime(38, time + .45);
+    g.gain.setValueAtTime(.9 * k, time);
+    g.gain.exponentialRampToValueAtTime(.001, time + .9);
+    o.connect(g).connect(master); o.start(time); o.stop(time + .95);
+    const ns = ac.createBufferSource(); ns.buffer = noiseBuf;
+    const lp = ac.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 900;
+    const ng = ac.createGain(); ng.gain.setValueAtTime(.35 * k, time); ng.gain.exponentialRampToValueAtTime(.001, time + .14);
+    ns.connect(lp).connect(ng).connect(master); ns.start(time); ns.stop(time + .16);
+    const delay = Math.max(0, (time - ac.currentTime) * 1000);
+    setTimeout(() => { state.beat = Math.min(1.2, state.beat + .6 * k); fab.classList.add('hit'); setTimeout(() => fab.classList.remove('hit'), 90); }, delay);
+  }
+  function schedule() {
+    while (nextTime < ac.currentTime + .15) {
+      const k = pattern[step % pattern.length];
+      if (k) hit(nextTime, k);
+      nextTime += .21; step++;
+    }
+  }
+  function setPressed(v) { fab.setAttribute('aria-pressed', v); heroBtn.setAttribute('aria-pressed', v); heroBtn.textContent = v ? '止鼓' : '击鼓 · 听渔阳鼙鼓'; }
+  function toggleDrum() {
+    try {
+      if (!ac) {
+        ac = new (window.AudioContext || window.webkitAudioContext)();
+        master = ac.createGain(); master.gain.value = .7;
+        const comp = ac.createDynamicsCompressor(); master.connect(comp).connect(ac.destination);
+        noiseBuf = ac.createBuffer(1, ac.sampleRate * .2, ac.sampleRate);
+        const d = noiseBuf.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+      }
+      if (timer) { clearInterval(timer); timer = null; setPressed(false); return; }
+      ac.resume(); nextTime = ac.currentTime + .05; step = 0;
+      timer = setInterval(schedule, 40); schedule(); setPressed(true);
+    } catch (e) { setPressed(false); }
+  }
+  fab.addEventListener('click', toggleDrum); heroBtn.addEventListener('click', toggleDrum);
+
+  /* ——— SVG 地图 ——— */
+  const NS = 'http://www.w3.org/2000/svg';
+  const svg = document.getElementById('mapSvg');
+  const P = (lon, lat) => [(lon - 102) * 60, (41.5 - lat) * 60];
+  const el = (tag, attrs, parent = svg) => { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); parent.appendChild(e); return e; };
+  function curve(pts) {
+    const p = pts.map(a => P(a[0], a[1]));
+    let d = `M${p[0][0].toFixed(1)},${p[0][1].toFixed(1)}`;
+    for (let i = 0; i < p.length - 1; i++) {
+      const p0 = p[i - 1] || p[i], p1 = p[i], p2 = p[i + 1], p3 = p[i + 2] || p2;
+      const c1 = [p1[0] + (p2[0] - p0[0]) / 6, p1[1] + (p2[1] - p0[1]) / 6];
+      const c2 = [p2[0] - (p3[0] - p1[0]) / 6, p2[1] - (p3[1] - p1[1]) / 6];
+      d += `C${c1[0].toFixed(1)},${c1[1].toFixed(1)} ${c2[0].toFixed(1)},${c2[1].toFixed(1)} ${p2[0].toFixed(1)},${p2[1].toFixed(1)}`;
+    }
+    return d;
+  }
+  const defs = el('defs', {});
+  defs.innerHTML = '<filter id="glow" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="3" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>';
+  // 黄河（唐代河道示意）、长江
+  el('path', { class: 'river', d: curve([[103.8, 36.1], [104.9, 37.3], [106.0, 37.9], [106.4, 38.6], [106.9, 39.5], [107.6, 40.6], [109.8, 40.6], [111.0, 40.3], [111.2, 39.3], [110.6, 38.0], [110.4, 36.5], [110.3, 34.65], [111.2, 34.8], [112.4, 34.92], [113.6, 34.95], [114.6, 35.4], [115.4, 36.1], [116.2, 37.0], [116.9, 37.6], [117.7, 38.1], [118.4, 38.3]]) });
+  el('path', { class: 'river', d: curve([[104.6, 29.5], [106.5, 29.6], [108.3, 30.7], [110.5, 30.9], [111.3, 30.7], [112.9, 30.1], [114.3, 30.6], [116.0, 29.8], [117.6, 30.9], [118.8, 32.0], [119.5, 32.2]]) });
+  const rl1 = P(111.6, 39.9), rl2 = P(112.0, 30.0);
+  el('text', { class: 'river-label', x: rl1[0], y: rl1[1] }).textContent = '黄河';
+  el('text', { class: 'river-label', x: rl2[0], y: rl2[1] + 30 }).textContent = '长江';
+
+  const routes = [
+    { c: 'var(--ember)', w: 4, pts: [[116.4, 39.9], [115.6, 39.1], [115.0, 38.5], [114.5, 37.6], [114.4, 36.1], [114.6, 35.5], [114.6, 34.85], [113.4, 34.8], [112.45, 34.62], [111.2, 34.75], [110.25, 34.55], [108.94, 34.27]] },
+    { c: 'var(--gold)', w: 3.2, pts: [[108.94, 34.27], [108.43, 34.29], [107.14, 34.36], [106.9, 33.9], [106.1, 33.1], [105.55, 32.2], [104.8, 31.5], [104.07, 30.67]] },
+    { c: 'var(--paper)', w: 2.4, pts: [[108.43, 34.29], [107.8, 35.0], [106.67, 35.54], [106.4, 36.8], [106.33, 38.1]] },
+    { c: '#6fa38a', w: 3.2, pts: [[107.39, 34.52], [108.2, 34.35], [108.94, 34.27], [110.0, 34.48], [111.4, 34.75], [112.45, 34.62]] }
+  ];
+  const routeEls = routes.map(r => el('path', { class: 'route', d: curve(r.pts), stroke: r.c, 'stroke-width': r.w, filter: 'url(#glow)' }));
+
+  const cities = [
+    ['范阳', 116.4, 39.9, 12, -10, 1], ['常山', 114.57, 38.15, 12, 5, 0], ['平原', 116.5, 37.3, 12, 5, 0],
+    ['太原', 112.55, 37.87, -48, 5, 0], ['邺城', 114.3, 36.3, -48, 5, 0], ['洛阳', 112.45, 34.62, -20, 30, 1],
+    ['睢阳', 115.65, 34.43, 12, 5, 0], ['潼关', 110.25, 34.55, -16, -14, 0], ['长安', 108.94, 34.27, 0, 30, 1],
+    ['马嵬驿', 108.43, 34.29, -62, -10, 0], ['凤翔', 107.39, 34.52, -48, 5, 0], ['灵武', 106.33, 38.1, 12, 5, 0],
+    ['成都', 104.07, 30.67, 12, 5, 1]
+  ];
+  cities.forEach(([nm, lon, lat, dx, dy, cap]) => {
+    const [x, y] = P(lon, lat);
+    const g = el('g', { class: 'city' + (cap ? ' capital' : '') });
+    if (cap) el('circle', { class: 'pulse', cx: x, cy: y, r: 6 }, g);
+    el('circle', { class: 'dot', cx: x, cy: y, r: cap ? 5.5 : 4 }, g);
+    el('text', { x: x + dx, y: y + dy }, g).textContent = nm;
+  });
+
+  /* ——— Canvas 户口点阵 ——— */
+  const dc = document.getElementById('dots'), dx = dc.getContext('2d');
+  const TOTAL = 265, KEEP = 85;
+  let seed = 755; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  const order = Array.from({ length: TOTAL }, (_, i) => i).sort(() => rnd() - .5);
+  const kept = new Set(order.slice(0, KEEP));
+  const drift = Array.from({ length: TOTAL }, () => ({ dx: (rnd() - .5) * 26, dy: -10 - rnd() * 34, d: rnd() * .5 }));
+  let dotsT = 1;
+  function drawDots(t) {
+    dotsT = t;
+    const w = dc.clientWidth || 600, cols = w < 480 ? 15 : 27, gap = w / cols, rows = Math.ceil(TOTAL / cols);
+    const dpr = Math.min(devicePixelRatio || 1, 2), H = rows * gap;
+    dc.width = w * dpr; dc.height = H * dpr; dc.style.height = H + 'px';
+    dx.setTransform(dpr, 0, 0, dpr, 0, 0); dx.clearRect(0, 0, w, H);
+    const r = gap * .3;
+    for (let i = 0; i < TOTAL; i++) {
+      const x = (i % cols + .5) * gap, y = (Math.floor(i / cols) + .5) * gap;
+      if (kept.has(i)) { dx.fillStyle = '#c9a35b'; dx.beginPath(); dx.arc(x, y, r, 0, 6.283); dx.fill(); continue; }
+      const k = clamp((t - drift[i].d) / .5, 0, 1);
+      // 飘散的灰烬
+      if (k > 0 && k < 1) {
+        dx.fillStyle = `rgba(255,122,60,${(1 - k) * .8})`;
+        dx.beginPath(); dx.arc(x + drift[i].dx * k, y + drift[i].dy * k, r * (1 - .6 * k), 0, 6.283); dx.fill();
+      }
+      if (k < 1) { dx.fillStyle = `rgba(201,163,91,${1 - k})`; dx.beginPath(); dx.arc(x, y, r * (1 - k), 0, 6.283); dx.fill(); }
+      dx.strokeStyle = `rgba(157,144,122,${.25 + .45 * k})`; dx.lineWidth = 1;
+      dx.beginPath(); dx.arc(x, y, r, 0, 6.283); dx.stroke();
+    }
+  }
+  drawDots(1);
+  addEventListener('resize', () => drawDots(dotsT));
+
+  /* ——— 人物卡片：墨晕跟随指针 ——— */
+  document.querySelectorAll('.person').forEach(c => c.addEventListener('pointermove', e => {
+    const b = c.getBoundingClientRect();
+    c.style.setProperty('--mx', (e.clientX - b.left) + 'px'); c.style.setProperty('--my', (e.clientY - b.top) + 'px');
+  }));
+
+  /* ——— 春望逐字 ——— */
+  const poem = document.getElementById('poemText');
+  const nodes = [...poem.childNodes];
+  nodes.forEach(nd => {
+    if (nd.nodeType === 3) {
+      const frag = document.createDocumentFragment();
+      [...nd.textContent].forEach(ch => { const s = document.createElement('span'); s.className = 'ch'; s.setAttribute('aria-hidden', 'true'); s.textContent = ch; frag.appendChild(s); });
+      poem.replaceChild(frag, nd);
+    }
+  });
+
+  /* ——— GSAP 编排 ——— */
+  if (!(window.gsap && window.ScrollTrigger)) return;
+  gsap.registerPlugin(ScrollTrigger);
+  const mm = gsap.matchMedia();
+  const bar = document.getElementById('rollBar');
+
+  mm.add('(min-width: 900px) and (prefers-reduced-motion: no-preference)', () => {
+    document.documentElement.classList.add('js-h');
+    const track = document.getElementById('track');
+    const dist = () => Math.max(0, track.scrollWidth - innerWidth);
+    gsap.set(bar, { scaleX: 0 });
+    const tw = gsap.to(track, {
+      x: () => -dist(), ease: 'none',
+      scrollTrigger: { trigger: '#roll', pin: true, start: 'top top', end: () => '+=' + dist(), scrub: 1, invalidateOnRefresh: true, anticipatePin: 1,
+        onUpdate: s => { bar.style.transform = `scaleX(${s.progress})`; updateTarget(); } }
+    });
+    track.querySelectorAll('.glyph').forEach(g => {
+      gsap.fromTo(g, { yPercent: -18, rotate: -6 }, { yPercent: 18, rotate: 6, ease: 'none', scrollTrigger: { trigger: g.parentElement, containerAnimation: tw, start: 'left right', end: 'right left', scrub: true } });
+    });
+    ScrollTrigger.refresh();
+    return () => { document.documentElement.classList.remove('js-h'); gsap.set(bar, { clearProps: 'transform' }); };
+  });
+
+  mm.add('(prefers-reduced-motion: no-preference)', () => {
+    const tl = gsap.timeline({ scrollTrigger: { trigger: '#map', start: 'top 75%', end: 'bottom 70%', scrub: 1 } });
+    routeEls.forEach(p => {
+      const L = p.getTotalLength();
+      p.style.strokeDasharray = L;
+      tl.fromTo(p, { strokeDashoffset: L }, { strokeDashoffset: 0, ease: 'none', duration: 1 });
+    });
+    const proxy = { t: 0 };
+    gsap.to(proxy, { t: 1, ease: 'none', onUpdate: () => drawDots(proxy.t), scrollTrigger: { trigger: '#dots', start: 'top 80%', end: 'bottom 35%', scrub: 1 } });
+    drawDots(0);
+    const chars = poem.querySelectorAll('.ch');
+    gsap.fromTo(chars, { color: 'rgba(157,144,122,.35)', textShadow: '0 0 0 rgba(255,122,60,0)' },
+      { color: '#ece2cc', textShadow: '0 0 18px rgba(255,122,60,.45)', stagger: .05, ease: 'none', scrollTrigger: { trigger: '#poem', start: 'top 70%', end: 'bottom 75%', scrub: 1 } });
+    gsap.utils.toArray('.cause, .person, .after article').forEach((c, i) => {
+      gsap.from(c, { y: 40, duration: 1, ease: 'power3.out', delay: (i % 5) * .06, scrollTrigger: { trigger: c, start: 'top 92%', once: true } });
+    });
+  });
+  updateTarget();
+})();
+</script>
+<!--/ARTIFACT-BODY-->
+</body>
+</html>
