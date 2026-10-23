@@ -1,0 +1,114 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<script type="importmap">{"imports":{"three":"./node_modules/three/build/three.module.js","three/addons/":"./node_modules/three/examples/jsm/"}}</script>
+</head><body>
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+
+const renderer = new THREE.WebGLRenderer({ antialias: false, preserveDrawingBuffer: true });
+let mesh, box;
+
+window.load = async (url) => {
+  const gltf = await new GLTFLoader().loadAsync(url);
+  gltf.scene.updateMatrixWorld(true);
+  gltf.scene.traverse(o => { if (o.isMesh) mesh = o; });
+  box = new THREE.Box3().setFromObject(gltf.scene);
+  return { min: box.min.toArray(), max: box.max.toArray() };
+};
+
+function frontCam() {
+  // orthographic camera looking down -Z, framing the bbox exactly
+  const c = new THREE.OrthographicCamera(box.min.x, box.max.x, box.max.y, box.min.y, 0.001, 100);
+  c.position.set(0, 0, box.max.z + 1); c.lookAt(0, 0, box.min.z - 10);
+  c.position.set(0, 0, box.max.z + 1);
+  c.updateMatrixWorld(); c.updateProjectionMatrix();
+  return c;
+}
+
+// returns a PNG data URL; row 0 of the PNG = row 0 of the render target (no flip)
+function readTarget(rt, w, h) {
+  const buf = new Uint8ClampedArray(w * h * 4);
+  renderer.readRenderTargetPixels(rt, 0, 0, w, h, buf);
+  const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
+  cv.getContext('2d').putImageData(new ImageData(buf, w, h), 0, 0);
+  return cv.toDataURL('image/png');
+}
+
+// Silhouette (alpha) + view-space depth of the front orthographic view, w x h pixels.
+window.front = (w, h, kind) => {
+  renderer.setSize(w, h);
+  const scene = new THREE.Scene();
+  const mat = kind === 'depth'
+    ? new THREE.ShaderMaterial({
+        side: THREE.DoubleSide,
+        vertexShader: `varying float vz; void main(){ vec4 p = modelViewMatrix*vec4(position,1.); vz=-p.z; gl_Position=projectionMatrix*p; }`,
+        fragmentShader: `varying float vz; uniform float zn, zf; void main(){ float d=(vz-zn)/(zf-zn); float hi=floor(d*255.)/255.; gl_FragColor=vec4(fract(d*255.), hi, 0., 1.); }`,
+        uniforms: { zn: { value: 0.5 }, zf: { value: 3.0 } } })
+    : kind === 'tex'
+      ? new THREE.MeshBasicMaterial({ map: mesh.material.map, side: THREE.DoubleSide })
+      : new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide });
+  const m = new THREE.Mesh(mesh.geometry, mat);
+  m.matrix.copy(mesh.matrixWorld); m.matrixAutoUpdate = false;
+  scene.add(m);
+  const rt = new THREE.WebGLRenderTarget(w, h, { type: THREE.UnsignedByteType });
+  renderer.setRenderTarget(rt); renderer.setClearColor(0x000000, 0); renderer.clear();
+  renderer.render(scene, frontCam());
+  renderer.setRenderTarget(null);
+  return readTarget(rt, w, h);
+};
+
+// Bake into UV space: for every texel, project its world position into the
+// reference image (front ortho + affine fit) and output the reference colour,
+// with alpha = visibility * facing weight. depthURL is the front depth map.
+window.bake = async (refURL, depthURL, fit, size, tol = 0.004, fLo = 0.25, fHi = 0.6) => {
+  const loader = new THREE.TextureLoader();
+  const ref = await loader.loadAsync(refURL);
+  const dep = await loader.loadAsync(depthURL);
+  for (const t of [ref, dep]) { t.flipY = false; t.colorSpace = THREE.NoColorSpace; }
+  dep.minFilter = dep.magFilter = THREE.NearestFilter;
+  const mat = new THREE.ShaderMaterial({
+    side: THREE.DoubleSide,
+    uniforms: {
+      ref: { value: ref }, dep: { value: dep },
+      bmin: { value: box.min }, bmax: { value: box.max },
+      fit: { value: new THREE.Vector4(...fit) },  // ref_px = a*front_px + b (x), c*front_py + d (y), normalised
+      viewMat: { value: frontCam().matrixWorldInverse },
+      tol: { value: tol }, fLo: { value: fLo }, fHi: { value: fHi },
+    },
+    vertexShader: `
+      varying vec3 wp; varying vec3 wn;
+      void main(){
+        vec4 w = modelMatrix*vec4(position,1.); wp = w.xyz;
+        wn = normalize(mat3(modelMatrix)*normal);
+        gl_Position = vec4(uv*2.-1., 0., 1.);
+      }`,
+    fragmentShader: `
+      uniform sampler2D ref, dep; uniform vec3 bmin, bmax; uniform vec4 fit; uniform mat4 viewMat; uniform float tol, fLo, fHi;
+      varying vec3 wp; varying vec3 wn;
+      void main(){
+        vec2 f = vec2((wp.x-bmin.x)/(bmax.x-bmin.x), (bmax.y-wp.y)/(bmax.y-bmin.y)); // front image coords, y down
+        vec2 r = vec2(fit.x*f.x+fit.y, fit.z*f.y+fit.w);
+        if (r.x<0. || r.x>1. || r.y<0. || r.y>1.) { gl_FragColor = vec4(0.); return; }
+        float vz = -(viewMat*vec4(wp,1.)).z;
+        vec4 dd = texture2D(dep, vec2(f.x, 1.-f.y));
+        float dfront = (floor(dd.g*255.+0.5)+dd.r)/255.*(3.0-0.5)+0.5;
+        float vis = (dd.a > 0.5 && vz - dfront < tol) ? 1. : 0.;
+        float facing = smoothstep(fLo, fHi, wn.z);
+        vec4 c = texture2D(ref, r);
+        gl_FragColor = vec4(c.rgb, vis*facing*c.a);
+      }`,
+  });
+  const scene = new THREE.Scene();
+  const m = new THREE.Mesh(mesh.geometry, mat);
+  m.matrix.copy(mesh.matrixWorld); m.matrixAutoUpdate = false; m.frustumCulled = false;
+  scene.add(m);
+  renderer.setSize(size, size);
+  const rt = new THREE.WebGLRenderTarget(size, size, { type: THREE.UnsignedByteType });
+  renderer.setRenderTarget(rt); renderer.setClearColor(0x000000, 0); renderer.clear();
+  renderer.render(scene, new THREE.Camera());
+  renderer.setRenderTarget(null);
+  return readTarget(rt, size, size);
+};
+window.ready = true;
+</script></body></html>

@@ -1,0 +1,401 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>大肥鱼 · 鲸鱼娘</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700;900&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one stage card for the model, a narrow spec column beside it; stacks to one column on phones. */
+:root {
+  --bg: #eef2f9;
+  --bg-glow: #f8faff;
+  --card: rgba(255, 255, 255, 0.82);
+  --card-solid: #ffffff;
+  --tile: #f3f6fc;
+  --line: #dde4f1;
+  --fg: #1a2240;
+  --muted: #66708c;
+  --accent: #4657c4;
+  --accent-ink: #ffffff;
+  --navy: #1f2a6b;
+  --ok: #2f9e68;
+  --warn: #c98a1b;
+  --stage-top: #f6f8fd;
+  --stage-floor: #e3e8f3;
+  --font-body: "Noto Sans SC", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0d1226; --bg-glow: #151c38; --card: rgba(22, 29, 58, 0.85); --card-solid: #161d3a;
+    --tile: #1d2547; --line: #2a3460; --fg: #e8ecfa; --muted: #9aa4c6; --accent: #8a98ff;
+    --accent-ink: #0d1226; --navy: #c9d1ff; --ok: #4cc28a; --warn: #e2a945;
+    --stage-top: #141b36; --stage-floor: #0f152c; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0d1226; --bg-glow: #151c38; --card: rgba(22, 29, 58, 0.85); --card-solid: #161d3a;
+  --tile: #1d2547; --line: #2a3460; --fg: #e8ecfa; --muted: #9aa4c6; --accent: #8a98ff;
+  --accent-ink: #0d1226; --navy: #c9d1ff; --ok: #4cc28a; --warn: #e2a945;
+  --stage-top: #141b36; --stage-floor: #0f152c; color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { min-height: 100%; }
+body {
+  margin: 0;
+  background: radial-gradient(1200px 600px at 20% -10%, var(--bg-glow), transparent 70%), var(--bg);
+  color: var(--fg);
+  font-family: var(--font-body);
+  font-size: 15px;
+  line-height: 1.6;
+}
+.page {
+  max-width: 1320px;
+  margin: 0 auto;
+  padding-block: 28px 40px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: grid;
+  gap: 24px;
+}
+
+header { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+.mark {
+  width: 52px; height: 52px; border-radius: 14px; flex: none;
+  background: linear-gradient(150deg, #5a74e6, #2c3a9e);
+  display: grid; place-items: center;
+  box-shadow: 0 8px 20px -8px rgba(44, 58, 158, 0.6);
+}
+.mark svg { width: 30px; height: 30px; }
+.titles { min-width: 0; }
+.eyebrow {
+  font-family: var(--font-mono); font-size: 12px; font-weight: 500;
+  letter-spacing: 0.18em; text-transform: uppercase; color: var(--accent);
+}
+h1 { margin: 0; font-size: clamp(22px, 3vw, 28px); font-weight: 900; letter-spacing: 0.02em; text-wrap: balance; }
+.tag {
+  margin-left: auto; padding: 6px 14px; border-radius: 999px;
+  border: 1px solid var(--line); background: var(--card); color: var(--muted); font-size: 13px;
+}
+
+.layout { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 24px; align-items: start; }
+@media (max-width: 960px) { .layout { grid-template-columns: minmax(0, 1fr); } }
+
+.stage {
+  position: relative; min-width: 0;
+  border-radius: 24px; border: 1px solid var(--line);
+  background: linear-gradient(180deg, var(--stage-top), var(--stage-floor));
+  aspect-ratio: 4 / 3.3; max-width: 100%;
+  overflow: hidden;
+}
+@media (max-width: 600px) { .stage { aspect-ratio: 3 / 4.4; } }
+.stage canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+.stage-top {
+  position: absolute; inset: 16px 16px auto 16px; display: flex; gap: 10px;
+  justify-content: space-between; align-items: flex-start; flex-wrap: wrap; pointer-events: none;
+}
+.stage-top > * { pointer-events: auto; }
+.chip {
+  font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase;
+  padding: 6px 14px; border-radius: 999px; background: var(--card); color: var(--muted); border: 1px solid var(--line);
+}
+.seg { display: flex; gap: 4px; padding: 4px; border-radius: 14px; background: var(--card); border: 1px solid var(--line); flex-wrap: wrap; }
+.seg button {
+  font: inherit; font-size: 14px; border: 0; cursor: pointer; padding: 6px 14px; border-radius: 10px;
+  background: transparent; color: var(--fg);
+}
+.seg button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); font-weight: 700; }
+.seg button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.stage-bottom {
+  position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%);
+  display: flex; gap: 10px; align-items: center; flex-wrap: wrap; justify-content: center; width: calc(100% - 32px);
+}
+.hint { font-size: 13px; color: var(--muted); padding: 6px 14px; border-radius: 999px; background: var(--card); border: 1px solid var(--line); }
+.loading {
+  position: absolute; inset: 0; display: grid; place-items: center; color: var(--muted); font-size: 14px;
+}
+.loading .bar { width: 180px; height: 4px; border-radius: 4px; background: var(--line); overflow: hidden; margin-top: 10px; }
+.loading .bar i { display: block; height: 100%; width: 0; background: var(--accent); transition: width 0.2s; }
+
+aside { display: grid; gap: 16px; min-width: 0; }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 22px; padding: 22px; display: grid; gap: 14px; }
+.card h2 { margin: 0; font-size: 17px; font-weight: 900; }
+.tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.tile { background: var(--tile); border-radius: 14px; padding: 12px 14px; display: grid; gap: 2px; }
+.tile b { font-family: var(--font-mono); font-size: 19px; font-weight: 500; font-variant-numeric: tabular-nums; }
+.tile span { font-size: 12.5px; color: var(--muted); }
+ul.dots { margin: 0; padding: 0; list-style: none; display: grid; gap: 8px; }
+ul.dots li { position: relative; padding-left: 18px; font-size: 14px; }
+ul.dots li::before { content: ""; position: absolute; left: 2px; top: 0.6em; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); }
+.status { display: flex; align-items: center; gap: 8px; font-size: 14px; }
+.status i { width: 9px; height: 9px; border-radius: 50%; background: var(--ok); flex: none; box-shadow: 0 0 0 4px color-mix(in srgb, var(--ok) 20%, transparent); }
+.kv { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; font-size: 13.5px; }
+.kv dt { color: var(--muted); }
+.kv dd { margin: 0; font-family: var(--font-mono); font-variant-numeric: tabular-nums; text-align: right; }
+.note { font-size: 13.5px; color: var(--muted); margin: 0; }
+.fixes { margin: 0; padding: 0; list-style: none; display: grid; gap: 10px; }
+.fixes li { display: grid; grid-template-columns: auto 1fr; gap: 10px; font-size: 14px; align-items: baseline; }
+.fixes .k { font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.08em; padding: 2px 8px; border-radius: 6px; background: var(--tile); color: var(--accent); }
+@media (prefers-reduced-motion: reduce) { .loading .bar i { transition: none; } }
+</style>
+</head>
+<body>
+
+<div class="page">
+  <header>
+    <div class="mark" aria-hidden="true">
+      <svg viewBox="0 0 32 32" fill="none"><path d="M5 18c0-6 5-10 11-10 5 0 9 3 10 7l3-3v8l-3-2c-1 5-6 8-11 8-6 0-10-3-10-8z" fill="#fff"/><circle cx="12" cy="16" r="1.6" fill="#2c3a9e"/><path d="M15 6c0-2 2-3 3-2M18 6c1-2 3-2 4-1" stroke="#9fd3ff" stroke-width="1.6" stroke-linecap="round"/></svg>
+    </div>
+    <div class="titles">
+      <div class="eyebrow">DeepSeek · Character Model</div>
+      <h1>大肥鱼 · 鲸鱼娘</h1>
+    </div>
+    <div class="tag">树脂打印 · 单件摆件</div>
+  </header>
+
+  <div class="layout">
+    <section class="stage" id="stage" aria-label="3D 模型预览">
+      <div class="loading" id="loading"><div><div id="loadtxt">正在加载模型…</div><div class="bar"><i id="loadbar"></i></div></div></div>
+      <div class="stage-top">
+        <div class="seg" role="group" aria-label="外观">
+          <button type="button" id="m-color" aria-pressed="true">彩色外观</button>
+          <button type="button" id="m-print" aria-pressed="false">白色打印版</button>
+        </div>
+        <div class="seg" role="group" aria-label="视角">
+          <button type="button" data-view="front" aria-pressed="true">正面</button>
+          <button type="button" data-view="side" aria-pressed="false">侧面</button>
+          <button type="button" data-view="back" aria-pressed="false">背面</button>
+          <button type="button" data-view="orbit" aria-pressed="false">立体</button>
+        </div>
+      </div>
+      <div class="stage-bottom">
+        <div class="hint" id="hint">拖动旋转 · 滚轮或双指缩放 · 右键或双指平移</div>
+      </div>
+    </section>
+
+    <aside>
+      <div class="card">
+        <h2>模型规格</h2>
+        <div class="tiles">
+          <div class="tile"><b>119.6 mm</b><span>整体高度（含底座）</span></div>
+          <div class="tile"><b>Ø 90 mm</b><span>底座直径</span></div>
+          <div class="tile"><b>6 mm</b><span>底座厚度</span></div>
+          <div class="tile"><b>1 件</b><span>连通打印主体</span></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>角色细节</h2>
+        <ul class="dots">
+          <li>渐变蓝长发、呆毛与蕾丝女仆头饰</li>
+          <li>鲸鳍耳、蓝色蝴蝶结与背部鲸鱼尾</li>
+          <li>鲸鱼围裙图案、宝石领结与多层裙摆</li>
+          <li>彩色 GLB 外观与白色 3MF 打印版分离</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <h2>几何检查</h2>
+        <div class="status"><i></i>封闭网格 · 法线一致 · 单一连通体</div>
+        <dl class="kv">
+          <dt>打印版面数</dt><dd>900,060</dd>
+          <dt>外形尺寸</dt><dd>90 × 90 × 119.6 mm</dd>
+          <dt>实心体积</dt><dd>150.5 cm³</dd>
+          <dt>壁厚 ≥ 1.0 mm</dt><dd>97.8% 表面</dd>
+        </dl>
+        <p class="note">剩余不足 1 mm 的地方主要是发梢尖端和蕾丝边缘。建议树脂打印，并在切片软件里为发梢、头饰和裙边加支撑；如需省料可抽壳 2 mm 并开排液孔。尚未切片或实体试打。</p>
+      </div>
+
+      <div class="card">
+        <h2>修复记录</h2>
+        <ul class="fixes">
+          <li><span class="k">外观</span><span>去掉金属反光与无效法线贴图，按原画重新校色</span></li>
+          <li><span class="k">贴图</span><span>按原画重绘围裙鲸鱼图案和领口宝石</span></li>
+          <li><span class="k">脸部</span><span>清掉灰斑、额头红痕和下巴脏线，恢复暖色肤色并加腮红</span></li>
+          <li><span class="k">眼睛</span><span>按原画风格重画双眼，贴合模型眼窝，去掉杂乱线条</span></li>
+          <li><span class="k">结构</span><span>悬空的眉毛焊回额头，删除裙内悬空的环片</span></li>
+          <li><span class="k">壁厚</span><span>裙摆、发梢等薄壁加厚到 1 mm，并平滑褶皱</span></li>
+          <li><span class="k">底座</span><span>加 Ø90 × 6 mm 底座，与双脚合并为一个实体</span></li>
+        </ul>
+      </div>
+    </aside>
+  </div>
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+} }
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
+
+// Physical layout in millimetres, matching the print file.
+const FIG_H = 114, BASE_D = 90, BASE_H = 6, SINK = 0.4;
+
+const stage = document.getElementById('stage');
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.NeutralToneMapping;
+renderer.toneMappingExposure = 1.05;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+stage.prepend(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.environment = new THREE.PMREMGenerator(renderer).fromScene(new RoomEnvironment(), 0.04).texture;
+scene.environmentIntensity = 0.75;
+const key = new THREE.DirectionalLight(0xffffff, 1.6);
+key.position.set(120, 260, 180);
+key.castShadow = true;
+key.shadow.mapSize.set(2048, 2048);
+Object.assign(key.shadow.camera, { left: -110, right: 110, top: 110, bottom: -110, near: 10, far: 700 });
+key.shadow.bias = -0.0005;
+scene.add(key);
+scene.add(new THREE.HemisphereLight(0xffffff, 0xd6dcf0, 0.6));
+
+const floor = new THREE.Mesh(new THREE.CircleGeometry(400, 64), new THREE.ShadowMaterial({ opacity: 0.12 }));
+floor.rotation.x = -Math.PI / 2; floor.receiveShadow = true; scene.add(floor);
+
+const camera = new THREE.PerspectiveCamera(30, 1, 1, 3000);
+const TARGET = new THREE.Vector3(0, 58, 0);
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.target.copy(TARGET);
+controls.minDistance = 90; controls.maxDistance = 700;
+
+const colorGroup = new THREE.Group();
+const printGroup = new THREE.Group();
+printGroup.visible = false;
+scene.add(colorGroup, printGroup);
+
+const base = new THREE.Mesh(
+  new THREE.CylinderGeometry(BASE_D / 2 - 1, BASE_D / 2, BASE_H, 128),
+  new THREE.MeshStandardMaterial({ color: 0x1b2669, roughness: 0.35, metalness: 0.1 }));
+base.position.y = BASE_H / 2; base.castShadow = base.receiveShadow = true;
+colorGroup.add(base);
+
+const loader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
+const progress = {};
+function onProgress(name) {
+  return e => {
+    if (!e.total) return;
+    progress[name] = e.loaded / e.total;
+    document.getElementById('loadbar').style.width = `${Math.round(progress.color * 100 || 0)}%`;
+  };
+}
+function shade(root) {
+  root.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+}
+
+loader.load('models/whale_maid_color.glb', gltf => {
+  const m = gltf.scene;
+  // Scale to print size and stand the feet on the base (same placement as the print file).
+  let box = new THREE.Box3().setFromObject(m);
+  m.scale.multiplyScalar(FIG_H / box.getSize(new THREE.Vector3()).y);
+  m.updateMatrixWorld(true);
+  box = new THREE.Box3().setFromObject(m);
+  const c = box.getCenter(new THREE.Vector3());
+  m.position.sub(new THREE.Vector3(c.x, box.min.y - (BASE_H - SINK), c.z));
+  shade(m);
+  colorGroup.add(m);
+  document.getElementById('loading').hidden = true;
+}, onProgress('color'), err => {
+  document.getElementById('loadtxt').textContent = '模型加载失败，请刷新页面重试。';
+  console.error(err);
+});
+
+let printLoaded = false;
+function loadPrint() {
+  if (printLoaded) return;
+  printLoaded = true;
+  loader.load('models/whale_maid_print_preview.glb', gltf => {
+    gltf.scene.traverse(o => {
+      if (o.isMesh) o.material = new THREE.MeshStandardMaterial({ color: 0xeceef3, roughness: 0.55, metalness: 0 });
+    });
+    shade(gltf.scene);
+    printGroup.add(gltf.scene);
+  });
+}
+
+// Views: azimuth from the front (+Z), elevation in degrees.
+const VIEWS = { front: [0, 6], side: [-90, 6], back: [180, 6], orbit: [38, 18] };
+let tween = null;
+let currentView = 'front', userMoved = false;
+function setView(name, instant = false) {
+  currentView = name;
+  const [az, el] = VIEWS[name];
+  // Tween in spherical coordinates around the figure so the camera never cuts through it.
+  const off = camera.position.clone().sub(controls.target);
+  const from = new THREE.Spherical().setFromVector3(off);
+  const to = new THREE.Spherical(camera.userData.fitDist,
+    THREE.MathUtils.degToRad(90 - el), THREE.MathUtils.degToRad(az));
+  let d = to.theta - from.theta;
+  d = Math.atan2(Math.sin(d), Math.cos(d));  // shortest way round
+  to.theta = from.theta + d;
+  const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  tween = { from, to, fromT: controls.target.clone(), start: performance.now(), dur: reduce || instant ? 0 : 700 };
+  controls.autoRotate = name === 'orbit' && !reduce;
+  controls.autoRotateSpeed = 1.2;
+  document.querySelectorAll('[data-view]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.view === name)));
+}
+document.querySelectorAll('[data-view]').forEach(b => b.addEventListener('click', () => setView(b.dataset.view)));
+
+function setMode(print) {
+  colorGroup.visible = !print;
+  printGroup.visible = print;
+  if (print) loadPrint();
+  document.getElementById('m-color').setAttribute('aria-pressed', String(!print));
+  document.getElementById('m-print').setAttribute('aria-pressed', String(print));
+}
+document.getElementById('m-color').addEventListener('click', () => setMode(false));
+document.getElementById('m-print').addEventListener('click', () => setMode(true));
+controls.addEventListener('start', () => { tween = null; userMoved = true; });
+
+function resize() {
+  const w = stage.clientWidth, h = stage.clientHeight;
+  renderer.setSize(w, h, false);
+  camera.aspect = w / h;
+  // Fit the full figure height whatever the stage shape.
+  // Frame ~175 mm of height and ~125 mm of width (figure plus base) whatever the stage shape.
+  const needH = Math.max(175, 125 / Math.max(camera.aspect, 0.01));
+  camera.userData.fitDist = needH / 2 / Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
+  // Narrow stages stack two rows of buttons on top: aim higher so the figure sits below them.
+  TARGET.y = camera.aspect < 0.8 ? 68 : 58;
+  camera.updateProjectionMatrix();
+}
+// Until the viewer drags or zooms, keep re-framing the figure when the stage size settles.
+new ResizeObserver(() => { resize(); if (!userMoved) setView(currentView, true); }).observe(stage);
+resize();
+camera.position.set(0, 58, camera.userData.fitDist);
+setView('front');
+
+renderer.setAnimationLoop(now => {
+  if (tween) {
+    const t = tween.dur ? Math.min(1, (now - tween.start) / tween.dur) : 1;
+    const k = 1 - Math.pow(1 - t, 3);
+    const s = new THREE.Spherical(
+      THREE.MathUtils.lerp(tween.from.radius, tween.to.radius, k),
+      THREE.MathUtils.lerp(tween.from.phi, tween.to.phi, k),
+      THREE.MathUtils.lerp(tween.from.theta, tween.to.theta, k));
+    controls.target.lerpVectors(tween.fromT, TARGET, k);
+    camera.position.setFromSpherical(s).add(controls.target);
+    if (t >= 1) tween = null;
+  }
+  controls.update();
+  renderer.render(scene, camera);
+});
+</script>
+</body>
+</html>
