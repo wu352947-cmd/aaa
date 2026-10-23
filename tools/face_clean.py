@@ -36,5 +36,18 @@ w = np.maximum(w, gutter.astype(float))
 bl = np.where(face > 0.5, blush, 0)[..., None] * 0.55
 paint = SKIN * (1 - bl) + BLUSH * bl
 out = out * (1 - w[..., None]) + paint * w[..., None]
+# 3) redrawn eyes on top
+ey = np.asarray(Image.open('render/bk/bake_eyes.png'), float)
+ea = ey[..., 3:4] / 255
+out = out * (1 - ea) + ey[..., :3] * ea
+# fill the UV gutters around eye islands with the nearest eye colour so seams don't show
+from scipy import ndimage
+eyem = ea[..., 0] > 0.5
+near_eye = ndimage.binary_dilation(eyem, iterations=5)
+gut = near_eye & ~eyem & (face < 0.5)
+_, (iy, ix) = ndimage.distance_transform_edt(~eyem, return_indices=True)
+out[gut] = out[iy[gut], ix[gut]]
+print('eye gutter texels', int(gut.sum()))
+print('eye texels', int((ea[..., 0] > 0.5).sum()))
 print('face texels repainted', int(cand.sum()), '| skin texels re-warmed', int(skinlike.sum()))
 Image.fromarray(np.clip(out, 0, 255).astype(np.uint8)).save('tex/basecolor_face.png')
