@@ -216,6 +216,7 @@ ul.dots li::before { content: ""; position: absolute; left: 2px; top: 0.6em; wid
         <ul class="fixes">
           <li><span class="k">外观</span><span>去掉金属反光与无效法线贴图，按原画重新校色</span></li>
           <li><span class="k">贴图</span><span>按原画重绘围裙鲸鱼图案和领口宝石</span></li>
+          <li><span class="k">脸部</span><span>清掉灰斑、额头红痕和下巴脏线，恢复暖色肤色并加腮红</span></li>
           <li><span class="k">结构</span><span>悬空的眉毛焊回额头，删除裙内悬空的环片</span></li>
           <li><span class="k">壁厚</span><span>裙摆、发梢等薄壁加厚到 1 mm，并平滑褶皱</span></li>
           <li><span class="k">底座</span><span>加 Ø90 × 6 mm 底座，与双脚合并为一个实体</span></li>
@@ -330,7 +331,9 @@ function loadPrint() {
 // Views: azimuth from the front (+Z), elevation in degrees.
 const VIEWS = { front: [0, 6], side: [-90, 6], back: [180, 6], orbit: [38, 18] };
 let tween = null;
-function setView(name) {
+let currentView = 'front', userMoved = false;
+function setView(name, instant = false) {
+  currentView = name;
   const [az, el] = VIEWS[name];
   // Tween in spherical coordinates around the figure so the camera never cuts through it.
   const off = camera.position.clone().sub(controls.target);
@@ -341,7 +344,7 @@ function setView(name) {
   d = Math.atan2(Math.sin(d), Math.cos(d));  // shortest way round
   to.theta = from.theta + d;
   const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  tween = { from, to, fromT: controls.target.clone(), start: performance.now(), dur: reduce ? 0 : 700 };
+  tween = { from, to, fromT: controls.target.clone(), start: performance.now(), dur: reduce || instant ? 0 : 700 };
   controls.autoRotate = name === 'orbit' && !reduce;
   controls.autoRotateSpeed = 1.2;
   document.querySelectorAll('[data-view]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.view === name)));
@@ -357,7 +360,7 @@ function setMode(print) {
 }
 document.getElementById('m-color').addEventListener('click', () => setMode(false));
 document.getElementById('m-print').addEventListener('click', () => setMode(true));
-controls.addEventListener('start', () => { tween = null; });
+controls.addEventListener('start', () => { tween = null; userMoved = true; });
 
 function resize() {
   const w = stage.clientWidth, h = stage.clientHeight;
@@ -371,7 +374,8 @@ function resize() {
   TARGET.y = camera.aspect < 0.8 ? 68 : 58;
   camera.updateProjectionMatrix();
 }
-new ResizeObserver(resize).observe(stage);
+// Until the viewer drags or zooms, keep re-framing the figure when the stage size settles.
+new ResizeObserver(() => { resize(); if (!userMoved) setView(currentView, true); }).observe(stage);
 resize();
 camera.position.set(0, 58, camera.userData.fitDist);
 setView('front');

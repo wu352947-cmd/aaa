@@ -61,7 +61,7 @@ window.front = (w, h, kind) => {
 // Bake into UV space: for every texel, project its world position into the
 // reference image (front ortho + affine fit) and output the reference colour,
 // with alpha = visibility * facing weight. depthURL is the front depth map.
-window.bake = async (refURL, depthURL, fit, size) => {
+window.bake = async (refURL, depthURL, fit, size, tol = 0.004, fLo = 0.25, fHi = 0.6) => {
   const loader = new THREE.TextureLoader();
   const ref = await loader.loadAsync(refURL);
   const dep = await loader.loadAsync(depthURL);
@@ -74,6 +74,7 @@ window.bake = async (refURL, depthURL, fit, size) => {
       bmin: { value: box.min }, bmax: { value: box.max },
       fit: { value: new THREE.Vector4(...fit) },  // ref_px = a*front_px + b (x), c*front_py + d (y), normalised
       viewMat: { value: frontCam().matrixWorldInverse },
+      tol: { value: tol }, fLo: { value: fLo }, fHi: { value: fHi },
     },
     vertexShader: `
       varying vec3 wp; varying vec3 wn;
@@ -83,7 +84,7 @@ window.bake = async (refURL, depthURL, fit, size) => {
         gl_Position = vec4(uv*2.-1., 0., 1.);
       }`,
     fragmentShader: `
-      uniform sampler2D ref, dep; uniform vec3 bmin, bmax; uniform vec4 fit; uniform mat4 viewMat;
+      uniform sampler2D ref, dep; uniform vec3 bmin, bmax; uniform vec4 fit; uniform mat4 viewMat; uniform float tol, fLo, fHi;
       varying vec3 wp; varying vec3 wn;
       void main(){
         vec2 f = vec2((wp.x-bmin.x)/(bmax.x-bmin.x), (bmax.y-wp.y)/(bmax.y-bmin.y)); // front image coords, y down
@@ -92,8 +93,8 @@ window.bake = async (refURL, depthURL, fit, size) => {
         float vz = -(viewMat*vec4(wp,1.)).z;
         vec4 dd = texture2D(dep, vec2(f.x, 1.-f.y));
         float dfront = (floor(dd.g*255.+0.5)+dd.r)/255.*(3.0-0.5)+0.5;
-        float vis = (dd.a > 0.5 && vz - dfront < 0.004) ? 1. : 0.;
-        float facing = smoothstep(0.25, 0.6, wn.z);
+        float vis = (dd.a > 0.5 && vz - dfront < tol) ? 1. : 0.;
+        float facing = smoothstep(fLo, fHi, wn.z);
         vec4 c = texture2D(ref, r);
         gl_FragColor = vec4(c.rgb, vis*facing*c.a);
       }`,
