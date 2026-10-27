@@ -7,6 +7,8 @@ import { CardsBody } from './Cards';
 import { Contacts, type useDialogues } from './Contacts';
 import { cls, price, qty, signed } from './format';
 import { IntelList } from './IntelPanel';
+import { PixelScene } from './Pixel';
+import { eraOfScenario } from '../pixel/palettes';
 
 const WHY: Record<string, string> = {
   gravity: '没有人持续投钱时，做市与套利资金会把价格拉回真实走势附近',
@@ -87,6 +89,9 @@ export function Night({ game, llm, dlg, showMentor, onSleep }: { game: Game; llm
   return (
     <div className="night">
       <div className="night-inner">
+        <div className="night-scene scene-frame">
+          <PixelScene scene="study" era={eraOfScenario(game.scenario.id)} state={{ night: true, faded: Math.min(0.7, game.linesCrossed * 0.2) }} label="夜里的书房" fit />
+        </div>
         <div>
           <div className="newspaper paper">
             <div className="masthead">

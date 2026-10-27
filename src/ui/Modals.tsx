@@ -83,6 +83,8 @@ export interface UiSettings {
   motion: 'full' | 'reduced';
   mentor: boolean;
   sound: boolean;
+  /** 交易屏上方的像素场景条 */
+  scenes?: boolean;
 }
 
 export function SettingsModal({
@@ -189,6 +191,10 @@ export function SettingsModal({
         <label className="check">
           <input type="checkbox" checked={ui.sound} onChange={(e) => setUi({ ...ui, sound: e.target.checked })} />
           声音：交易大厅的人声随成交量起落，仓位越危险心跳越快，关键时刻响钟
+        </label>
+        <label className="check">
+          <input type="checkbox" checked={ui.scenes !== false} onChange={(e) => setUi({ ...ui, scenes: e.target.checked })} />
+          交易屏上方显示像素场景（交易大厅随成交量热闹或冷清）
         </label>
         <div className="actions">
           <button className="btn" onClick={onClose}>

@@ -1,3 +1,4 @@
+import { PixelScene } from './Pixel';
 import type { Game, Intel } from '../engine/game';
 import { Chart } from './Chart';
 import { cls } from './format';
@@ -16,6 +17,13 @@ export function EndingScreen({ game, onAgain, onTitle }: { game: Game; onAgain: 
     <div className="ending" style={{ background: '#0b0c10' }}>
       <div className="ending-inner">
         <div className="front-page paper">
+          <div className="scene-frame">
+            {game.scenario.id === 'gme2021' ? (
+              <PixelScene scene="room" state={{ heat: 0.2, faded: 0.5, restricted: !!game.flags.restrictActive }} label="散场之后" />
+            ) : (
+              <PixelScene scene="floor" state={{ heat: 0.05, halted: true, faded: 0.5 }} label="散场之后的交易大厅" />
+            )}
+          </div>
           <div className="masthead">
             <div className="name">{game.scenario.paperName ?? '财经报'}</div>
             <div className="meta">

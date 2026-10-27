@@ -5,6 +5,7 @@ import type { LlmSettings } from '../llm/settings';
 import { ANNUAL_WAGE, APRIL_VALUE, COUNCIL, EVENINGS, HOST, MEANS, TULIP_NPCS, TULIP_RULES, TULIP_SOURCES, WINE_MONEY } from '../scenarios/tulip/data';
 import { RULE_NAME, TulipGame, type Settlement, type TulipFaction, type TulipRule } from '../scenarios/tulip/game';
 import { CardList } from './Cards';
+import { PixelPortrait, PixelScene } from './Pixel';
 import { clearSave, saveTulip } from './save';
 import { tulipIntent } from '../scenarios/tulip/talk';
 import { cls } from './format';
@@ -31,6 +32,9 @@ export function TulipSetup({ onBegin, onBack }: { onBegin: (f: TulipFaction) => 
   return (
     <div className="setup paper tavern-paper">
       <div className="setup-inner">
+        <div className="scene-frame">
+          <PixelScene scene="tavern" state={{ who: ['jan', 'pieter', 'cornelis', 'maritje', 'dirck', 'hendrick'] }} label="金鹿酒馆" />
+        </div>
         <div style={{ letterSpacing: '0.3em', fontSize: 12, color: 'var(--ink-soft)' }}>新 手 第 一 课</div>
         <h2>酒馆里的花</h2>
         <div className="engraved-rule" />
@@ -173,6 +177,13 @@ export function TulipScreen({ game, llm, onExit, onTo327 }: { game: TulipGame; l
           </div>
         </header>
 
+        <div className="scene-frame">
+          <PixelScene
+            scene="tavern"
+            state={{ who: game.quotes.filter((q) => !q.done || council).map((q) => q.npc), empty: ev.kind !== 'normal' }}
+            label={`${ev.date} 的金鹿酒馆`}
+          />
+        </div>
         <div className="host">
           <span className="host-name">
             {HOST.name}（{HOST.title}）
@@ -192,7 +203,7 @@ export function TulipScreen({ game, llm, onExit, onTo327 }: { game: TulipGame; l
               return (
                 <div key={q.npc} className={cls('seat', q.done && 'gone')}>
                   <div className="seat-head">
-                    <span className="avatar">{n.avatar}</span>
+                    <PixelPortrait id={n.id} era="1637" size={40} talking={!!b?.pending} mood={ev.kind === 'normal' ? (q.side === 'buy' ? 'smile' : 'neutral') : 'frown'} />
                     <span>
                       <b>{n.name}</b> <span className="seat-title">{n.title}</span>
                     </span>
@@ -494,6 +505,9 @@ function CouncilVote({ game, pick, setPick, onNext }: { game: TulipGame; pick: T
         <div style={{ letterSpacing: '0.3em', fontSize: 12, color: 'var(--seal)', fontWeight: 700 }}>1637 年 2 月 24 日 · 阿姆斯特丹</div>
         <h2>七位议员，一次表决</h2>
         <div className="engraved-rule" />
+        <div className="scene-frame">
+          <PixelScene scene="chamber" state={{ who: COUNCIL.map((c) => c.id) }} label="阿姆斯特丹的议事厅" />
+        </div>
         <div className="section-label">你提交哪一条？</div>
         <div className="seg" style={{ marginBottom: 12 }}>
           {RULES.map((r) => (
@@ -508,11 +522,14 @@ function CouncilVote({ game, pick, setPick, onNext }: { game: TulipGame; pick: T
         <div className="settle">
           {COUNCIL.map((c) => (
             <div key={c.id} className="settle-row">
-              <span>
-                {c.name}
-                <small>
-                  {c.title} · {c.stance}
-                </small>
+              <span style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                <PixelPortrait id={c.id} era="1637" size={36} mood={t.votes[c.id] === pick ? 'smile' : 'frown'} />
+                <span>
+                  {c.name}
+                  <small>
+                    {c.title} · {c.stance}
+                  </small>
+                </span>
               </span>
               <span className="num">{RULE_NAME[t.votes[c.id]]}</span>
             </div>
@@ -570,6 +587,9 @@ function CouncilEnding({ game, onExit, onTo327 }: { game: TulipGame; onExit: () 
     <div className="ending" style={{ background: '#1b130d' }}>
       <div className="ending-inner">
         <div className="front-page paper tavern-paper">
+          <div className="scene-frame">
+            <PixelScene scene="chamber" state={{ who: COUNCIL.map((c) => c.id), faded: 0.45 }} label="议事厅" />
+          </div>
           <div className="masthead">
             <div className="name" style={{ fontSize: 26, letterSpacing: '0.15em' }}>真嘴与贪财的对话</div>
             <div className="meta">
@@ -668,6 +688,9 @@ function TulipEnding({ game, onExit, onTo327 }: { game: TulipGame; onExit: () =>
     <div className="ending" style={{ background: '#1b130d' }}>
       <div className="ending-inner">
         <div className="front-page paper tavern-paper">
+          <div className="scene-frame">
+            <PixelScene scene="tavern" state={{ who: ['jan', 'maritje'], empty: true, faded: 0.45 }} label="春天的酒馆" />
+          </div>
           <div className="masthead">
             <div className="name" style={{ fontSize: 26, letterSpacing: '0.15em' }}>真嘴与贪财的对话</div>
             <div className="meta">

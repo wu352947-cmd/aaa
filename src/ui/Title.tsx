@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { Scenario } from '../engine/game';
 import { cls } from './format';
+import { PixelScene } from './Pixel';
 import type { SaveData } from './save';
 
 export function Title({
@@ -21,6 +22,15 @@ export function Title({
   return (
     <div className="title-screen paper">
       <div className="title-card">
+        <div className="title-hero scene-frame">
+          {which === 'tulip' ? (
+            <PixelScene scene="tavern" state={{ who: ['jan', 'pieter', 'cornelis', 'maritje', 'dirck', 'hendrick'] }} label="1637 年，哈勒姆的金鹿酒馆" />
+          ) : which === 's327' ? (
+            <PixelScene scene="floor" state={{ heat: 0.7, dir: 1 }} label="1995 年，上海的交易大厅" />
+          ) : (
+            <PixelScene scene="room" state={{ heat: 0.8, dir: 1 }} label="2021 年，纽约的一间卧室" />
+          )}
+        </div>
         <h1>筹码</h1>
         <div className="en">C H I P S</div>
         <div className="tagline">价格取自史料，规则取自条文，胜负取决于人。</div>

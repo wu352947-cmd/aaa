@@ -5,6 +5,8 @@ import { speak } from '../llm/director';
 import { eraOf } from '../llm/era';
 import type { LlmSettings } from '../llm/settings';
 import { cls, money } from './format';
+import { PixelPortrait } from './Pixel';
+import { eraOfScenario } from '../pixel/palettes';
 
 export interface ChatLine {
   who: 'you' | 'npc' | 'sys';
@@ -133,7 +135,7 @@ export function Contacts({
       <div className="npc-list">
         {npcs.map((x) => (
           <button key={x.id} className={cls('npc', x.id === sel && 'on')} onClick={() => (setSel(x.id), setPanel('verbs'))}>
-            <span className="avatar">{x.avatar}</span>
+            <PixelPortrait id={x.id} era={eraOfScenario(game.scenario.id)} size={36} />
             <span>
               <b>{x.name}</b> <span className="muted" style={{ fontSize: 12 }}>{x.org} · {x.title}</span>
               <div className="bar-track" style={{ width: 120 }}>
@@ -160,9 +162,7 @@ export function Contacts({
       {n && (
         <div style={{ marginTop: 14 }}>
           <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-            <span className="avatar" style={{ width: 44, height: 44, fontSize: 18 }}>
-              {n.avatar}
-            </span>
+            <PixelPortrait id={n.id} era={eraOfScenario(game.scenario.id)} size={64} talking={lines.some((l) => l.pending)} mood={n.relation >= 30 ? 'smile' : n.relation <= -30 ? 'frown' : 'neutral'} />
             <div>
               <b style={{ fontFamily: 'var(--serif)', fontSize: 16 }}>{n.name}</b>
               <div className="muted" style={{ fontSize: 12 }}>

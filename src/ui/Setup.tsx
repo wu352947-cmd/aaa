@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { Scenario } from '../engine/game';
 import { cls } from './format';
+import { PixelScene } from './Pixel';
 
 export function Setup({ scenario, onBegin, onBack }: { scenario: Scenario; onBegin: (faction: string, principle: string, seed: string) => void; onBack: () => void }) {
   const [faction, setFaction] = useState(() => scenario.factions.find((x) => !x.locked)!.id);
@@ -11,6 +12,9 @@ export function Setup({ scenario, onBegin, onBack }: { scenario: Scenario; onBeg
   return (
     <div className="setup paper">
       <div className="setup-inner">
+        <div className="scene-frame">
+          {scenario.id === 'gme2021' ? <PixelScene scene="room" state={{ heat: 0.5 }} label="2021 年，纽约" /> : <PixelScene scene="floor" state={{ heat: 0.5 }} label="1995 年，上海" />}
+        </div>
         <div className="muted" style={{ color: 'var(--ink-soft)', letterSpacing: '0.3em', fontSize: 12 }}>
           序 幕
         </div>

@@ -3,6 +3,8 @@ import type { Game, GameEvent } from '../engine/game';
 import type { LlmSettings } from '../llm/settings';
 import { CardsDrawer } from './Cards';
 import { Chart } from './Chart';
+import { PixelScene } from './Pixel';
+import type { SceneId, SceneState } from '../pixel/scenes';
 import { Contacts, useDialogues } from './Contacts';
 import { cls, money } from './format';
 import { IntelDrawer } from './IntelPanel';
@@ -210,7 +212,7 @@ export function GameScreen({ game, llm, ui, onSettings, onEnd }: { game: Game; l
   };
 
   return (
-    <div className="game">
+    <div className={cls('game', ui.scenes !== false && 'with-scene')}>
       <div className="topbar">
         <div className="clock">
           <span className="date">{day.date}</span>
@@ -285,6 +287,8 @@ export function GameScreen({ game, llm, ui, onSettings, onEnd }: { game: Game; l
           <span className="faint">暂无消息</span>
         )}
       </div>
+
+      {ui.scenes !== false && <SceneStrip game={game} paused={paused} redUp={ui.colors === 'cn'} />}
 
       <div className="main">
         <div className="chart-wrap">
@@ -398,6 +402,41 @@ export function GameScreen({ game, llm, ui, onSettings, onEnd }: { game: Game; l
         />
       )}
       {ruleDef && <RuleCardModal card={ruleDef} detail={ruleCard?.detail} onClose={() => setRuleCard(null)} />}
+    </div>
+  );
+}
+
+/** 世界层：交易屏上方的场景条。只画气氛，不画数字。 */
+function SceneStrip({ game, paused, redUp }: { game: Game; paused: boolean; redUp: boolean }) {
+  const m = game.market;
+  const bars = m.bars;
+  const recent = bars.slice(-8);
+  const perMin = game.day.vDay / m.session.minutes;
+  const vol = recent.length ? recent.reduce((a, b) => a + b.v, 0) / recent.length : 0;
+  const trading = game.phase === 'trading' && !paused;
+  const heat = trading ? Math.min(1, Math.log2(1 + vol / Math.max(1, perMin)) / 2.5) : game.phase === 'night' ? 0.05 : 0.15;
+  const move = recent.length > 1 ? recent[recent.length - 1].c - recent[0].o : 0;
+  const dir: SceneState['dir'] = Math.abs(move) < m.last * 0.0005 ? 0 : move > 0 ? 1 : -1;
+  const gme = game.scenario.id === 'gme2021';
+  const scene: SceneId = gme ? 'room' : 'floor';
+  // 走势的形状：只取 24 个点，不带数字
+  const step = Math.max(1, Math.floor(bars.length / 24));
+  const shape = bars.filter((_, i) => i % step === 0).map((b) => b.c);
+  const state: SceneState = {
+    heat: Math.round(heat * 10) / 10,
+    dir,
+    halted: m.t < m.haltUntil,
+    climax: game.isBattleDay,
+    restricted: !!game.flags.restrictActive,
+    redUp,
+    shape: gme ? shape.slice(-24) : undefined,
+    faded: Math.min(0.7, game.linesCrossed * 0.2),
+  };
+  const cap = gme ? '纽约 · 一间卧室' : `上海 · 交易大厅${state.halted ? ' · 停市' : game.isBattleDay ? ' · 决战日' : ''}`;
+  return (
+    <div className="scene-strip">
+      <PixelScene scene={scene} state={state} label={cap} fit />
+      <span className="scene-cap">{cap}</span>
     </div>
   );
 }
