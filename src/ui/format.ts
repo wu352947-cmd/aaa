@@ -1,11 +1,11 @@
-import { fmtYi } from '../engine/exchange';
+import { fmtYi, UNITS } from '../engine/exchange';
 
 export const price = (fen: number) => (fen / 100).toFixed(2);
 export const money = fmtYi;
 export function qty(q: number): string {
   const a = Math.abs(q);
-  if (a >= 10000) return `${(q / 10000).toFixed(a >= 1e6 ? 0 : 1)} 万口`;
-  return `${q.toLocaleString()} 口`;
+  if (a >= 10000) return `${(q / 10000).toFixed(a >= 1e6 ? 0 : 1)} 万${UNITS.qty}`;
+  return `${q.toLocaleString()} ${UNITS.qty}`;
 }
 export function signed(n: number, f: (x: number) => string = String): string {
   return (n > 0 ? '+' : n < 0 ? '−' : '') + f(Math.abs(n));

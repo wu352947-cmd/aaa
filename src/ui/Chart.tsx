@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
 import type { Game } from '../engine/game';
-import { MINUTES_PER_DAY, minuteLabel } from '../engine/market';
 import type { Bar } from '../engine/types';
 import { price, qty } from './format';
 
@@ -113,10 +112,12 @@ function drawIntraday(ctx: CanvasRenderingContext2D, w: number, h: number, g: Ga
   lo -= padV;
   hi += padV;
 
+  const S = g.market.session;
+  const N = S.minutes;
   const plotW = w - PAD_L - AXIS_R;
   const volH = Math.max(36, (h - PAD_T - PAD_B) * 0.16);
   const plotH = h - PAD_T - PAD_B - volH - 6;
-  const X = (i: number) => PAD_L + (i / (MINUTES_PER_DAY - 1)) * plotW;
+  const X = (i: number) => PAD_L + (i / (N - 1)) * plotW;
   const Y = (v: number) => PAD_T + (1 - (v - lo) / (hi - lo)) * plotH;
 
   // 网格与价格轴
@@ -136,14 +137,7 @@ function drawIntraday(ctx: CanvasRenderingContext2D, w: number, h: number, g: Ga
   // 时间轴
   ctx.textBaseline = 'top';
   ctx.textAlign = 'center';
-  for (const [i, lab] of [
-    [0, '9:30'],
-    [60, '10:30'],
-    [120, '11:30/13:00'],
-    [180, '14:00'],
-    [240, '15:00'],
-    [300, '16:00'],
-  ] as [number, string][]) {
+  for (const [i, lab] of S.marks) {
     ctx.fillStyle = muted;
     ctx.fillText(lab, Math.min(Math.max(X(i), 20), PAD_L + plotW - 20), h - PAD_B + 6);
   }
@@ -151,10 +145,12 @@ function drawIntraday(ctx: CanvasRenderingContext2D, w: number, h: number, g: Ga
   // 午休分隔
   ctx.setLineDash([2, 4]);
   ctx.strokeStyle = line;
-  ctx.beginPath();
-  ctx.moveTo(X(119.5), PAD_T);
-  ctx.lineTo(X(119.5), PAD_T + plotH + volH + 6);
-  ctx.stroke();
+  for (const b of S.breaks) {
+    ctx.beginPath();
+    ctx.moveTo(X(b - 0.5), PAD_T);
+    ctx.lineTo(X(b - 0.5), PAD_T + plotH + volH + 6);
+    ctx.stroke();
+  }
 
   // 作废区间
   if (voidFrom != null) {
@@ -243,7 +239,7 @@ function drawIntraday(ctx: CanvasRenderingContext2D, w: number, h: number, g: Ga
     // 成交量
     const vMax = Math.max(...bars.map((b) => b.v), 1);
     const vTop = PAD_T + plotH + 6;
-    const bw = Math.max(1, plotW / MINUTES_PER_DAY - 0.5);
+    const bw = Math.max(1, plotW / N - 0.5);
     bars.forEach((b, i) => {
       const vh = (b.v / vMax) * volH;
       ctx.fillStyle = (b.c >= b.o ? up : down) + 'aa';
@@ -271,13 +267,13 @@ function drawIntraday(ctx: CanvasRenderingContext2D, w: number, h: number, g: Ga
     ctx.lineTo(x, PAD_T + plotH + volH + 6);
     ctx.stroke();
     ctx.setLineDash([]);
-    const lines = [minuteLabel(hover), `成交 ${price(b.c)}`, `历史 ${price(b.hist)}`, `偏离 ${b.c - b.hist >= 0 ? '+' : ''}${((b.c - b.hist) / 100).toFixed(2)}`, `量 ${qty(b.v)}`];
+    const lines = [S.label(hover), `成交 ${price(b.c)}`, `历史 ${price(b.hist)}`, `偏离 ${b.c - b.hist >= 0 ? '+' : ''}${((b.c - b.hist) / 100).toFixed(2)}`, `量 ${qty(b.v)}`];
     tooltip(ctx, x, PAD_T + 6, lines, w);
   }
 
   return {
     yToPrice: (y: number) => lo + (1 - (y - PAD_T) / plotH) * (hi - lo),
-    xToIndex: (x: number) => Math.round(((x - PAD_L) / plotW) * (MINUTES_PER_DAY - 1)),
+    xToIndex: (x: number) => Math.round(((x - PAD_L) / plotW) * (N - 1)),
   };
 }
 

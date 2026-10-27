@@ -17,6 +17,17 @@ export interface RuleDeck {
   priceLimit: number | null;
   /** 市价单最多吃到偏离最新价多少比例（防止扫空整本订单簿） */
   marketProtect: number;
+  /** 下单界面是否提供“超额透支”选项（当年的系统拦不住违规下单） */
+  overdraw?: boolean;
+  /** 涨跌幅区间暂停：window 分钟内偏离超过 band 即暂停 pause 分钟 */
+  luld?: { band: number; window: number; pause: number };
+}
+
+/** 数量与货币单位（只影响文字） */
+export const UNITS = { qty: '口', cur: '元' };
+export function setUnits(u: { qty: string; cur: string }): void {
+  UNITS.qty = u.qty;
+  UNITS.cur = u.cur;
 }
 
 export interface Account {
@@ -32,6 +43,10 @@ export interface Account {
   /** 免检账户：做市商与散户群体智能体不受保证金与限额约束 */
   exempt: boolean;
   violations: number;
+  /** 券商限制：只允许平仓 */
+  closeOnly?: boolean;
+  /** 可借券上限（股）：卖空超过它会被挡下；不设表示不限 */
+  borrowLimit?: number;
 }
 
 export function newAccount(p: Partial<Account> & Pick<Account, 'id' | 'name' | 'group'>): Account {
@@ -111,12 +126,20 @@ export class Exchange {
     const newPos = a.pos + dir * req.qty;
     const increases = Math.abs(newPos) > Math.abs(a.pos);
     if (!increases) return hits;
+    if (a.closeOnly) {
+      hits.push({ rule: 'close-only', owner: a.id, blocked: true, detail: '券商暂停了这只股票的买入，只允许卖出已有持仓' });
+      return hits;
+    }
+    if (newPos < 0 && a.borrowLimit != null && -newPos > a.borrowLimit) {
+      hits.push({ rule: 'no-borrow', owner: a.id, blocked: true, detail: `借不到更多的券：最多只能卖空 ${a.borrowLimit.toLocaleString()} ${UNITS.qty}` });
+      return hits;
+    }
     if (Math.abs(newPos) > this.deck.positionLimit) {
       hits.push({
         rule: 'position-limit',
         owner: a.id,
         blocked: !req.overdraw,
-        detail: `成交后持仓 ${Math.abs(newPos).toLocaleString()} 口，超过限额 ${this.deck.positionLimit.toLocaleString()} 口`,
+        detail: `成交后持仓 ${Math.abs(newPos).toLocaleString()} ${UNITS.qty}，超过限额 ${this.deck.positionLimit.toLocaleString()} ${UNITS.qty}`,
       });
     }
     const ref = req.type === 'limit' && req.price != null ? req.price : this.last;
@@ -249,7 +272,7 @@ export function opposite(s: Side): Side {
 
 export function fmtYi(yuan: number): string {
   const abs = Math.abs(yuan);
-  if (abs >= 1e8) return `${(yuan / 1e8).toFixed(2)} 亿元`;
-  if (abs >= 1e4) return `${(yuan / 1e4).toFixed(1)} 万元`;
-  return `${yuan.toFixed(0)} 元`;
+  if (abs >= 1e8) return `${(yuan / 1e8).toFixed(2)} 亿${UNITS.cur}`;
+  if (abs >= 1e4) return `${(yuan / 1e4).toFixed(1)} 万${UNITS.cur}`;
+  return `${yuan.toFixed(0)} ${UNITS.cur}`;
 }

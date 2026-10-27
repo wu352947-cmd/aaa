@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import type { Game } from '../engine/game';
-import { groupName } from '../scenarios/s327';
 import { cls, dir, money, price, qty, signed } from './format';
 import { Term } from './Term';
 
@@ -88,7 +87,7 @@ export function PositionCard({ game }: { game: Game }) {
 /** 交易所官员的监管台：看得到每家会员的持仓与保证金（这是交易者看不到的） */
 export function MembersCard({ game }: { game: Game }) {
   const ex = game.market.ex;
-  const members = ['shenjiang', 'zhongcai', 'liaobei'].map((id) => ex.acct(id));
+  const members = (game.scenario.members ?? []).map((id) => ex.acct(id));
   return (
     <div className="card">
       <h4>
@@ -117,13 +116,15 @@ export function MembersCard({ game }: { game: Game }) {
           </div>
         );
       })}
-      {game.market.t < game.market.haltUntil && <div className="warn-box">停市中，{game.market.haltUntil >= 330 ? '至收盘' : `剩 ${game.market.haltUntil - game.market.t} 分钟`}</div>}
+      {game.market.t < game.market.haltUntil && <div className="warn-box">停市中，{game.market.haltUntil >= game.market.session.minutes ? '至收盘' : `剩 ${game.market.haltUntil - game.market.t} 分钟`}</div>}
     </div>
   );
 }
 
 export function TapeCard({ game }: { game: Game }) {
-  const seats: Record<string, string> = { '011': 'shenjiang', '102': 'zhongcai', '217': 'liaobei' };
+  const seats: Record<string, string> = {};
+  for (const a of game.market.ex.accounts.values()) if (a.seat) seats[a.seat] = a.id;
+  const name = (id: string) => game.scenario.groupName?.(game, id) ?? id;
   const rows = game.tape.filter((r) => r.day === game.dayIndex).slice(0, 14);
   return (
     <div className="card" style={{ flex: 1 }}>
@@ -138,7 +139,7 @@ export function TapeCard({ game }: { game: Game }) {
         return (
           <div key={i} className="tape-row">
             <span className="muted num">{r.time}</span>
-            <span title="席位号：对应某家会员单位。问问场内的老人就知道是谁。">{mine ? '你' : seats[r.seat] ? groupName(game, seats[r.seat]) : `席位 ${r.seat}`}</span>
+            <span title="席位号：对应某家会员单位。问问场内的老人就知道是谁。">{mine ? '你' : seats[r.seat] ? name(seats[r.seat]) : `席位 ${r.seat}`}</span>
             <span className={r.side === 'buy' ? 'up' : 'down'}>{r.side === 'buy' ? '买' : '卖'}</span>
             <span className="num">{qty(r.qty)}</span>
           </div>

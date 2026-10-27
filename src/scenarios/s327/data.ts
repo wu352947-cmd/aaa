@@ -11,6 +11,7 @@ export const DECK_1995: RuleDeck = {
   positionLimit: 3_000_000,
   priceLimit: null, // 当年国债期货没有涨跌停
   marketProtect: 0.04,
+  overdraw: true,
 };
 
 export const PARAMS: MarketParams = {

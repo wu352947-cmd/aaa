@@ -122,7 +122,7 @@ export function GameScreen({ game, llm, ui, onSettings, onEnd }: { game: Game; l
     if (!ui.sound) return;
     const bars = game.market.bars;
     const trading = game.phase === 'trading' && !paused;
-    const v = trading && bars.length ? bars[bars.length - 1].v / (game.day.vDay / 330) : 0;
+    const v = trading && bars.length ? bars[bars.length - 1].v / (game.day.vDay / game.market.session.minutes) : 0;
     sound.setCrowd(trading ? Math.min(1, Math.log2(1 + v) / 4) : 0);
     const eqNow = game.equity();
     const use = eqNow > 0 ? game.marginNeed() / eqNow : game.player.pos ? 2 : 0;

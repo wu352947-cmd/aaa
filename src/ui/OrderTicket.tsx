@@ -48,7 +48,7 @@ export function OrderTicket({
   const presets: [string, number][] = [];
   if (closing) presets.push(['平一半', Math.round(closing / 2)], ['全部平仓', closing]);
   if (maxOpen > 0) presets.push(['可开 25%', Math.floor(maxOpen * 0.25)], ['可开 50%', Math.floor(maxOpen * 0.5)], ['可开上限', closing + maxOpen]);
-  if (game.factionId !== 'retail') presets.push(['10 万口', 100_000], ['50 万口', 500_000]);
+  if (game.factionId !== 'retail') for (const n of game.scenario.lotPresets ?? []) presets.push([fq(n), n]);
 
   const submit = () => {
     if (q <= 0) return;
@@ -59,7 +59,7 @@ export function OrderTicket({
   return (
     <div className="drawer">
       <div className="drawer-head">
-        <h3>{side === 'buy' ? '买入' : '卖出'} · 327 合约</h3>
+        <h3>{side === 'buy' ? '买入' : '卖出'} · {game.scenario.id === 's327' ? '327 合约' : game.scenario.title}</h3>
         <button className="btn ghost small" onClick={onClose}>
           关闭 <span className="kbd">Esc</span>
         </button>
@@ -68,7 +68,7 @@ export function OrderTicket({
         <div className="field">
           <div className="seg">
             <button className={cls(side === 'buy' && 'on buy')} onClick={() => setSide('buy')}>
-              买入{p.pos < 0 ? '（平空）' : ''}
+              买入{p.pos < 0 ? '（回补）' : ''}
             </button>
             <button className={cls(side === 'sell' && 'on sell')} onClick={() => setSide('sell')}>
               卖出{p.pos > 0 ? '（平多）' : ''}
@@ -134,12 +134,14 @@ export function OrderTicket({
           </div>
         ))}
 
+        {ex.deck.overdraw && (
         <label className="check" style={{ color: overdraw ? '#ff9b95' : 'var(--muted)' }}>
           <input type="checkbox" checked={overdraw} onChange={(e) => setOverdraw(e.target.checked)} />
           <span>
             <Term k="超额透支">超额透支下单</Term>（绕过保证金与持仓限额。黑色操作：短期有效，必然留痕）
           </span>
         </label>
+        )}
 
         <div className="actions" style={{ display: 'flex', gap: 8, marginTop: 16 }}>
           <button className="btn" onClick={onClose}>

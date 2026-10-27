@@ -17,9 +17,9 @@ export function EndingScreen({ game, onAgain, onTitle }: { game: Game; onAgain: 
       <div className="ending-inner">
         <div className="front-page paper">
           <div className="masthead">
-            <div className="name">沪上财经报</div>
+            <div className="name">{game.scenario.paperName ?? '财经报'}</div>
             <div className="meta">
-              <span>1995-02-24 星期五</span>
+              <span>{game.scenario.endingDate ?? ''}</span>
               <span>号外</span>
             </div>
           </div>

@@ -41,20 +41,75 @@ export interface Actor {
 export interface TickReport {
   hits: RuleHit[];
   trades: Trade[];
+  /** 本分钟触发了涨跌幅区间暂停（LULD） */
+  luld?: boolean;
 }
 
-/** 交易时段：上午 9:30–11:30，下午 13:00–16:30（1995 年上交所国债期货） */
-export const MINUTES_PER_DAY = 330;
-export function minuteLabel(i: number): string {
-  const m = i < 120 ? 9 * 60 + 30 + i : 13 * 60 + (i - 120);
-  const h = Math.floor(m / 60);
-  return `${h}:${String(m % 60).padStart(2, '0')}`;
+/** 交易时段：由若干连续时段组成，每分钟一个 tick */
+export interface Session {
+  minutes: number;
+  label(i: number): string;
+  index(label: string): number;
+  /** 时间轴刻度 */
+  marks: [number, string][];
+  /** 午休等时段分界（tick 序号） */
+  breaks: number[];
 }
-export function minuteIndex(label: string): number {
-  const [h, mm] = label.split(':').map(Number);
-  const m = h * 60 + mm;
-  return m < 13 * 60 ? m - (9 * 60 + 30) : 120 + (m - 13 * 60);
+
+const toMin = (s: string) => {
+  const [h, m] = s.split(':').map(Number);
+  return h * 60 + m;
+};
+const fmtMin = (m: number) => `${Math.floor(m / 60)}:${String(m % 60).padStart(2, '0')}`;
+
+export function makeSession(segments: [string, string][]): Session {
+  const parts = segments.map(([a, b]) => [toMin(a), toMin(b)] as const);
+  const offsets: number[] = [];
+  let minutes = 0;
+  for (const [a, b] of parts) {
+    offsets.push(minutes);
+    minutes += b - a;
+  }
+  const marks: [number, string][] = [];
+  const breaks: number[] = [];
+  parts.forEach(([a, b], k) => {
+    const off = offsets[k];
+    if (k === 0) marks.push([0, fmtMin(a)]);
+    else {
+      breaks.push(off);
+      marks.push([off, `${fmtMin(parts[k - 1][1])}/${fmtMin(a)}`]);
+    }
+    for (let m = Math.ceil((a + 1) / 60) * 60; m < b; m += 60) marks.push([off + m - a, fmtMin(m)]);
+  });
+  return {
+    minutes,
+    marks,
+    breaks,
+    label(i) {
+      const j = Math.max(0, Math.min(i, minutes - 1));
+      for (let k = parts.length - 1; k >= 0; k--) if (j >= offsets[k]) return fmtMin(parts[k][0] + j - offsets[k]);
+      return fmtMin(parts[0][0]);
+    },
+    index(label) {
+      const m = toMin(label);
+      for (let k = 0; k < parts.length; k++) {
+        const [a, b] = parts[k];
+        if (m < a) return offsets[k];
+        if (m < b) return offsets[k] + m - a;
+      }
+      return minutes;
+    },
+  };
 }
+
+/** 1995 年上交所国债期货：上午 9:30–11:30，下午 13:00–16:30 */
+export const SSE_1995 = makeSession([
+  ['9:30', '11:30'],
+  ['13:00', '16:30'],
+]);
+export const MINUTES_PER_DAY = SSE_1995.minutes;
+export const minuteLabel = SSE_1995.label;
+export const minuteIndex = SSE_1995.index;
 
 // 做市商挂单档位（相对中枢的偏移，单位：分）。近处逐档、远处稀疏，覆盖 ±8 元。
 const LADDER: number[] = (() => {
@@ -95,6 +150,8 @@ export class Market {
   actors: Actor[] = [];
   /** 临时停市：当日第几分钟之前不撮合（-1 表示正常交易） */
   haltUntil = -1;
+  /** 券商限制买入时，散户群体只能卖出 */
+  crowdSellOnly = false;
   private rngCrowd: Rng;
   private rngTrend: Rng;
   closePrices: Fen[] = [];
@@ -104,6 +161,7 @@ export class Market {
     public params: MarketParams,
     seed: string,
     startPrice: Fen,
+    public session: Session = SSE_1995,
   ) {
     this.ex = new Exchange(deck, startPrice);
     this.ex.add(newAccount({ id: MM, name: '做市与套利资金', group: 'gravity', exempt: true }));
@@ -174,8 +232,11 @@ export class Market {
     const c = Math.round(center);
     const s = this.scale(center) / 100;
     const V = this.day.vDay;
+    // 档位步长随冲击尺度放大：327 合约每档 1 分，三百美元的股票每档约 25 美分
+    const unit = Math.max(1, Math.round((s * 100) / 600));
     let prevC = 0;
-    for (const off of LADDER) {
+    for (const base of LADDER) {
+      const off = base * unit;
       const cum = V * Math.pow(off / 100 / s, 2);
       const size = Math.max(1, Math.round(cum - prevC));
       prevC = cum;
@@ -186,13 +247,13 @@ export class Market {
 
   private crowdOrders(): OrderReq[] {
     const r = this.rngCrowd;
-    const perTick = (this.day.crowdShare * this.day.vDay) / MINUTES_PER_DAY;
+    const perTick = (this.day.crowdShare * this.day.vDay) / this.session.minutes;
     const n = 4 + r.int(0, 4);
     const out: OrderReq[] = [];
     const bias = 0.18 * this.sentiment;
     for (let i = 0; i < n; i++) {
       const qty = Math.max(1, Math.round((perTick / n) * Math.exp(r.normal() * 0.6 - 0.18)));
-      const side = r.chance(0.5 + bias) ? 'buy' : 'sell';
+      const side = this.crowdSellOnly || !r.chance(0.5 + bias) ? 'sell' : 'buy';
       if (r.chance(0.65)) out.push({ owner: CROWD, side, qty, type: 'market' });
       else {
         const off = r.int(0, 4);
@@ -211,7 +272,7 @@ export class Market {
     const mom = this.last - this.bars[this.bars.length - 6].o;
     if (Math.abs(devRatio) < p.trendThreshold || Math.sign(mom) !== Math.sign(devRatio)) return [];
     const strength = Math.min(2, Math.abs(devRatio) - p.trendThreshold);
-    const qty = Math.round(((p.trendScale * this.day.vDay) / MINUTES_PER_DAY) * strength * (0.7 + 0.6 * this.rngTrend.next()));
+    const qty = Math.round(((p.trendScale * this.day.vDay) / this.session.minutes) * strength * (0.7 + 0.6 * this.rngTrend.next()));
     if (qty <= 0) return [];
     return [{ owner: TREND, side: devRatio > 0 ? 'buy' : 'sell', qty, type: 'market' }];
   }
@@ -281,11 +342,20 @@ export class Market {
     const move = (ex.last - open) / Math.max(1, this.day.sigma * this.reference * 0.05);
     this.sentiment = clamp(this.sentiment * 0.97 + 0.03 * Math.tanh(move), -1, 1);
     this.t++;
+    // 涨跌幅区间暂停（LULD）：价格在窗口内偏离超过区间，暂停若干分钟
+    const luld = this.deck.luld;
+    if (luld && this.bars.length > luld.window) {
+      const ref = this.bars[this.bars.length - 1 - luld.window].c;
+      if (Math.abs(ex.last - ref) / ref > luld.band) {
+        this.haltUntil = this.t + luld.pause;
+        report.luld = true;
+      }
+    }
     return report;
   }
 
   get dayOver(): boolean {
-    return this.t >= MINUTES_PER_DAY;
+    return this.t >= this.session.minutes;
   }
 
   /** 收盘：生成日线，撤掉所有挂单，并以 settlePrice 逐日盯市 */

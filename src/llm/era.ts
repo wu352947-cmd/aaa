@@ -25,6 +25,8 @@ export const ERA_1995_SH: EraPack = {
   safeNumbers: [1995, 1992, 327, 132],
 };
 
+export const ERAS: Record<string, EraPack> = {};
+
 export const ERA_1637_HAARLEM: EraPack = {
   id: '1637-haarlem',
   place: '1637 年冬天荷兰哈勒姆的金鹿酒馆，花商们称这里为“学院”',
@@ -33,3 +35,10 @@ export const ERA_1637_HAARLEM: EraPack = {
   foreknowledge: ['崩盘', '暴跌', '2月3日', '二月三日', '行会裁决', '期权', '3.5', '百分之三点五', '郁金香狂热', '狂热', '二十四日', '24日'],
   safeNumbers: [1636, 1637],
 };
+
+ERAS[ERA_1995_SH.id] = ERA_1995_SH;
+ERAS[ERA_1637_HAARLEM.id] = ERA_1637_HAARLEM;
+
+export function eraOf(id: string | undefined): EraPack {
+  return (id && ERAS[id]) || ERA_1995_SH;
+}

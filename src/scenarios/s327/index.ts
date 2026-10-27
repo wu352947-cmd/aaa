@@ -121,6 +121,13 @@ export const S327: Scenario = {
   ruleCards: RULE_CARDS,
   sources: SOURCES,
   prologue: PROLOGUE,
+  eraId: '1995-shanghai',
+  paperName: '沪上财经报',
+  endingDate: '1995-02-24 星期五',
+  setupRules: ['no-price-limit', 'margin', 'position-limit', 'daily-settlement'],
+  members: [SHORT, LONG, ALLY],
+  lotPresets: [100_000, 500_000],
+  groupName: (g, who) => groupName(g, who),
 
   setup(g) {
     const ex = g.market.ex;

@@ -1,9 +1,8 @@
 import { useEffect, useState } from 'react';
 import type { Game } from '../engine/game';
 import { headline } from '../llm/director';
-import { ERA_1995_SH } from '../llm/era';
+import { eraOf } from '../llm/era';
 import type { LlmSettings } from '../llm/settings';
-import { groupName } from '../scenarios/s327';
 import { Contacts, type useDialogues } from './Contacts';
 import { cls, price, qty, signed } from './format';
 import { IntelList } from './IntelPanel';
@@ -21,6 +20,7 @@ export function Recap({ game, dayIdx }: { game: Game; dayIdx?: number }) {
   const parts = rc.parts.filter((p) => Math.abs(p.move) >= 0.5);
   const max = Math.max(...parts.map((p) => Math.abs(p.move)), 1);
   const total = rc.close - rc.open;
+  const groupName = (g: Game, who: string) => g.scenario.groupName?.(g, who) ?? who;
   return (
     <div className="recap">
       <h3>收盘复盘 · {rc.date}</h3>
@@ -77,7 +77,7 @@ export function Night({ game, llm, dlg, showMentor, onSleep }: { game: Game; llm
   const [tab, setTab] = useState<'recap' | 'people' | 'intel'>('recap');
   useEffect(() => {
     setHl(null);
-    if (paper) headline(llm, ERA_1995_SH, paper, game.day.date).then(setHl);
+    if (paper) headline(llm, eraOf(game.scenario.eraId), paper, game.day.date).then(setHl);
   }, [paper, llm, game]);
   const todays = game.intel.filter((i) => i.day === game.dayIndex && i.kind !== 'system' && (showMentor || i.kind !== 'mentor'));
   return (
@@ -86,7 +86,7 @@ export function Night({ game, llm, dlg, showMentor, onSleep }: { game: Game; llm
         <div>
           <div className="newspaper paper">
             <div className="masthead">
-              <div className="name">沪上财经报</div>
+              <div className="name">{game.scenario.paperName ?? '财经报'}</div>
               <div className="meta">
                 <span>{game.day.date} {game.day.label.replace(' · 决战日', '')}</span>
                 <span>第 {1024 + game.dayIndex} 期</span>

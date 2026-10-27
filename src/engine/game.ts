@@ -1,5 +1,5 @@
-import { fmtYi, type Account, type RuleDeck } from './exchange';
-import { Market, MINUTES_PER_DAY, minuteLabel, type DayDef, type MarketParams } from './market';
+import { fmtYi, setUnits, type Account, type RuleDeck } from './exchange';
+import { Market, SSE_1995, type DayDef, type MarketParams, type Session } from './market';
 import { Rng } from './rng';
 import type { Fen, OrderReq, RuleHit, Side } from './types';
 
@@ -172,6 +172,24 @@ export interface Scenario {
   ruleCards: RuleCardDef[];
   sources: SourceCard[];
   prologue: string[];
+  /** 交易时段（默认 1995 年上交所） */
+  session?: Session;
+  /** 数量与货币单位（默认“口”“元”） */
+  units?: { qty: string; cur: string };
+  /** 台词层的年代风格包 id */
+  eraId?: string;
+  /** 夜间报纸与结局页的报名 */
+  paperName?: string;
+  /** 结局页报纸的日期 */
+  endingDate?: string;
+  /** 选阵营页展示的规则卡 */
+  setupRules?: string[];
+  /** 监管座位能看到的会员账户 */
+  members?: string[];
+  /** 下单面板里的快捷数量（机构座位） */
+  lotPresets?: number[];
+  /** 复盘与逐笔里怎么称呼一个群体或账户 */
+  groupName?(g: Game, who: string): string;
   setup(g: Game): void;
   onDayStart(g: Game): void;
   onTick(g: Game): void;
@@ -284,7 +302,8 @@ export class Game {
     this.rngSocial = this.rng.fork('social');
     this.rngScript = this.rng.fork('script');
     // 规则卡组按局复制：监管者盘中调整保证金只影响这一局
-    this.market = new Market({ ...scenario.deck }, scenario.params, `${scenario.id}:${seed}:market`, scenario.startPrice);
+    setUnits(scenario.units ?? { qty: '口', cur: '元' });
+    this.market = new Market({ ...scenario.deck }, scenario.params, `${scenario.id}:${seed}:market`, scenario.startPrice, scenario.session ?? SSE_1995);
     for (const d of scenario.npcs) if (d.factionId !== factionId) this.npcs.set(d.id, { ...d, memory: [] });
     scenario.setup(this);
     this.startDay();
@@ -306,10 +325,10 @@ export class Game {
     return this.market.t;
   }
   get time(): string {
-    return minuteLabel(Math.min(this.market.t, MINUTES_PER_DAY - 1));
+    return this.market.session.label(this.market.t);
   }
   get globalTick(): number {
-    return this.dayIndex * (MINUTES_PER_DAY + 1) + this.market.t;
+    return this.dayIndex * (this.market.session.minutes + 1) + this.market.t;
   }
   get isBattleDay(): boolean {
     return this.day.kind === 'battle';
@@ -457,6 +476,10 @@ export class Game {
     if (!halted) orders.push(...this.runPlans());
     const rep = this.market.step(orders);
     this.onRuleHits(rep.hits);
+    if (rep.luld) {
+      const l = this.market.deck.luld!;
+      this.push({ kind: 'rule', rule: 'luld', blocked: true, text: `${l.window} 分钟内价格波动超过 ${l.band * 100}%，交易暂停 ${l.pause} 分钟` });
+    }
     // 逐笔成交：同一主动方在同一分钟的成交合并为一笔，大单才显示席位号
     const agg = new Map<string, { side: Side; qty: number; notional: number }>();
     for (const tr of rep.trades) {
@@ -471,7 +494,7 @@ export class Game {
       if (e.qty < this.tapeThreshold()) continue;
       const acct = this.market.ex.accounts.get(key.slice(0, -e.side.length));
       if (!acct?.seat) continue;
-      this.tape.unshift({ day: this.dayIndex, time: minuteLabel(this.market.t - 1), seat: acct.seat, side: e.side, qty: e.qty, price: Math.round(e.notional / e.qty) });
+      this.tape.unshift({ day: this.dayIndex, time: this.market.session.label(this.market.t - 1), seat: acct.seat, side: e.side, qty: e.qty, price: Math.round(e.notional / e.qty) });
     }
     if (this.tape.length > 200) this.tape.length = 200;
     this.intradayRisk();

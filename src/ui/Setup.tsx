@@ -3,10 +3,10 @@ import type { Scenario } from '../engine/game';
 import { cls } from './format';
 
 export function Setup({ scenario, onBegin, onBack }: { scenario: Scenario; onBegin: (faction: string, principle: string, seed: string) => void; onBack: () => void }) {
-  const [faction, setFaction] = useState('short');
+  const [faction, setFaction] = useState(() => scenario.factions.find((x) => !x.locked)!.id);
   const [principle, setPrinciple] = useState(scenario.principles[0].id);
   const [seed, setSeed] = useState(() => Math.random().toString(36).slice(2, 8));
-  const cards = ['no-price-limit', 'margin', 'position-limit', 'daily-settlement'].map((id) => scenario.ruleCards.find((r) => r.id === id)!);
+  const cards = (scenario.setupRules ?? []).map((id) => scenario.ruleCards.find((r) => r.id === id)).filter((c) => !!c);
   const f = scenario.factions.find((x) => x.id === faction)!;
   return (
     <div className="setup paper">

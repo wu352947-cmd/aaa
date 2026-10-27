@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Game, Npc, NpcDef, SocialOutcome, Verb } from '../engine/game';
 import type { ChatMessage } from '../llm/client';
 import { speak } from '../llm/director';
-import { ERA_1995_SH } from '../llm/era';
+import { eraOf } from '../llm/era';
 import type { LlmSettings } from '../llm/settings';
 import { cls, money } from './format';
 
@@ -37,7 +37,7 @@ export function useDialogues(game: Game | null, llm: LlmSettings) {
     (id: string, persona: NpcDef, out: SocialOutcome['dialogue'], playerText?: string, history?: ChatMessage[]) => {
       const marker = Math.random().toString(36).slice(2);
       push(id, { who: 'npc', text: marker, pending: true });
-      speak(llm, persona, ERA_1995_SH, out, { playerText, history, salt: game?.dayIndex }).then((line) => {
+      speak(llm, persona, eraOf(game?.scenario.eraId), out, { playerText, history, salt: game?.dayIndex }).then((line) => {
         setChats((c) => ({
           ...c,
           [id]: (c[id] ?? []).map((l) =>
