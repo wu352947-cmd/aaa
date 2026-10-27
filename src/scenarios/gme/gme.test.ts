@@ -86,3 +86,50 @@ describe('散户起义：玩家真的能改变历史', { timeout: 60000 }, () =>
     expect(g.player.pos).toBe(-10_000_000);
   });
 });
+
+describe('散户起义：手段', { timeout: 60000 }, () => {
+  it('券商这一周做足准备（融资、提保证金、停期权、找清算所）：凌晨可以照常开放', () => {
+    const g = play('broker', { nscc: 'open' }, 'ready', (x) => {
+      if (x.dayIndex <= 1) x.act({ type: 'card', id: 'raise-early' });
+      if (x.dayIndex === 2) x.act({ type: 'card', id: 'margin-full' });
+      if (x.dayIndex === 3) x.act({ type: 'card', id: 'call-nscc' });
+    });
+    expect(g.flags.opened).toBe(true);
+    expect(g.flags.restrictActive).toBeFalsy();
+    expect(g.ending?.id).toBe('broker-ready');
+  });
+
+  it('没有准备：凌晨的选项里没有“照常开放”', () => {
+    const g = new Game(GME, 'unready', 'broker', 'no-violation');
+    while (!g.decision || g.decision.id !== 'nscc') {
+      if (g.phase === 'night') g.act({ type: 'end-night' });
+      else g.tick();
+    }
+    expect(g.decision.choices.some((c) => c.id === 'open')).toBe(false);
+  });
+
+  it('暂停期权开仓：做市商的对冲买盘弱了，周三冲得没那么高', () => {
+    const run = (off: boolean) =>
+      play('broker', {}, 'opt', (x) => {
+        if (off && x.dayIndex === 1) x.act({ type: 'card', id: 'options-off' });
+      });
+    const high = (x: Game) => x.market.dailyBars[3].h;
+    expect(high(run(true))).toBeLessThan(high(run(false)));
+  });
+
+  it('被限制买入的散户转户：一小时后又能买', () => {
+    const g = new Game(GME, 'switch', 'retail', 'no-violation');
+    while (!g.isBattleDay || g.market.t <= NYSE.index('10:05')) {
+      if (g.phase === 'night') g.act({ type: 'end-night' });
+      else if (g.decision) g.act({ type: 'decision', id: g.decision.id, choice: 'hold' });
+      else g.tick();
+    }
+    expect(g.player.closeOnly).toBe(true);
+    g.act({ type: 'card', id: 'switch' });
+    for (let i = 0; i < 62; i++) {
+      if (g.decision) g.act({ type: 'decision', id: g.decision.id, choice: 'hold' });
+      g.tick();
+    }
+    expect(g.player.closeOnly).toBe(false);
+  });
+});

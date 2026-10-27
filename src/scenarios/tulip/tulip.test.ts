@@ -103,11 +103,115 @@ describe('行会议员', () => {
     expect(Math.abs(sum('forward').reduce((a, b) => a + b, 0))).toBeLessThanOrEqual(6);
   });
 
-  it('议员的裁决写进动作日志，读档后得到同样的结果', () => {
+  it('议员的提案与表决写进动作日志，读档后得到同样的结果', () => {
     const g = toRuling('saved');
     g.act({ type: 'rule', rule: 'forward' });
     const r = replayTulip('saved', 'council', g.log);
-    expect(r.rule).toBe('forward');
+    expect(r.proposal).toBe('forward');
+    expect(r.rule).toBe(g.rule);
+    expect(r.votes).toEqual(g.votes);
     expect([...r.npcOutcome(r.rule)]).toEqual([...g.npcOutcome(g.rule)]);
+  });
+});
+
+describe('行会议员：每晚都能出手', () => {
+  const council = (seed = 'c') => new TulipGame(seed, 'council');
+  const toEnd = (g: TulipGame) => {
+    while (g.phase === 'table') g.act({ type: 'leave' });
+    return g;
+  };
+
+  it('不游说，光凭你一票：提“照约履行”会被大会否决，通过的是期权', () => {
+    const g = toEnd(council());
+    g.act({ type: 'rule', rule: 'forward' });
+    expect(g.proposal).toBe('forward');
+    expect(g.rule).toBe('option');
+  });
+
+  it('游说公证人和市政官：照约履行也能过', () => {
+    const g = council('lobby');
+    for (const target of ['spiegel', 'witt', 'spiegel', 'witt', 'bloc', 'bloc']) {
+      if (g.influence === 0) g.act({ type: 'leave' });
+      g.act({ type: 'card', id: 'lobby-forward', target });
+    }
+    toEnd(g);
+    g.act({ type: 'rule', rule: 'forward' });
+    expect(g.rule).toBe('forward');
+  });
+
+  it('每晚只有两点影响力：用完就做不了别的', () => {
+    const g = council();
+    g.act({ type: 'card', id: 'notice' });
+    g.act({ type: 'card', id: 'register' });
+    expect(g.influence).toBe(0);
+    expect(g.cards().find((c) => c.id === 'tax')?.blocked).toMatch(/影响力/);
+    g.act({ type: 'card', id: 'tax' });
+    expect(g.tax).toBe(false);
+  });
+
+  it('告示让之后每晚的价降温；定金让约定少一半', () => {
+    const a = council('cool');
+    const b = council('cool');
+    b.act({ type: 'card', id: 'notice' });
+    a.act({ type: 'leave' });
+    b.act({ type: 'leave' });
+    expect(b.price).toBeLessThan(a.price * 0.95);
+    const dep = (on: boolean) => {
+      const g = council('dep');
+      if (on) g.act({ type: 'card', id: 'deposit' });
+      return toEnd(g).npcBook.length;
+    };
+    expect(dep(true)).toBeLessThan(dep(false));
+  });
+
+  it('不登记时有些约定你根本听不到；登记之后一份不漏', () => {
+    const g = council('reg');
+    g.act({ type: 'leave' });
+    g.act({ type: 'card', id: 'register' });
+    const from = g.evening;
+    toEnd(g);
+    expect(g.npcBook.filter((d) => d.evening > from).every((d) => d.heard)).toBe(true);
+    const blind = toEnd(council('reg'));
+    expect(blind.npcBook.some((d) => !d.heard)).toBe(true);
+  });
+
+  it('收印花钱、崩盘后设救济金：照约履行下倾家荡产的人更少', () => {
+    const plain = toEnd(council('relief'));
+    const g = council('relief');
+    g.act({ type: 'card', id: 'tax' });
+    while (g.night.kind === 'normal') g.act({ type: 'leave' });
+    g.act({ type: 'card', id: 'relief' });
+    toEnd(g);
+    expect(g.treasury).toBeGreaterThan(0);
+    expect(g.ruined('forward').length).toBeLessThanOrEqual(plain.ruined('forward').length);
+  });
+
+  it('收了花农的礼却提“改作期权”：被花农记恨，威望大跌', () => {
+    const g = council('gift');
+    g.act({ type: 'card', id: 'gift-grower' });
+    toEnd(g);
+    g.act({ type: 'rule', rule: 'option' });
+    const v = g.councilVerdict();
+    expect(v.betrayed).toEqual(['grower']);
+    expect(v.standing).toBeLessThan(50);
+  });
+});
+
+describe('酒馆里的手段', () => {
+  it('请老板透底：知道的底价误差不超过一成', () => {
+    const g = new TulipGame('ask', 'speculator');
+    const q = g.quotes[0];
+    g.act({ type: 'card', id: 'ask-host', target: q.npc });
+    expect(Math.abs(g.revealed[q.npc] - q.reservation) / q.reservation).toBeLessThanOrEqual(0.06);
+    expect(g.cash).toBe(98);
+  });
+
+  it('放风：下一晚大家心里的价高一截', () => {
+    const a = new TulipGame('rum', 'speculator');
+    const b = new TulipGame('rum', 'speculator');
+    b.act({ type: 'card', id: 'rumor' });
+    a.act({ type: 'leave' });
+    b.act({ type: 'leave' });
+    expect(b.price).toBeGreaterThan(a.price * 1.05);
   });
 });

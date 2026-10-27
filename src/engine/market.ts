@@ -6,7 +6,8 @@ import type { Bar, Fen, OrderReq, RuleHit, Trade } from './types';
 export interface DayDef {
   date: string;
   label: string;
-  kind: 'layout' | 'battle';
+  /** layout 布局期；battle 决战日；aftermath 余波（不开盘，只有夜晚） */
+  kind: 'layout' | 'battle' | 'aftermath';
   /** 每分钟真实历史价（分），长度 = 交易分钟数 */
   hist: Fen[];
   /** 做市商的估值中枢（“历史引力”指向的位置）；为空时等于 hist */
@@ -152,6 +153,8 @@ export class Market {
   haltUntil = -1;
   /** 券商限制买入时，散户群体只能卖出 */
   crowdSellOnly = false;
+  /** 券商限购、提高保证金时，散户买入的意愿打折（1 = 不打折） */
+  crowdBuyScale = 1;
   private rngCrowd: Rng;
   private rngTrend: Rng;
   closePrices: Fen[] = [];
@@ -211,7 +214,8 @@ export class Market {
     this.ex.open = true;
     // 开盘：隔夜消化掉一大半前一日的净流量
     this.flow *= 0.25;
-    this.ex.last = Math.round(this.reference);
+    const [lo, hi] = this.ex.priceBand();
+    this.ex.last = clamp(Math.round(this.reference), lo, hi);
   }
 
   /** 要让中枢到达 target（分），累计净流量还需要再加多少（口，买为正） */
@@ -229,6 +233,11 @@ export class Market {
   private postLiquidity(center: number = this.reference): void {
     const ex = this.ex;
     ex.book.cancelOwner(MM);
+    // 有涨跌停时，做市商的报价中枢不会越出停板：价格被“封”在板上
+    if (this.deck.priceLimit != null) {
+      const [lo, hi] = ex.priceBand();
+      center = clamp(center, lo, hi);
+    }
     const c = Math.round(center);
     const s = this.scale(center) / 100;
     const V = this.day.vDay;
@@ -253,7 +262,7 @@ export class Market {
     const bias = 0.18 * this.sentiment;
     for (let i = 0; i < n; i++) {
       const qty = Math.max(1, Math.round((perTick / n) * Math.exp(r.normal() * 0.6 - 0.18)));
-      const side = this.crowdSellOnly || !r.chance(0.5 + bias) ? 'sell' : 'buy';
+      const side = this.crowdSellOnly || !r.chance((0.5 + bias) * this.crowdBuyScale) ? 'sell' : 'buy';
       if (r.chance(0.65)) out.push({ owner: CROWD, side, qty, type: 'market' });
       else {
         const off = r.int(0, 4);

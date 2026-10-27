@@ -1,5 +1,6 @@
 import { fmtYi, newAccount } from '../../engine/exchange';
-import type { DialogueIntent, Ending, ExchangeOffer, Game, Scenario, SocialOutcome } from '../../engine/game';
+import { addCrowdFlow, crowdFlowOrders } from '../../engine/flows';
+import type { CardDef, CardResult, DialogueIntent, Ending, ExchangeOffer, Game, Meter, Scenario, SocialOutcome } from '../../engine/game';
 import type { Actor, Market } from '../../engine/market';
 import { BATTLE_2021, DAYS_2021, DECK_2021, FACTIONS_2021, NPCS_2021, NYSE, PARAMS_2021, PRINCIPLES_2021, PROLOGUE_2021, RULES_2021, SOURCES_2021, START_2021 } from './data';
 
@@ -21,17 +22,20 @@ const BORROW_RATE = [0.25, 0.4, 0.6, 0.8, 1.0];
 // ───────────── NPC 资金 ─────────────
 
 /** 期权做市商的对冲买盘：价格往上冲时，卖出看涨期权的一方被迫买入股票对冲 */
-function hedgerActor(): Actor {
+function hedgerActor(g: Game): Actor {
   return {
     id: FT,
     onTick(m: Market) {
-      if (m.bars.length < 6) return [];
-      if (m.day.kind === 'battle' && m.t > mi('10:00')) return [];
+      const extra = crowdFlowOrders(g);
+      if (m.bars.length < 6) return extra;
+      if (m.day.kind === 'battle' && m.t > mi('10:00')) return extra;
       const last = m.last;
       const mom = last - m.bars[m.bars.length - 6].o;
-      if (mom <= last * 0.02) return [];
-      const q = Math.round((m.day.vDay / NYSE.minutes) * 0.15 * Math.min(2, mom / (last * 0.02)));
-      return [{ owner: FT, side: 'buy', qty: q, type: 'market' }];
+      if (mom <= last * 0.02) return extra;
+      // 期权开仓被暂停后，新增的对冲需求少了大半
+      const scale = flag(g, 'optionsOff') ? 0.4 : 1;
+      const q = Math.round((m.day.vDay / NYSE.minutes) * 0.15 * scale * Math.min(2, mom / (last * 0.02)));
+      return [...extra, { owner: FT, side: 'buy', qty: q, type: 'market' }];
     },
   };
 }
@@ -93,6 +97,9 @@ export const GME: Scenario = {
   members: [GW, FT],
   lotPresets: [1_000_000, 5_000_000],
   groupName: (g, who) => groupName(g, who),
+  cards: (g) => gmeCards(g),
+  playCard: (g, id, target) => gmePlay(g, id, target),
+  meters: (g) => (g.factionId === 'broker' ? brokerMeters(g) : undefined),
 
   setup(g) {
     const ex = g.market.ex;
@@ -102,7 +109,11 @@ export const GME: Scenario = {
     ex.add(newAccount({ id: PANIC, name: '被限制的散户', group: 'crowd', exempt: true }));
     if (g.factionId === 'retail') ex.add(newAccount({ id: YOU, name: '你', group: 'player', cash: 5000, pos: 50, avg: 1800, borrowLimit: 0 }));
     if (g.factionId === 'broker') ex.add(newAccount({ id: FEATHER, name: '羽毛证券', group: 'player', exempt: true }));
-    g.market.actors.push(hedgerActor());
+    g.market.actors.push(hedgerActor(g));
+    if (g.factionId === 'broker') {
+      g.flags.capital = 700_000_000;
+      g.flags.trust = 60;
+    }
     if (!isPlayer(g, GW)) g.market.actors.push(greywolfActor(g));
     g.market.actors.push(restrictedFlowActor(g));
     if (g.factionId === 'retail') g.alliances.push({ id: 'diamond', npc: 'jack', terms: '钻石手公约：价格到月球之前，一股不卖', lockUntilDay: BATTLE_2021, penalty: 0 });
@@ -114,6 +125,10 @@ export const GME: Scenario = {
 
   onDayStart(g) {
     const d = g.dayIndex;
+    if (flag(g, 'sentNext')) {
+      g.market.sentiment = Math.max(-1, Math.min(1, g.market.sentiment + (g.flags.sentNext as number)));
+      delete g.flags.sentNext;
+    }
     if (d === 0) mentor(g, '记住，这只股票没有涨跌停。价格几分钟内动得太猛，交易所会暂停 5 分钟——那 5 分钟里你什么都做不了。');
     if (d === 3 && g.factionId === 'short' && g.player.pos < 0) {
       g.decision = {
@@ -130,13 +145,18 @@ export const GME: Scenario = {
     }
     if (d === BATTLE_2021) {
       if (g.factionId === 'broker') {
+        const req = requirement(g);
+        const cap = g.flags.capital as number;
+        const gap = req - cap;
         g.decision = {
           id: 'nscc',
           title: '凌晨五点，清算所来电',
-          body: '客户这几天买的股票要到 T+2 才交收。清算所按这只股票的波动重新计算了你的风险押金：今天开盘前要再交 37 亿美元。你的账上只有 7 亿左右。',
+          body: `清算所要你开盘前缴足 ${fmtYi(req)} 押金。你账上 ${fmtYi(cap)}${gap > 0 ? `，缺 ${fmtYi(gap)}` : '，够了'}。`,
           choices: [
-            { id: 'restrict', label: '限制买入：客户只能卖出', detail: '押金要求会大幅下降，公司能活下来。客户会愤怒。' },
-            { id: 'raise', label: '连夜融资 34 亿美元，保持开放', detail: '股东权益被稀释，但客户想买就能买。' },
+            ...(gap <= 0 ? [{ id: 'open', label: '照常开放', detail: '押金已经够了。你前几天做的准备，换来了今天的从容。' }] : []),
+            ...(gap > 0 && gap <= 1_500_000_000 ? [{ id: 'cap', label: '限购：每位客户最多再买几股', detail: '押金要求降 15 亿美元，够了。客户能买，但买不多。' }] : []),
+            { id: 'restrict', label: '限制买入：客户只能卖出', detail: '押金要求大幅下降，公司能活下来。客户会愤怒。' },
+            ...(gap > 0 ? [{ id: 'raise', label: `连夜融资 ${fmtYi(gap)}，保持开放`, detail: '股东被稀释，但客户想买就能买。' }] : []),
             { id: 'nothing', label: '什么都不做', detail: '赌清算所会通融。' },
           ],
         };
@@ -152,6 +172,10 @@ export const GME: Scenario = {
     const t = m.t - 1;
     const d = g.dayIndex;
     checkLines(g);
+    if (flag(g, 'switchAt') != null && m.t >= (g.flags.switchAt as number) && g.player.closeOnly) {
+      g.player.closeOnly = false;
+      g.push({ kind: 'intel', text: '转户完成：你又能买了' });
+    }
     if (d === 1 && t === mi('10:50')) news(g, 'gme-high-25', '股价盘中冲上 159 美元', '论坛上有人喊：空头开始回补了！随后一个多小时，股价跌回 60 多美元。', 0.9);
     if (d === 3 && t === mi('10:00')) news(g, 'gme-27', '证交会：正在密切关注近期的市场波动', '监管机构表示，正在与其他部门协调，评估近期部分股票的极端波动。', 0.95);
     if (g.isBattleDay && t === mi('10:00')) applyRestriction(g);
@@ -319,9 +343,21 @@ export const GME: Scenario = {
         break;
       case 'nscc:restrict':
         g.flags.restrict = true;
+        g.flags.trust = Math.max(0, (g.flags.trust as number) - 40);
         break;
       case 'nscc:raise':
         g.flags.raised = true;
+        g.flags.capital = requirement(g);
+        break;
+      case 'nscc:open':
+        g.flags.opened = true;
+        g.flags.trust = Math.min(100, (g.flags.trust as number) + 10);
+        break;
+      case 'nscc:cap':
+        g.flags.capped = true;
+        g.flags.trust = Math.max(0, (g.flags.trust as number) - 15);
+        g.market.crowdBuyScale = 0.6;
+        g.push({ kind: 'intel', text: '羽毛证券限购：每位客户最多再买几股' });
         break;
       case 'nscc:nothing':
         g.flags.restrict = true;
@@ -468,7 +504,8 @@ function reckon(g: Game): Ending {
   const ex = g.market.ex;
   const p = g.player;
   const startEq = (flag(g, 'startEq') as number) || 1;
-  const eq = ex.equity(p);
+  const calls = callPayoff(g);
+  const eq = ex.equity(p) + calls;
   const r = g.faction.observer ? 0 : (eq - startEq) / startEq;
   const bars = g.market.bars;
   const high = Math.max(...bars.map((b) => b.h));
@@ -483,8 +520,25 @@ function reckon(g: Game): Ending {
   let archetype: Ending['archetype'];
   const body: string[] = [];
 
+  if (calls > 0) body.push(`你的看涨期权到期值 ${fmtYi(calls)}。`);
+  else if (flag(g, 'callStrike')) body.push('你的看涨期权没涨过行权价，权利金归零。');
   if (g.factionId === 'broker') {
-    if (flag(g, 'failed')) {
+    const trust = g.flags.trust as number;
+    if (flag(g, 'opened')) {
+      id = 'broker-ready';
+      archetype = '守门人';
+      title = '早有准备';
+      headline = '羽毛证券押金早已备足 照常交易';
+      subhead = `客户照常买入，股价收于 ${usd(close)}`;
+      body.push('凌晨五点的电话来的时候，你的钱已经在账上了。这一周你做的每一件小事——融资、提保证金、停期权、打电话——都在这一刻兑现。');
+    } else if (flag(g, 'capped') || flag(g, 'loosened')) {
+      id = 'broker-capped';
+      archetype = '长青者';
+      title = '限购';
+      headline = '羽毛证券限购 客户能买但买不多';
+      subhead = `股价收于 ${usd(close)}`;
+      body.push('你没有关上门，只是把门开小了。用户骂你，但没有那么恨你。');
+    } else if (flag(g, 'failed')) {
       id = 'broker-failed';
       archetype = '出局者';
       title = '倒下';
@@ -495,9 +549,10 @@ function reckon(g: Game): Ending {
       id = 'broker-raised';
       archetype = '守门人';
       title = '硬扛';
-      headline = '羽毛证券连夜融资 34 亿美元 拒绝限制交易';
+      headline = '羽毛证券连夜融资 拒绝限制交易';
       subhead = `客户照常买入，股价收于 ${usd(close)}`;
       body.push('你用股东的钱换来了客户的信任。老股东被大幅稀释，但这一天，你的用户想买就能买。');
+      g.reputation -= 5;
       body.push('没有了被迫卖出的散户，史料里那场一个多小时的暴跌没有发生——空头为此多付了一大笔钱。');
     } else {
       id = 'broker-restrict';
@@ -508,6 +563,7 @@ function reckon(g: Game): Ending {
       body.push('你做了历史上那位 CEO 做过的事：只许卖、不许买。押金要求降了下来，公司活了下来。');
       body.push('代价是：几百万用户在最高点附近被关在门外，只能看着价格从 483 美元跌下去。三周后，你被请到了国会听证会上。');
     }
+    body.push(trust >= 60 ? `用户信任 ${trust}：大多数人还愿意留下。` : trust >= 30 ? `用户信任 ${trust}：应用商店里的一星评价刷了几十万条。` : `用户信任 ${trust}：用户在你家楼下举着牌子。`);
   } else if (g.bankrupt || eq <= 0) {
     id = 'bust';
     archetype = '出局者';
@@ -556,7 +612,8 @@ function reckon(g: Game): Ending {
     ],
     stats: g.faction.observer
       ? [
-          ['凌晨的决定', flag(g, 'failed') ? '什么都不做' : flag(g, 'raised') ? '融资保持开放' : '限制买入'],
+          ['凌晨的决定', flag(g, 'opened') ? '照常开放' : flag(g, 'capped') ? '限购' : flag(g, 'failed') ? '什么都不做' : flag(g, 'raised') ? '融资保持开放' : '限制买入'],
+          ['用户信任', String(g.flags.trust)],
           ['当日收盘', usd(close)],
           ['当日最低', usd(low)],
           ['声望', String(g.reputation)],
@@ -569,4 +626,281 @@ function reckon(g: Game): Ending {
           ['越过底线', `${g.linesCrossed} 次`],
         ],
   };
+}
+
+// ───────────── 手段 ─────────────
+
+/** 凌晨五点清算所要的押金：你前几天做的每一件降风险的事，都会让它小一点 */
+function requirement(g: Game): number {
+  let req = 3_700_000_000;
+  if (flag(g, 'marginFull')) req -= 800_000_000;
+  if (flag(g, 'optionsOff')) req -= 500_000_000;
+  if (flag(g, 'waiver')) req -= 1_600_000_000;
+  return req;
+}
+
+function brokerMeters(g: Game): Meter[] {
+  const gap = requirement(g) - (g.flags.capital as number);
+  const trust = g.flags.trust as number;
+  return [
+    { id: 'gap', label: '预估押金缺口', value: gap > 0 ? fmtYi(gap) : '够了', tone: gap > 0 ? 'bad' : 'good', tip: `按清算所现行公式估算，凌晨要 ${fmtYi(requirement(g))}，你账上 ${fmtYi(g.flags.capital as number)}。缺口越小，周四凌晨越从容。` },
+    { id: 'trust', label: '用户信任', value: String(trust), tone: trust < 30 ? 'bad' : trust >= 70 ? 'good' : undefined, tip: '限制交易、提高门槛会让用户愤怒；解释清楚能挽回一些。' },
+    { id: 'rep', label: '声望', value: String(g.reputation), tip: '圈内信誉' },
+  ];
+}
+
+function gmeCards(g: Game): CardDef[] {
+  const d = g.dayIndex;
+  const used = (k: string) => !!flag(g, `used-${k}`);
+  const battle = g.isBattleDay;
+  if (g.factionId === 'broker') {
+    const restricted = !!flag(g, 'restrictActive');
+    const gap = requirement(g) - (g.flags.capital as number);
+    return [
+      {
+        id: 'raise-early',
+        name: '提前融资 10 亿美元',
+        group: '资本',
+        color: 'white',
+        does: '趁还没出事先融一笔钱。凌晨的押金缺口会小 10 亿。',
+        cost: '老股东被稀释；声望 −2。',
+        when: 'night',
+        blocked: battle ? '来不及了' : ((g.flags.raises as number) || 0) >= 2 ? '投资人不肯再给了' : undefined,
+      },
+      {
+        id: 'margin-full',
+        name: '这只股票改为 100% 保证金',
+        group: '风控',
+        color: 'white',
+        does: '客户不能再借钱买它。清算所算的风险少 8 亿美元，散户的买盘也会弱一点。',
+        cost: '用户信任 −10。',
+        when: 'any',
+        status: flag(g, 'marginFull') ? '已实行' : undefined,
+        blocked: flag(g, 'marginFull') ? '已经实行' : undefined,
+      },
+      {
+        id: 'options-off',
+        name: '暂停这只股票的期权开仓',
+        group: '风控',
+        color: 'white',
+        does: '散户不能再买看涨期权：做市商被逼着买股票对冲的那股力量少了大半。押金要求少 5 亿。',
+        cost: '用户信任 −5。',
+        when: 'any',
+        status: flag(g, 'optionsOff') ? '已实行' : undefined,
+        blocked: flag(g, 'optionsOff') ? '已经实行' : undefined,
+      },
+      {
+        id: 'call-nscc',
+        name: '半夜打给清算所风险部',
+        group: '资本',
+        color: 'white',
+        does: '解释你的头寸，申请豁免超额资本附加费。谈得好，押金能少 16 亿。',
+        cost: '只能在 27 日晚上打。',
+        when: 'night',
+        status: flag(g, 'waiver') ? '已豁免' : undefined,
+        blocked: flag(g, 'waiver') ? '已经谈过' : d !== 3 ? '要等押金数字出来（27 日晚上）' : undefined,
+      },
+      {
+        id: 'loosen',
+        name: '放宽为限购',
+        group: '风控',
+        color: 'white',
+        does: '从“只许卖”改成“每人最多再买几股”。被关在门外的用户能回来一部分。',
+        cost: '押金缺口必须在 15 亿美元以内；用户信任 +10。',
+        when: 'trading',
+        blocked: !restricted ? '没有在限制买入' : gap > 1_500_000_000 ? '押金还差太多' : undefined,
+      },
+      {
+        id: 'explain',
+        name: '发公告解释原因',
+        group: '公关',
+        color: 'white',
+        does: '把 T+2 交收和清算所押金讲清楚。没限制交易时说这些，没人在意。',
+        cost: '1 点精力。',
+        when: 'any',
+        blocked: used(`explain-${d}`) ? '今天已经发过' : g.energy <= 0 ? '精力用完了' : undefined,
+      },
+    ];
+  }
+  if (g.factionId === 'short') {
+    return [
+      {
+        id: 'tv',
+        name: '上电视唱空',
+        group: '舆论',
+        color: 'grey',
+        does: '在财经频道讲基本面：明早散户情绪偏空。论坛会把你做成表情包。',
+        cost: '声望 −5。',
+        when: 'night',
+        blocked: used(`tv-${d}`) ? '今晚已经上过' : undefined,
+      },
+      {
+        id: 'calls',
+        name: '买看涨期权对冲',
+        group: '对冲',
+        color: 'white',
+        does: '花 2 亿美元买 300 万股的看涨期权，行权价比现价高三成：逼空越凶，它赚得越多。',
+        cost: '2 亿美元权利金；不涨就归零。',
+        when: 'any',
+        status: flag(g, 'callStrike') ? `行权价 ${usd(g.flags.callStrike as number)}` : undefined,
+        blocked: flag(g, 'callStrike') ? '已经买过' : g.player.cash < 200_000_000 ? '现金不够' : undefined,
+      },
+      {
+        id: 'borrow',
+        name: '加价借 300 万股券',
+        group: '对冲',
+        color: 'white',
+        does: '出高价从券商那里多借一些券，能继续卖空。',
+        cost: '5000 万美元。',
+        when: 'any',
+        blocked: used('borrow') ? '已经借过' : undefined,
+      },
+      {
+        id: 'collude',
+        name: '约几家空头一起砸',
+        group: '盘面',
+        color: 'black',
+        does: '半小时里一起抛出 400 万股。',
+        cost: '监管热度 +20；串通操纵，聊天记录都在。',
+        when: 'trading',
+        key: 'x',
+        blocked: used(`collude-${d}`) ? '今天已经砸过' : undefined,
+      },
+      {
+        id: 'lobby-sec',
+        name: '游说监管查论坛',
+        group: '舆论',
+        color: 'grey',
+        does: '让监管机构表态关注“社交媒体上的协同交易”。明早散户会犹豫一点。',
+        cost: '声望 −5；监管热度 +5。',
+        when: 'night',
+        blocked: used('lobby-sec') ? '已经游说过' : undefined,
+      },
+    ];
+  }
+  return [
+    {
+      id: 'post',
+      name: '发帖：钻石手，别卖',
+      group: '论坛',
+      color: 'white',
+      does: '你的帖子被顶上首页。明早买盘会更积极。',
+      cost: '1 点精力。',
+      when: 'night',
+      blocked: used(`post-${d}`) ? '今晚已经发过' : g.energy <= 0 ? '精力用完了' : undefined,
+    },
+    {
+      id: 'calls',
+      name: '买价外看涨期权',
+      group: '杠杆',
+      color: 'grey',
+      does: '花 1,000 美元买 200 股的看涨期权，行权价比现价高五成：涨过去就翻几倍，涨不过去就归零。',
+      cost: '1,000 美元权利金。',
+      when: 'any',
+      status: flag(g, 'callStrike') ? `行权价 ${usd(g.flags.callStrike as number)}` : undefined,
+      blocked: flag(g, 'callStrike') ? '已经买过' : g.player.cash < 1000 ? '现金不够' : undefined,
+    },
+    {
+      id: 'switch',
+      name: '转户到没限制的券商',
+      group: '自救',
+      color: 'white',
+      does: '一小时后你又能买了。',
+      cost: '25 美元手续费。',
+      when: 'trading',
+      blocked: !g.player.closeOnly ? '你的券商没有限制你' : flag(g, 'switchAt') ? '正在转户' : undefined,
+    },
+  ];
+}
+
+function gmePlay(g: Game, id: string, _target?: string): CardResult {
+  const d = g.dayIndex;
+  const p = g.player;
+  const m = g.market;
+  const R = (title: string, effects: string[], reply?: CardResult['reply']): CardResult => ({ ok: true, title, effects, reply });
+  const mark = (k: string) => (g.flags[`used-${k}`] = true);
+  const trust = (n: number) => (g.flags.trust = Math.max(0, Math.min(100, ((g.flags.trust as number) || 0) + n)));
+  switch (id) {
+    case 'raise-early':
+      g.flags.capital = (g.flags.capital as number) + 1_000_000_000;
+      g.flags.raises = ((g.flags.raises as number) || 0) + 1;
+      g.reputation -= 2;
+      return R('融到 10 亿美元', [`账上 ${fmtYi(g.flags.capital as number)}`, '声望 −2']);
+    case 'margin-full':
+      g.flags.marginFull = true;
+      m.crowdBuyScale = Math.min(m.crowdBuyScale, 0.9);
+      trust(-10);
+      return R('这只股票改为 100% 保证金', ['押金要求 −8 亿美元', '散户买盘弱一点', '用户信任 −10']);
+    case 'options-off':
+      g.flags.optionsOff = true;
+      trust(-5);
+      return R('暂停期权开仓', ['对冲买盘少了大半', '押金要求 −5 亿美元', '用户信任 −5']);
+    case 'call-nscc':
+      g.flags.waiver = true;
+      return R('清算所同意豁免超额资本附加费', ['押金要求 −16 亿美元'], { who: '清算所风险部', text: '我们理解你们的情况。附加费这部分可以豁免，基础押金一分不能少。' });
+    case 'loosen':
+      g.market.crowdSellOnly = false;
+      g.market.crowdBuyScale = 0.6;
+      g.flags.restrictActive = false;
+      g.flags.loosened = true;
+      trust(10);
+      return R('改为限购', ['用户能买，但买不多', '用户信任 +10']);
+    case 'explain':
+      mark(`explain-${d}`);
+      g.energy--;
+      trust(flag(g, 'restrict') || flag(g, 'capped') ? 10 : 2);
+      g.relate('susan', 5);
+      return R('公告发出', [flag(g, 'restrict') || flag(g, 'capped') ? '用户信任 +10' : '用户信任 +2：没出事的时候没人在意']);
+    case 'tv':
+      mark(`tv-${d}`);
+      g.flags.sentNext = ((g.flags.sentNext as number) || 0) - 0.3;
+      g.reputation -= 5;
+      g.relate('susan', 5);
+      return R('上了财经频道', ['明早散户情绪偏空', '声望 −5'], { who: '苏珊', text: '论坛已经把你的截图做成表情包了。' });
+    case 'calls': {
+      const premium = g.factionId === 'short' ? 200_000_000 : 1000;
+      p.cash -= premium;
+      g.flags.callStrike = Math.round(m.last * (g.factionId === 'short' ? 1.3 : 1.5));
+      g.flags.callQty = g.factionId === 'short' ? 3_000_000 : 200;
+      return R(`买入看涨期权：行权价 ${usd(g.flags.callStrike as number)}`, [`付权利金 ${fmtYi(premium)}`, `${shares(g.flags.callQty as number)}`]);
+    }
+    case 'borrow':
+      mark('borrow');
+      p.borrowLimit = (p.borrowLimit ?? 0) + 3_000_000;
+      p.cash -= 50_000_000;
+      return R('多借到 300 万股券', ['付 5000 万美元']);
+    case 'collude':
+      mark(`collude-${d}`);
+      addCrowdFlow(g, 'sell', 4_000_000, 30);
+      g.addHeat(20, '串通砸盘');
+      if (g.principleId === 'no-violation') g.crossLine('串通操纵股价');
+      return R('几家空头一起砸', ['半小时里抛出约 400 万股', '监管热度 +20']);
+    case 'lobby-sec':
+      mark('lobby-sec');
+      g.addHeat(5, '游说监管');
+      g.reputation -= 5;
+      g.flags.sentNext = ((g.flags.sentNext as number) || 0) - 0.15;
+      news(g, `sec-social-${d}`, '证交会：关注社交媒体上的协同交易', '监管机构表示，正在评估社交媒体上可能存在的协同交易行为。', 0.9);
+      return R('监管表态了', ['明早散户会犹豫一点', '声望 −5', '监管热度 +5']);
+    case 'post':
+      mark(`post-${d}`);
+      g.energy--;
+      g.flags.sentNext = ((g.flags.sentNext as number) || 0) + 0.25;
+      g.relate('jack', 5);
+      g.reputation += 2;
+      return R('帖子被顶上首页', ['明早买盘更积极', '声望 +2'], { who: '杰克', text: '钻石手！🚀' });
+    case 'switch':
+      p.cash -= 25;
+      g.flags.switchAt = m.t + 60;
+      return R('转户申请已提交', ['一小时后可以买入', '付 25 美元']);
+  }
+  return R('没有效果', []);
+}
+
+/** 期权到期价值：结局时按最后收盘价算 */
+export function callPayoff(g: Game): number {
+  const k = g.flags.callStrike as number | undefined;
+  if (!k) return 0;
+  const close = g.market.closePrices[g.market.closePrices.length - 1] ?? g.market.last;
+  return (Math.max(0, close - k) / 100) * ((g.flags.callQty as number) || 0);
 }

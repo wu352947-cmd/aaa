@@ -146,6 +146,55 @@ export interface Decision {
   countdown?: number;
 }
 
+/**
+ * 行动卡：每个座位手里能打出的“手段”。白色合规，灰色游走在边缘，黑色违法。
+ * 卡面只写三件事：它做什么、要付出什么、什么时候能用。
+ */
+export type CardColor = 'white' | 'grey' | 'black';
+
+export interface CardDef {
+  id: string;
+  name: string;
+  /** 分组标题，如“盘中风控”“政策协调” */
+  group: string;
+  color: CardColor;
+  /** 一句话效果 */
+  does: string;
+  /** 代价（显示用；实际扣除由剧本结算） */
+  cost: string;
+  when: 'trading' | 'night' | 'any';
+  /** 需要选择对象时的选项 */
+  targets?: { id: string; label: string }[];
+  /** 现在不能用的原因 */
+  blocked?: string;
+  /** 已生效的状态，如“已提高到 5%” */
+  status?: string;
+  /** 交易屏上的快捷键（同时显示为快捷按钮） */
+  key?: string;
+}
+
+export interface CardResult {
+  ok: boolean;
+  /** 结算标题，如“临时停市 15 分钟” */
+  title: string;
+  /** 结算行，如“政治资本 −1”“申江证券 关系 −25” */
+  effects: string[];
+  /** 一句对方的反应（可选） */
+  reply?: { who: string; text: string };
+}
+
+/** 顶栏指标：剧本可以为不同座位换上自己的指标 */
+export interface Meter {
+  id: string;
+  label: string;
+  /** 文本值；与 pips 二选一 */
+  value?: string;
+  /** 点数条：on / of */
+  pips?: { on: number; of: number; tone?: 'heat' | 'good' };
+  tip: string;
+  tone?: 'good' | 'bad';
+}
+
 export interface Ending {
   id: string;
   title: string;
@@ -192,8 +241,12 @@ export interface Scenario {
   members?: string[];
   /** 下单面板里的快捷数量（机构座位） */
   lotPresets?: number[];
-  /** 监管类座位在交易屏上的工具按钮（点击时以 decision 'reg' 提交 id） */
-  observerTools?(g: Game): { id: string; label: string; title: string; key: string; disabled: boolean; tone: 'buy' | 'sell' }[];
+  /** 当前座位手里的行动卡 */
+  cards?(g: Game): CardDef[];
+  /** 打出一张卡。只在 cards() 里出现且未被 blocked 时才会被调用。 */
+  playCard?(g: Game, id: string, target?: string): CardResult;
+  /** 顶栏指标；不提供时显示权益、监管热度与声望 */
+  meters?(g: Game): Meter[] | undefined;
   /** 复盘与逐笔里怎么称呼一个群体或账户 */
   groupName?(g: Game, who: string): string;
   setup(g: Game): void;
@@ -234,6 +287,7 @@ export type PlayerAction =
   | { type: 'plan-remove'; id: number }
   | { type: 'social'; verb: Verb; npc: string; option?: string }
   | { type: 'decision'; id: string; choice: string }
+  | { type: 'card'; id: string; target?: string }
   | { type: 'end-night' };
 
 export interface LoggedAction {
@@ -256,7 +310,7 @@ export interface DayRecap {
 export type Phase = 'trading' | 'night' | 'reckoning';
 
 export interface GameEvent {
-  kind: 'rule' | 'intel' | 'decision' | 'pause' | 'margin' | 'liquidation' | 'phase';
+  kind: 'rule' | 'intel' | 'decision' | 'pause' | 'margin' | 'liquidation' | 'phase' | 'card';
   text: string;
   rule?: string;
   /** 规则事件：委托被挡下（true）还是违规放行（false） */
@@ -297,6 +351,8 @@ export class Game {
   tape: { day: number; time: string; seat: string; side: Side; qty: number; price: Fen }[] = [];
   /** 每晚的报纸头条（引擎给事实，台词层负责措辞） */
   papers: { day: number; headline: string; sub: string; facts: string[] }[] = [];
+  /** 打过的行动卡与结算结果 */
+  cardLog: { day: number; time: string; id: string; name: string; target?: string; result: CardResult }[] = [];
 
   constructor(
     readonly scenario: Scenario,
@@ -338,6 +394,27 @@ export class Game {
   }
   get isBattleDay(): boolean {
     return this.day.kind === 'battle';
+  }
+  /** 余波：决战之后不再开盘的日子，只有夜晚 */
+  get isAftermath(): boolean {
+    return this.day.kind === 'aftermath';
+  }
+
+  /** 当前能打出的行动卡（含被挡住的，供界面显示原因） */
+  cards(): CardDef[] {
+    return this.scenario.cards?.(this) ?? [];
+  }
+
+  /** 这张卡此刻能不能打：时段、是否被挡住、对象是否合法 */
+  canPlay(id: string, target?: string): string | null {
+    const c = this.cards().find((x) => x.id === id);
+    if (!c) return '没有这张卡';
+    if (c.blocked) return c.blocked;
+    if (this.decision || this.ending) return '现在不能出手';
+    if (c.when === 'trading' && (this.phase !== 'trading' || !this.market.ex.open)) return '只能在盘中使用';
+    if (c.when === 'night' && this.phase !== 'night') return '只能在收盘后使用';
+    if (c.targets && !c.targets.some((t) => t.id === target)) return '先选一个对象';
+    return null;
   }
 
   equity(): number {
@@ -420,6 +497,18 @@ export class Game {
         this.scenario.decide(this, action.id, action.choice);
         return null;
       }
+      case 'card': {
+        const why = this.canPlay(action.id, action.target);
+        const card = this.cards().find((x) => x.id === action.id);
+        if (why || !card || !this.scenario.playCard) {
+          if (card) this.push({ kind: 'card', text: `${card.name}：${why}` });
+          return null;
+        }
+        const result = this.scenario.playCard(this, action.id, action.target);
+        this.cardLog.push({ day: this.dayIndex, time: this.phase === 'night' ? '夜' : this.time, id: card.id, name: card.name, target: action.target, result });
+        this.push({ kind: 'card', text: `${result.title}${result.effects.length ? '：' + result.effects.join('，') : ''}` });
+        return null;
+      }
       case 'end-night':
         this.endNight();
         return null;
@@ -444,8 +533,16 @@ export class Game {
   // ── 时间推进 ──
 
   private startDay(): void {
-    this.phase = 'trading';
     this.energy = this.maxEnergy;
+    if (this.isAftermath) {
+      // 余波：市场不再开盘，直接进入夜晚
+      this.phase = 'night';
+      this.scenario.onDayStart(this);
+      this.push({ kind: 'phase', text: `${this.day.date} ${this.day.label}` });
+      this.scenario.onNight(this);
+      return;
+    }
+    this.phase = 'trading';
     this.market.beginDay(this.day, this.dayIndex);
     this.scenario.onDayStart(this);
     this.cureOrLiquidate();
@@ -602,7 +699,9 @@ export class Game {
         text: `逐日盯市后权益 ${fmtYi(eq)}，低于所需保证金 ${fmtYi(ex.marginReq(this.player.pos))}：明早开盘前须补足，否则强制平仓`,
       });
     }
-    if (this.dayIndex >= this.scenario.days.length - 1 || this.bankrupt) {
+    // 布局期就穿仓：故事到此为止；决战日穿仓的人还要面对余波
+    const aftermathAhead = this.scenario.days.slice(this.dayIndex + 1).some((d) => d.kind === 'aftermath');
+    if (this.dayIndex >= this.scenario.days.length - 1 || (this.bankrupt && !(aftermathAhead && this.isBattleDay))) {
       this.phase = 'reckoning';
       this.ending = this.scenario.reckon(this);
       return;
@@ -615,6 +714,11 @@ export class Game {
 
   private endNight(): void {
     if (this.phase !== 'night') return;
+    if (this.dayIndex >= this.scenario.days.length - 1) {
+      this.phase = 'reckoning';
+      this.ending = this.scenario.reckon(this);
+      return;
+    }
     this.dayIndex++;
     this.startDay();
   }

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
 import type { Game, GameEvent } from '../engine/game';
 import type { LlmSettings } from '../llm/settings';
+import { CardsDrawer } from './Cards';
 import { Chart } from './Chart';
 import { Contacts, useDialogues } from './Contacts';
 import { cls, money } from './format';
@@ -10,7 +11,7 @@ import { Night } from './Night';
 import { OrderTicket } from './OrderTicket';
 import { PlanBook } from './PlanBook';
 import { saveGame } from './save';
-import { MembersCard, OrderBookCard, PositionCard, TapeCard } from './SidePanels';
+import { MembersCard, OrderBookCard, PositionCard, StakeCard, TapeCard } from './SidePanels';
 import { sound } from './sound';
 
 // 每分钟行情的现实耗时（毫秒）。布局期一天约 40 秒，决战日按分钟慢慢推进。
@@ -20,7 +21,7 @@ const SPEEDS = {
 };
 const SPEED_LABEL = ['慢', '中', '快', '极快'];
 
-type Drawer = null | 'buy' | 'sell' | 'plan' | 'people' | 'intel';
+type Drawer = null | 'buy' | 'sell' | 'plan' | 'people' | 'intel' | 'cards';
 interface Toast {
   id: number;
   text: string;
@@ -42,12 +43,14 @@ export function GameScreen({ game, llm, ui, onSettings, onEnd }: { game: Game; l
   const toastId = useRef(0);
   const dlg = useDialogues(game, llm);
   const observer = !!game.faction.observer;
-  const tools = observer ? (game.scenario.observerTools?.(game) ?? []) : [];
-  const todayViolations = [...game.market.ex.accounts.values()].reduce((a, x) => a + (x.exempt ? 0 : x.violations), 0);
-  const regulate = useCallback(
-    (what: string) => {
-      if (game.phase !== 'trading') return;
-      game.act({ type: 'decision', id: 'reg', choice: what });
+  const cards = game.cards();
+  // 带快捷键的卡在盘中显示为快捷按钮
+  const quick = cards.filter((c) => c.key && c.when !== 'night');
+  const meters = game.scenario.meters?.(game);
+  const playQuick = useCallback(
+    (id: string) => {
+      if (game.canPlay(id)) return;
+      game.act({ type: 'card', id });
       bump();
     },
     [game],
@@ -169,7 +172,8 @@ export function GameScreen({ game, llm, ui, onSettings, onEnd }: { game: Game; l
       if (k === ' ') {
         e.preventDefault();
         setPaused((p) => !p);
-      } else if (observer && tools.some((t) => t.key === k && !t.disabled)) regulate(tools.find((t) => t.key === k)!.id);
+      } else if (quick.some((c) => c.key === k && !game.canPlay(c.id))) playQuick(quick.find((c) => c.key === k)!.id);
+      else if (k === 'a') setDrawer('cards');
       else if (!observer && k === 'b') setDrawer('buy');
       else if (!observer && k === 's') setDrawer('sell');
       else if (!observer && k === 'p') setDrawer('plan');
@@ -178,7 +182,7 @@ export function GameScreen({ game, llm, ui, onSettings, onEnd }: { game: Game; l
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [game, ruleCard, observer, regulate, tools]);
+  }, [game, ruleCard, observer, playQuick, quick]);
 
   const ex = game.market.ex;
   const eq = game.equity();
@@ -225,30 +229,41 @@ export function GameScreen({ game, llm, ui, onSettings, onEnd }: { game: Game; l
           ))}
         </div>
         <div className="meters">
-          {!observer && (
-          <div className="meter" title="现金 + 浮动盈亏">
-            <span className="label">权益</span>
-            <span className="value">{money(eq)}</span>
-          </div>
+          {meters ? (
+            meters.map((m) => (
+              <div key={m.id} className="meter" title={m.tip}>
+                <span className="label">{m.label}</span>
+                {m.pips ? (
+                  <span className={cls('pips', m.pips.tone === 'heat' && 'heat', m.pips.tone === 'good' && 'good')}>
+                    {Array.from({ length: m.pips.of }, (_, i) => (
+                      <i key={i} className={cls(i < m.pips!.on && 'on')} />
+                    ))}
+                  </span>
+                ) : (
+                  <span className={cls('value', m.tone === 'bad' && 'up', m.tone === 'good' && 'gold')}>{m.value}</span>
+                )}
+              </div>
+            ))
+          ) : (
+            <>
+              <div className="meter" title="现金 + 浮动盈亏">
+                <span className="label">权益</span>
+                <span className="value">{money(eq)}</span>
+              </div>
+              <div className="meter" title="监管热度：违规行为会累积热度，按真实流程逐级升级——问询、警示、立案、处罚、禁入。只降不清零。">
+                <span className="label">监管热度 · 第 {game.heatTier()} 级</span>
+                <span className="pips heat">
+                  {[1, 2, 3, 4, 5].map((i) => (
+                    <i key={i} className={cls(game.heatTier() >= i && 'on')} />
+                  ))}
+                </span>
+              </div>
+              <div className="meter" title="声望：圈内信誉，决定谁愿意和你结盟、给你真消息">
+                <span className="label">声望</span>
+                <span className="value">{game.reputation}</span>
+              </div>
+            </>
           )}
-          {observer && (
-            <div className="meter" title="会员累计的违规委托笔数（超额透支、超出持仓限额）">
-              <span className="label">会员违规委托（累计）</span>
-              <span className="value">{todayViolations}</span>
-            </div>
-          )}
-          <div hidden={observer} className="meter" title="监管热度：违规行为会累积热度，按真实流程逐级升级——问询、警示、立案、处罚、禁入。只降不清零。">
-            <span className="label">监管热度 · 第 {game.heatTier()} 级</span>
-            <span className="pips heat">
-              {[1, 2, 3, 4, 5].map((i) => (
-                <i key={i} className={cls(game.heatTier() >= i && 'on')} />
-              ))}
-            </span>
-          </div>
-          <div className="meter" title="声望：圈内信誉，决定谁愿意和你结盟、给你真消息">
-            <span className="label">声望</span>
-            <span className="value">{game.reputation}</span>
-          </div>
           <div className="meter" title={`底线「${game.principle.label}」：越过的次数。不扣分，但会改变画面与结局。`}>
             <span className="label">底线</span>
             <span className="value">{game.linesCrossed === 0 ? '守住' : `越过 ${game.linesCrossed} 次`}</span>
@@ -318,6 +333,7 @@ export function GameScreen({ game, llm, ui, onSettings, onEnd }: { game: Game; l
         </div>
         <div className="side">
           {observer ? <MembersCard game={game} /> : <PositionCard game={game} />}
+          {observer && <StakeCard game={game} />}
           <OrderBookCard game={game} />
           <TapeCard game={game} />
         </div>
@@ -325,19 +341,11 @@ export function GameScreen({ game, llm, ui, onSettings, onEnd }: { game: Game; l
         {drawer === 'plan' && <PlanBook game={game} onClose={() => setDrawer(null)} />}
         {drawer === 'people' && <Contacts game={game} dlg={dlg} llmOn={llm.enabled} onClose={() => setDrawer(null)} />}
         {drawer === 'intel' && <IntelDrawer game={game} showMentor={ui.mentor} onClose={() => setDrawer(null)} />}
+        {drawer === 'cards' && <CardsDrawer game={game} onClose={() => setDrawer(null)} onPlayed={() => (processEvents(), bump())} />}
       </div>
 
       <div className="actionbar">
-        {observer ? (
-          <>
-            {tools.map((t) => (
-              <button key={t.id} className={cls('core-btn', t.tone)} disabled={t.disabled} onClick={() => regulate(t.id)} title={t.title}>
-                {t.label}
-                <span className="kbd">{t.key.toUpperCase()}</span>
-              </button>
-            ))}
-          </>
-        ) : (
+        {!observer && (
           <>
             <button className="core-btn buy" onClick={() => open('buy')}>
               买入<span className="kbd">B</span>
@@ -351,6 +359,12 @@ export function GameScreen({ game, llm, ui, onSettings, onEnd }: { game: Game; l
             </button>
           </>
         )}
+        {cards.length > 0 && (
+          <button className="core-btn" onClick={() => open('cards')}>
+            手段<span className="kbd">A</span>
+            <span className="badge">{cards.filter((c) => !game.canPlay(c.id, c.targets?.[0]?.id)).length}</span>
+          </button>
+        )}
         <button className="core-btn" onClick={() => open('people')}>
           人脉<span className="kbd">R</span>
         </button>
@@ -358,6 +372,12 @@ export function GameScreen({ game, llm, ui, onSettings, onEnd }: { game: Game; l
           情报<span className="kbd">I</span>
           {unread > 0 && <span className="badge">{unread}</span>}
         </button>
+        {quick.map((c) => (
+          <button key={c.id} className={cls('core-btn quick', c.color === 'black' && 'sell')} disabled={!!game.canPlay(c.id)} onClick={() => playQuick(c.id)} title={`${c.does}（代价：${c.cost}）${c.blocked ? ' — ' + c.blocked : ''}`}>
+            {c.status ?? c.name}
+            <span className="kbd">{c.key!.toUpperCase()}</span>
+          </button>
+        ))}
         <span className="spacer" />
         <span className="muted" style={{ fontSize: 12 }}>
           {game.faction.name} · 第 {game.dayIndex + 1} / {game.scenario.days.length} 个交易日

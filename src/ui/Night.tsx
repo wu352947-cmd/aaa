@@ -3,6 +3,7 @@ import type { Game } from '../engine/game';
 import { headline } from '../llm/director';
 import { eraOf } from '../llm/era';
 import type { LlmSettings } from '../llm/settings';
+import { CardsBody } from './Cards';
 import { Contacts, type useDialogues } from './Contacts';
 import { cls, price, qty, signed } from './format';
 import { IntelList } from './IntelPanel';
@@ -64,21 +65,21 @@ export function Recap({ game, dayIdx }: { game: Game; dayIdx?: number }) {
           ))}
         </ul>
       )}
-      <p className="faint" style={{ fontSize: 12, marginBottom: 0 }}>
-        每一笔主动成交都会推动盘口；加总起来就是今天的涨跌。“历史引力”一栏是做市资金把价格拉回真实走势的力量。
-      </p>
     </div>
   );
 }
 
 export function Night({ game, llm, dlg, showMentor, onSleep }: { game: Game; llm: LlmSettings; dlg: ReturnType<typeof useDialogues>; showMentor: boolean; onSleep: () => void }) {
+  const [, bump] = useState(0);
   const paper = game.papers[game.papers.length - 1];
   const [hl, setHl] = useState<{ headline: string; sub: string; source: string } | null>(null);
-  const [tab, setTab] = useState<'recap' | 'people' | 'intel'>('recap');
+  const hasCards = game.cards().length > 0;
+  const [tab, setTab] = useState<'recap' | 'people' | 'intel' | 'cards'>(game.isAftermath && hasCards ? 'cards' : 'recap');
   useEffect(() => {
     setHl(null);
     if (paper) headline(llm, eraOf(game.scenario.eraId), paper, game.day.date).then(setHl);
   }, [paper, llm, game]);
+  const next = game.scenario.days[game.dayIndex + 1];
   const todays = game.intel.filter((i) => i.day === game.dayIndex && i.kind !== 'system' && (showMentor || i.kind !== 'mentor'));
   return (
     <div className="night">
@@ -110,6 +111,11 @@ export function Night({ game, llm, dlg, showMentor, onSleep }: { game: Game; llm
             <button className={cls(tab === 'recap' && 'on')} onClick={() => setTab('recap')}>
               收盘复盘
             </button>
+            {hasCards && (
+              <button className={cls(tab === 'cards' && 'on')} onClick={() => setTab('cards')}>
+                手段
+              </button>
+            )}
             <button className={cls(tab === 'people' && 'on')} onClick={() => setTab('people')}>
               人脉（{game.energy} 点精力）
             </button>
@@ -118,6 +124,11 @@ export function Night({ game, llm, dlg, showMentor, onSleep }: { game: Game; llm
             </button>
           </div>
           {tab === 'recap' && <Recap game={game} />}
+          {tab === 'cards' && (
+            <div className="recap">
+              <CardsBody game={game} onPlayed={() => bump((x) => x + 1)} />
+            </div>
+          )}
           {tab === 'people' && (
             <div className="recap">
               <Contacts game={game} dlg={dlg} llmOn={llm.enabled} inline />
@@ -131,10 +142,10 @@ export function Night({ game, llm, dlg, showMentor, onSleep }: { game: Game; llm
         </div>
         <div className="night-actions">
           <span className="muted" style={{ fontSize: 13 }}>
-            夜晚是研究、社交和写计划的时间。明天：{game.scenario.days[game.dayIndex + 1]?.date} {game.scenario.days[game.dayIndex + 1]?.label}
+            {next ? `明天：${next.date} ${next.label}` : '这是最后一夜。'}
           </span>
           <button className="btn primary" onClick={onSleep}>
-            熄灯，等明天开盘 →
+            {!next ? '收场 →' : next.kind === 'aftermath' ? '熄灯，等明天 →' : '熄灯，等明天开盘 →'}
           </button>
         </div>
       </div>

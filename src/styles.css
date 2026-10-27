@@ -1788,3 +1788,196 @@ textarea {
   background: var(--ink);
   color: var(--paper) !important;
 }
+
+/* ───────── 行动卡 ───────── */
+.card-group {
+  margin-bottom: 14px;
+}
+.card-group-title {
+  font-size: 12px;
+  color: var(--muted);
+  letter-spacing: 0.15em;
+  margin-bottom: 6px;
+}
+.action-card {
+  border: 1px solid var(--line);
+  border-left: 3px solid #cfd3dc;
+  border-radius: 6px;
+  background: var(--panel-2);
+  padding: 8px 10px;
+  margin-bottom: 6px;
+}
+.action-card.grey {
+  border-left-color: #7d8494;
+}
+.action-card.black {
+  border-left-color: var(--black);
+}
+.action-card.off {
+  opacity: 0.55;
+}
+.ac-head {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  font-size: 14px;
+}
+.ac-color {
+  font-size: 11px;
+  border-radius: 3px;
+  padding: 0 5px;
+  background: #cfd3dc;
+  color: #17191f;
+  cursor: help;
+}
+.ac-color.grey {
+  background: #7d8494;
+  color: #fff;
+}
+.ac-color.black {
+  background: var(--black);
+  color: #fff;
+}
+.ac-status {
+  font-size: 11px;
+  color: var(--gold);
+  border: 1px solid var(--gold-dim);
+  border-radius: 3px;
+  padding: 0 5px;
+}
+.ac-when {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--faint);
+}
+.ac-does {
+  font-size: 13px;
+  margin-top: 4px;
+}
+.ac-cost {
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 2px;
+}
+.ac-targets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 6px;
+}
+.ac-targets button {
+  font-size: 12px;
+  padding: 2px 8px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--muted);
+}
+.ac-targets button.on {
+  border-color: var(--gold);
+  color: var(--text);
+}
+.ac-foot {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+  font-size: 12px;
+}
+.card-results {
+  margin-bottom: 12px;
+}
+.card-result {
+  margin-top: 6px;
+  font-size: 13px;
+  border-left: 3px solid var(--gold);
+  padding: 4px 8px;
+  margin-bottom: 4px;
+  background: var(--bg);
+  opacity: 0.7;
+}
+.card-result.latest {
+  opacity: 1;
+}
+.card-result.fail {
+  border-left-color: var(--up);
+}
+.card-result .fx {
+  color: var(--muted);
+  font-size: 12px;
+}
+.card-result .reply {
+  font-family: var(--serif);
+  margin-top: 2px;
+}
+.core-btn.quick {
+  min-width: 0;
+  font-size: 13px;
+  padding: 9px 12px;
+}
+.stake-row {
+  display: grid;
+  grid-template-columns: 1fr 90px 34px;
+  gap: 8px;
+  align-items: center;
+  font-size: 12px;
+  margin-bottom: 3px;
+}
+.stake-row .bar-track {
+  margin-top: 0;
+}
+
+/* 酒馆里的手段 */
+.tavern-cards {
+  margin-top: 18px;
+}
+.tavern-cards h3 {
+  font-family: var(--serif);
+  font-size: 16px;
+  margin: 0 0 8px;
+  color: var(--candle, var(--gold));
+}
+.tavern-cards .card-group {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 6px;
+  align-items: start;
+}
+.tavern-cards .card-group-title {
+  grid-column: 1 / -1;
+  margin-bottom: 0;
+}
+.tavern-cards .action-card {
+  margin-bottom: 0;
+}
+.tavern-paper .action-card {
+  background: rgba(255, 255, 255, 0.35);
+  border-color: rgba(90, 74, 56, 0.35);
+  color: var(--ink);
+}
+.tavern-paper .ac-cost,
+.tavern-paper .ac-when,
+.tavern-paper .card-group-title,
+.tavern-paper .card-result .fx {
+  color: var(--ink-soft);
+}
+.tavern-paper .ac-targets button {
+  background: rgba(255, 255, 255, 0.5);
+  border-color: rgba(90, 74, 56, 0.35);
+  color: var(--ink);
+}
+.tavern-paper .ac-targets button.on {
+  border-color: var(--seal);
+}
+.tavern-paper .card-result {
+  background: rgba(255, 255, 255, 0.5);
+}
+.tavern-paper .tavern-cards h3 {
+  color: var(--seal);
+}
+.slate-hint {
+  font-size: 12px;
+  color: var(--candle, var(--gold));
+  margin-top: 4px;
+}

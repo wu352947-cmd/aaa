@@ -95,7 +95,21 @@ export const DAYS: DayDef[] = [
   },
 ];
 
-export const BATTLE = DAYS.length - 1;
+// 余波：327 合约停牌，市场不再开盘，只剩夜里的谈判、追偿与处分
+const aftermath = (date: string, label: string): DayDef => ({
+  date,
+  label,
+  kind: 'aftermath',
+  hist: [15130],
+  vDay: 1,
+  sigma: 0.01,
+  halfLife: 1,
+  crowdShare: 0,
+  provenance: 'reconstructed',
+});
+DAYS.push(aftermath('1995-02-24', '星期五 · 余波'), aftermath('1995-02-27', '星期一 · 清算'));
+
+export const BATTLE = 5;
 export const START_PRICE = 14760;
 export const OFFICIAL_CLOSE = 15130;
 
@@ -105,40 +119,40 @@ export const FACTIONS: Faction[] = [
     id: 'short',
     name: '空方券商总经理',
     role: '申江证券 · 总经理',
-    blurb: '你判断 327 国债到期兑付价约 132 元，而合约还在 147–148 元，于是重仓做空。辽北发展是你的锁仓盟友。',
-    secretGoal: '在消息落地前把空单降到不会爆仓的水平——或者赌一把，赌赢了就是年度最大的一笔利润。',
+    blurb: '空单 220 万口。你算过：兑付价约 132 元，合约却在 148 元。',
+    secretGoal: '在消息落地前把空单降到安全水平——或者赌一把。',
     accountId: 'shenjiang',
   },
   {
     id: 'long',
     name: '多方信托交易员',
     role: '中财信托 · 交易部',
-    blurb: '你的机构背景特殊，消息总比别人早一步。你手里有多单，但不能让关联关系曝光。',
-    secretGoal: '在贴息消息公开时把价格托住、把空头逼到墙角；同时别让任何人抓住“提前知道”的把柄。',
+    blurb: '多单 150 万口。你的消息总比别人早一步。',
+    secretGoal: '把价格托住、把空头逼到墙角，别让人抓住“提前知道”的把柄。',
     accountId: 'zhongcai',
   },
   {
     id: 'retail',
     name: '散户',
     role: '大户室里的普通人',
-    blurb: '你带着八万块积蓄挤进证券营业部的大户室。两头巨鲸在你头顶厮杀，你只想活下来。',
-    secretGoal: '五个交易日后，带着比现在多的钱离开，并且看懂这场仗是怎么打的。',
+    blurb: '八万块积蓄。两头巨鲸在你头顶厮杀。',
+    secretGoal: '带着比现在多的钱离开。',
     accountId: 'retail',
   },
   {
     id: 'ally',
     name: '空翻多的盟友',
     role: '辽北发展 · 总经理',
-    blurb: '你和申江证券签了锁仓同盟，手里有 80 万口空单。可风向好像变了：多方的人最近总约你吃饭。',
-    secretGoal: '在最合适的时刻倒戈。第一个卖的人赚得最多——前提是你没看错。',
+    blurb: '空单 80 万口，和申江签了锁仓同盟。可多方的人最近总约你吃饭。',
+    secretGoal: '在最合适的时刻倒戈。',
     accountId: 'liaobei',
   },
   {
     id: 'official',
-    name: '交易所值班官员',
+    name: '交易所监管负责人',
     role: '上海证券交易所 · 交易部',
-    blurb: '你不下单。你能看到每家会员的持仓，能约谈、能停市、能调保证金。当晚，你要裁决这一天的成交算不算数。',
-    secretGoal: '让市场明天还能开门：违规者受罚，守规矩的人别被一起拖下水。',
+    blurb: '你不下单。你有政治资本、一整套风控工具，和六方要应付。',
+    secretGoal: '让市场下周还能开门：违规者受罚，守规矩的人别被拖下水，你的位子也还在。',
     accountId: 'exchange',
     observer: true,
   },
@@ -250,6 +264,32 @@ export const NPCS: NpcDef[] = [
     avatar: '沈',
     factionId: 'short',
   },
+  {
+    id: 'lu',
+    name: '陆明远',
+    title: '处长',
+    org: '财政部国债司',
+    style: '程序',
+    persona: '北京人，四十五岁，说话四平八稳，爱说“按程序走”“要统筹考虑”，从不在电话里谈具体数字。',
+    secretGoal: '贴息方案按程序公布，财政部不被市场绑架。',
+    bottomLine: '不提前向任何机构透露方案。',
+    honesty: 0.7,
+    relation: 0,
+    avatar: '陆',
+  },
+  {
+    id: 'yan',
+    name: '严正',
+    title: '主任',
+    org: '中国证监会期货监管部',
+    style: '上级',
+    persona: '五十多岁，说话干脆，喜欢问“你的方案是什么”“出了事谁负责”，不喜欢下级事事请示，更不喜欢下级出事不报。',
+    secretGoal: '试点不能出大乱子；出了乱子，要有人负责。',
+    bottomLine: '不替下级背锅。',
+    honesty: 0.8,
+    relation: 10,
+    avatar: '严',
+  },
 ];
 
 // ───────────── 规则卡 ─────────────
@@ -318,6 +358,20 @@ export const RULE_CARDS: RuleCardDef[] = [
     source: '《股票发行与交易管理暂行条例》（1993）中关于内幕交易的禁止性规定。',
   },
   {
+    id: 'price-limit',
+    title: '涨跌停板',
+    plain: '价格一天之内只能在前一日结算价上下一定幅度内成交，超出的委托不被接受。',
+    why: '涨跌停给多空双方一个冷静期：再大的单子也砸不穿、拉不破。代价是价格发现被推迟到第二天。',
+    source: '327 事件后，上交所对国债期货实行涨跌停板制度。游戏取 ±1.5%。',
+  },
+  {
+    id: 'agreed-close',
+    title: '协议平仓',
+    plain: '多空双方在交易所主持下，按商定的价格直接对冲掉一部分仓位，不经过订单簿。',
+    why: '把对赌的规模在爆炸之前拆小。谁让步、让多少，取决于谁更怕明天。',
+    source: '327 事件后，交易所组织多空双方对 327 合约协议平仓。',
+  },
+  {
     id: 'grey-loan',
     title: '场外拆借',
     plain: '绕开正规渠道向私人借钱补保证金。利息高，借贷关系不受保护，也会引起监管注意。',
@@ -358,8 +412,6 @@ export const SOURCES: SourceCard[] = [
 ];
 
 export const PROLOGUE: string[] = [
-  '1995 年 2 月，上海。浦江饭店的老交易大厅里挤满了穿红马甲的场内交易员，黑板上的报价一刻不停。',
-  '全国通胀还在高位。国库券实行保值贴补，到期能兑付多少钱，取决于财政部怎么定。',
-  '代码 327 的国债期货合约，把这份不确定变成了一场赌局：空方算过账，到期兑付价约 132 元，而合约还在 147 元以上；多方赌财政部会贴息，价格还要涨。',
-  '五个交易日后的 2 月 23 日，将是中国证券史上最长的一天。',
+  '1995 年 2 月，上海。327 国债到期能兑付多少，取决于财政部贴不贴息。空方算的是 132 元，合约却在 148 元。',
+  '五个交易日后，2 月 23 日。',
 ];

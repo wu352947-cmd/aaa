@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { S327 } from '../scenarios/s327';
-import { DAYS, DECK_1995, PARAMS } from '../scenarios/s327/data';
+import { BATTLE, DAYS, DECK_1995, PARAMS } from '../scenarios/s327/data';
 import { Game, replay } from './game';
 import { Market, minuteIndex } from './market';
 
@@ -13,7 +13,7 @@ describe('引擎验收 5.2-1 零干预回放', () => {
   const g = runIdle('retail');
 
   it('布局期每日收盘贴近真实（重建）收盘价', () => {
-    for (let d = 0; d < DAYS.length - 1; d++) {
+    for (let d = 0; d < BATTLE; d++) {
       const hist = DAYS[d].hist[DAYS[d].hist.length - 1];
       expect(Math.abs(g.market.closePrices[d] - hist)).toBeLessThanOrEqual(20); // ±0.20 元
     }
@@ -171,21 +171,40 @@ describe('新座位：空翻多的盟友', () => {
   });
 });
 
-describe('新座位：交易所值班官员', () => {
-  function play(choices: Record<string, string>): Game {
-    const g = new Game(S327, 'official', 'official', 'no-violation');
-    for (let guard = 0; guard < 5000 && !g.ending; guard++) {
-      if (g.phase === 'night') g.act({ type: 'end-night' });
-      else if (g.decision) g.act({ type: 'decision', id: g.decision.id, choice: choices[g.decision.id] ?? g.decision.choices[0].id });
-      else g.tick();
+describe('监管座位：交易所监管负责人', () => {
+  type Night = Record<number, [string, string?][]>;
+  /** 跑完一局：nights 是每晚要打的卡，day 是盘中每分钟的钩子，ruling 是当晚裁决 */
+  function play(opts: { nights?: Night; day?: (g: Game) => void; ruling?: string; seed?: string } = {}): Game {
+    const g = new Game(S327, opts.seed ?? 'official', 'official', 'no-violation');
+    const done = new Set<number>();
+    for (let guard = 0; guard < 8000 && !g.ending; guard++) {
+      if (g.phase === 'night') {
+        if (!done.has(g.dayIndex)) {
+          done.add(g.dayIndex);
+          for (const [id, target] of opts.nights?.[g.dayIndex] ?? []) g.act({ type: 'card', id, target });
+        }
+        g.act({ type: 'end-night' });
+      } else if (g.decision) g.act({ type: 'decision', id: g.decision.id, choice: g.decision.id === 'ruling' ? (opts.ruling ?? 'void') : g.decision.choices[0].id });
+      else {
+        opts.day?.(g);
+        g.tick();
+      }
     }
     return g;
   }
+  const low = (g: Game) => Math.min(...g.market.bars.slice(minuteIndex('16:22')).map((b) => b.l));
+
+  it('剧本多出两夜余波：决战日之后还有清算', () => {
+    const g = play();
+    expect(DAYS.filter((d) => d.kind === 'aftermath').length).toBe(2);
+    expect(g.papers.some((p) => p.day === BATTLE + 1)).toBe(true);
+    expect(g.ending).not.toBeNull();
+  });
 
   it('裁决“全部有效”时不作废，按砸盘后的价格收盘', () => {
     const g = play({ ruling: 'valid' });
     expect(g.flags.voided).toBeFalsy();
-    expect(g.market.closePrices[g.market.closePrices.length - 1]).toBeLessThan(14900);
+    expect(g.market.closePrices[BATTLE]).toBeLessThan(14900);
     expect(g.ending?.archetype).toBe('旁观者');
   });
 
@@ -195,18 +214,141 @@ describe('新座位：交易所值班官员', () => {
     expect(g.ending?.archetype).toBe('守门人');
   });
 
-  it('尾盘立即停市：之后没有成交，砸盘幅度被截住', () => {
-    const g = play({ 'reg-dump': 'halt', ruling: 'void' });
-    const bars = g.market.bars;
-    expect(bars.slice(minuteIndex('16:24')).every((b) => b.v === 0)).toBe(true);
-    expect(Math.min(...bars.map((b) => b.l))).toBeGreaterThan(14800);
+  it('只撤销透支成交：正常成交保留，没有无辜的人被一起抹掉', () => {
+    const g = play({ ruling: 'precise' });
+    expect(g.flags.precise).toBe(true);
+    expect(g.flags.innocentVoided).toBe(0);
+    expect(play({ ruling: 'void' }).flags.innocentVoided).toBeGreaterThan(0);
+  });
+
+  it('砸盘一开始就停市：之后没有成交，砸盘幅度被截住', () => {
+    const g = play({ day: (x) => x.isBattleDay && x.market.t === minuteIndex('16:23') && x.act({ type: 'card', id: 'halt' }) });
+    expect(g.market.bars.slice(minuteIndex('16:24')).every((b) => b.v === 0)).toBe(true);
+    expect(low(g)).toBeGreaterThan(14800);
+  });
+
+  it('尾盘前限令申江只许平仓：砸盘根本发不出来', () => {
+    const g = play({ day: (x) => x.isBattleDay && x.market.t === minuteIndex('16:10') && x.act({ type: 'card', id: 'closeonly', target: 'shenjiang' }) });
+    expect(g.flags.shenPlan).toBe('blocked');
+    expect(g.flags.voided).toBeFalsy();
+    expect(low(g)).toBeGreaterThan(14950);
+    expect(g.ending?.id).toBe('official-defused');
+  });
+
+  it('布局期层层施压（吹风、稽查、电话、点名）：申江在尾盘认赔而不是砸盘', () => {
+    const g = play({ nights: { 2: [['brief', 'general']], 3: [['inspect', 'shenjiang'], ['csrc']], 4: [['call', 'shenjiang'], ['brief', 'name-shen']] } });
+    expect(g.intel.some((i) => i.id === 'ev-split')).toBe(true);
+    expect(g.flags.shenPlan).toBe('cover');
+    expect(g.flags.npcDump).toBeFalsy();
+  });
+
+  it('请财政部提前公告：开盘二十分钟内价格就到位，盟友在开盘就倒戈', () => {
+    const g = play({ nights: { 2: [['mof']] } });
+    expect(g.flags.mofPublic).toBe(true);
+    expect(g.market.bars[20].c).toBeGreaterThan(15050);
+    const idle = play();
+    expect(idle.market.bars[20].c).toBeLessThan(14900);
+  });
+
+  it('协议平仓谈成后，申江的空单少了 80 万口，尾盘不再需要砸盘', () => {
+    const g = play({ nights: { 2: [['mediate']], 3: [['mediate']], 4: [['mediate']] }, seed: 'med' });
+    expect(g.flags.mediated).toBe(true);
+    expect(g.flags.npcDump).toBeFalsy();
+  });
+
+  it('涨跌停板：决战日的价格被封在板上', () => {
+    const g = play({ nights: { 3: [['csrc']], 4: [['band']] } });
+    const settle = g.market.closePrices[BATTLE - 1];
+    const hi = Math.max(...g.market.bars.map((b) => b.h));
+    expect(hi).toBeLessThanOrEqual(settle + Math.round(settle * 0.015));
   });
 
   it('提高保证金只影响这一局，不污染剧本常量', () => {
-    const g = play({ 'reg-spike': 'margin', ruling: 'void' });
+    const g = play({ day: (x) => x.dayIndex === 0 && x.market.t === 10 && x.act({ type: 'card', id: 'margin-now' }) });
     expect(g.market.ex.deck.marginRate).toBe(0.05);
     expect(S327.deck.marginRate).toBe(0.025);
     expect(new Game(S327, 'x', 'retail', 'no-violation').market.ex.deck.marginRate).toBe(0.025);
+  });
+
+  it('政治资本不够时，卡打不出去', () => {
+    const g = new Game(S327, 'broke', 'official', 'no-violation');
+    while (g.phase === 'trading') g.tick();
+    g.act({ type: 'card', id: 'mof' });
+    g.act({ type: 'card', id: 'limit' });
+    expect(g.canPlay('band')).toMatch(/政治资本不足/);
+    g.act({ type: 'card', id: 'band' });
+    expect(g.market.ex.deck.priceLimit).toBeNull();
+    expect(g.flags.bandNext).toBeUndefined();
+  });
+
+  it('余波：没人处理的穿仓会员会连环违约，用风险基金垫付就不会', () => {
+    const g = play({ ruling: 'valid' });
+    expect(g.ending?.stats.find(([k]) => k === '会员穿仓 / 违约')).toBeDefined();
+  });
+
+  it('卡牌结算写进动作日志，读档重放得到同一局', () => {
+    const live = new Game(S327, 'cards', 'official', 'no-violation');
+    while (live.phase === 'trading') live.tick();
+    live.act({ type: 'card', id: 'inspect', target: 'zhongcai' });
+    live.act({ type: 'card', id: 'mediate' });
+    live.act({ type: 'end-night' });
+    for (let i = 0; i < 30; i++) live.tick();
+    live.act({ type: 'card', id: 'notice' });
+    for (let i = 0; i < 30; i++) live.tick();
+    const re = replay(S327, 'cards', 'official', 'no-violation', live.log, live.globalTick);
+    expect(re.stateHash()).toBe(live.stateHash());
+    expect(re.cardLog.map((c) => c.result.title)).toEqual(live.cardLog.map((c) => c.result.title));
+  });
+});
+
+describe('交易座位的手段', () => {
+  function day1(f: string, card?: string) {
+    const g = new Game(S327, 'w', f, 'no-violation');
+    while (g.phase === 'trading') g.tick();
+    g.act({ type: 'end-night' });
+    while (g.market.t < 215) {
+      if (card && g.market.t === 200) g.act({ type: 'card', id: card });
+      g.tick();
+    }
+    return g;
+  }
+
+  it('对倒拉抬把价格推上去，散布谣言把价格压下来，两者都留痕', () => {
+    const idle = day1('long').market.last;
+    const wash = day1('long', 'wash');
+    const veto = day1('short', 'fake-veto');
+    expect(wash.market.last).toBeGreaterThan(idle + 5);
+    expect(veto.market.last).toBeLessThan(idle - 5);
+    expect(wash.heat).toBeGreaterThan(0);
+    expect(veto.intel.some((i) => i.chain?.some((c) => c.altered && c.who === '你'))).toBe(true);
+  });
+
+  it('借壳分仓：空方的持仓限额变成 400 万口，越过“绝不违规”的底线', () => {
+    const g = new Game(S327, 's', 'short', 'no-violation');
+    g.act({ type: 'card', id: 'split' });
+    expect(g.market.ex.limitOf(g.player)).toBe(4_000_000);
+    expect(g.linesCrossed).toBe(1);
+  });
+
+  it('多方拿到代持证据后举报：申江在尾盘不敢全力砸盘', () => {
+    const g = new Game(S327, 'rep', 'long', 'no-violation');
+    for (let guard = 0; guard < 8000 && !g.ending; guard++) {
+      if (g.phase === 'night') {
+        if ((g.dayIndex === 1 || g.dayIndex === 2) && g.flags[`probed-${g.dayIndex}`] == null) {
+          g.flags[`probed-${g.dayIndex}`] = true;
+          g.act({ type: 'social', verb: 'probe', npc: 'zhou' });
+        }
+        if (g.dayIndex === 3 && !g.flags.repDone) {
+          g.flags.repDone = true;
+          g.act({ type: 'card', id: 'report-split' });
+        }
+        g.act({ type: 'end-night' });
+      } else if (g.decision) g.act({ type: 'decision', id: g.decision.id, choice: g.decision.choices[0].id });
+      else g.tick();
+    }
+    expect(g.intel.some((i) => i.id === 'ev-split')).toBe(true);
+    expect(g.flags.shenReported).toBe(true);
+    expect(g.flags.shenPlan).not.toBe('dump');
   });
 });
 

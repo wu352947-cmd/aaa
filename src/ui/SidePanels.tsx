@@ -87,7 +87,7 @@ export function PositionCard({ game }: { game: Game }) {
 /** 交易所官员的监管台：看得到每家会员的持仓与保证金（这是交易者看不到的） */
 export function MembersCard({ game }: { game: Game }) {
   const ex = game.market.ex;
-  const members = (game.scenario.members ?? []).map((id) => ex.acct(id));
+  const members = (game.scenario.members ?? []).filter((id) => ex.accounts.has(id)).map((id) => ex.acct(id));
   return (
     <div className="card">
       <h4>
@@ -100,9 +100,7 @@ export function MembersCard({ game }: { game: Game }) {
         return (
           <div key={a.id} style={{ marginBottom: 8 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
-              <span>
-                {a.name} <span className="faint">（{a.seat}）</span>
-              </span>
+              <span>{game.scenario.groupName?.(game, a.id) ?? `${a.name}（${a.seat}）`}</span>
               <span className={a.pos > 0 ? 'up' : a.pos < 0 ? 'down' : ''}>{a.pos === 0 ? '空仓' : `${a.pos > 0 ? '多' : '空'} ${qty(Math.abs(a.pos))}`}</span>
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }} className="muted">
@@ -112,7 +110,13 @@ export function MembersCard({ game }: { game: Game }) {
             <div className={cls('bar-track', use > 0.85 && 'danger')}>
               <div style={{ width: `${Math.min(100, use * 100)}%` }} />
             </div>
-            {a.violations > 0 && <div className="danger-box" style={{ marginTop: 4, padding: '2px 8px' }}>违规委托 {a.violations} 笔</div>}
+            {(a.violations > 0 || a.closeOnly) && (
+              <div className="danger-box" style={{ marginTop: 4, padding: '2px 8px' }}>
+                {a.closeOnly ? '只许平仓' : ''}
+                {a.closeOnly && a.violations > 0 ? ' · ' : ''}
+                {a.violations > 0 ? `违规委托 ${a.violations} 笔` : ''}
+              </div>
+            )}
           </div>
         );
       })}
@@ -145,6 +149,29 @@ export function TapeCard({ game }: { game: Game }) {
           </div>
         );
       })}
+    </div>
+  );
+}
+
+/** 各方态度：监管座位要同时应付的人 */
+export function StakeCard({ game }: { game: Game }) {
+  const npcs = [...game.npcs.values()].filter((n) => n.style !== '经验' && n.style !== '消息贩子');
+  return (
+    <div className="card">
+      <h4>
+        <span>各方态度</span>
+      </h4>
+      {npcs.map((n) => (
+        <div key={n.id} className="stake-row" title={`${n.org} · ${n.title}`}>
+          <span>
+            {n.name} <span className="faint">{n.org.replace('中国', '')}</span>
+          </span>
+          <div className="bar-track">
+            <div style={{ width: `${(n.relation + 100) / 2}%`, background: n.relation >= 0 ? 'var(--gold)' : 'var(--up)' }} />
+          </div>
+          <span className="num rel">{n.relation > 0 ? '+' : ''}{n.relation}</span>
+        </div>
+      ))}
     </div>
   );
 }

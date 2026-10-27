@@ -284,7 +284,7 @@ function drawDaily(ctx: CanvasRenderingContext2D, w: number, h: number, g: Game,
   const line = css('--line');
   const muted = css('--muted');
   ctx.clearRect(0, 0, w, h);
-  const days = g.scenario.days;
+  const days = g.scenario.days.filter((d) => d.kind !== 'aftermath');
   const bars: (Bar | null)[] = days.map((_, i) => g.market.dailyBars[i] ?? null);
   if (g.phase === 'trading' && g.market.bars.length) {
     const b = g.market.bars;

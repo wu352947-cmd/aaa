@@ -49,6 +49,8 @@ export interface Account {
   closeOnly?: boolean;
   /** 可借券上限（股）：卖空超过它会被挡下；不设表示不限 */
   borrowLimit?: number;
+  /** 本账户的持仓限额（借壳分仓、监管限仓时与卡组不同）；不设表示按卡组 */
+  limit?: number;
 }
 
 export function newAccount(p: Partial<Account> & Pick<Account, 'id' | 'name' | 'group'>): Account {
@@ -103,6 +105,10 @@ export class Exchange {
     return Math.abs(pos) * this.contractValue(p) * this.deck.marginRate;
   }
 
+  limitOf(a: Account): number {
+    return a.limit ?? this.deck.positionLimit;
+  }
+
   priceBand(): [Fen, Fen] {
     if (this.deck.priceLimit == null) return [1, Number.MAX_SAFE_INTEGER];
     const d = Math.round(this.refClose * this.deck.priceLimit);
@@ -136,12 +142,13 @@ export class Exchange {
       hits.push({ rule: 'no-borrow', owner: a.id, blocked: true, detail: `借不到更多的券：最多只能卖空 ${a.borrowLimit.toLocaleString()} ${UNITS.qty}` });
       return hits;
     }
-    if (Math.abs(newPos) > this.deck.positionLimit) {
+    const limit = this.limitOf(a);
+    if (Math.abs(newPos) > limit) {
       hits.push({
         rule: 'position-limit',
         owner: a.id,
         blocked: !req.overdraw,
-        detail: `成交后持仓 ${Math.abs(newPos).toLocaleString()} ${UNITS.qty}，超过限额 ${this.deck.positionLimit.toLocaleString()} ${UNITS.qty}`,
+        detail: `成交后持仓 ${Math.abs(newPos).toLocaleString()} ${UNITS.qty}，超过限额 ${limit.toLocaleString()} ${UNITS.qty}`,
       });
     }
     const ref = req.type === 'limit' && req.price != null ? req.price : this.last;
@@ -175,7 +182,8 @@ export class Exchange {
       const prot = Math.round(this.last * this.deck.marketProtect);
       limit = req.side === 'buy' ? Math.min(hi, this.last + prot) : Math.max(lo, this.last - prot);
     } else {
-      limit = req.price!;
+      // 停板之外的价位一律成交不了（免检的做市与散户群体也一样）
+      limit = req.side === 'buy' ? Math.min(hi, req.price!) : Math.max(lo, req.price!);
     }
 
     const midBefore = this.book.mid() ?? this.last;
@@ -214,6 +222,12 @@ export class Exchange {
   contribute(group: string, d: number): void {
     if (!d) return;
     this.contributions.set(group, (this.contributions.get(group) ?? 0) + d);
+  }
+
+  /** 把一笔已经发生的成交重新记到双方账上（交易所撤销部分成交后重算账户时用） */
+  rebook(t: Trade): void {
+    this.applyFill(this.acct(t.buyer), 'buy', t.qty, t.price);
+    this.applyFill(this.acct(t.seller), 'sell', t.qty, t.price);
   }
 
   private applyFill(a: Account, side: Side, q: number, p: Fen): void {

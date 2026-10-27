@@ -26,8 +26,7 @@ export const EVENINGS: Evening[] = [
     anchor: 120,
     mood: 0.05,
     intro: [
-      '金鹿酒馆的后屋里生着炉火。几张长桌，一壶啤酒，一块块写着粉笔字的石板。这里就是花商们说的“学院”。',
-      '没有人带着球茎来——球茎还埋在城外的花田里，要到四月开过花才能挖出来。今晚大家买卖的，是一张张“春天交货”的约定。',
+      '金鹿酒馆的后屋，炉火，长桌，写着粉笔字的石板。没有人带着球茎来——今晚买卖的，是“春天交货”的约定。',
     ],
   },
   {
@@ -171,6 +170,32 @@ export const TULIP_NPCS: NpcDef[] = [
 ];
 
 export const HOST = { name: '赫里特', title: '金鹿酒馆老板' };
+
+/** 每个桌边人能拿出来的家底（盾）：亏损超过它就倾家荡产 */
+export const MEANS: Record<string, number> = { jan: 120, pieter: 300, cornelis: 500, maritje: 600, dirck: 1500, hendrick: 80 };
+
+export type CouncilRule = 'forward' | 'option' | 'void';
+
+/** 行会里的其他六位议员（虚构）。pref 是他们对三条规则的天然倾向 */
+export interface Councillor {
+  id: string;
+  name: string;
+  title: string;
+  pref: Record<CouncilRule, number>;
+  /** 他替哪一边说话：收了这一边的礼，他会更信你 */
+  side?: 'grower' | 'speculator';
+  /** 一句话立场 */
+  stance: string;
+}
+
+export const COUNCIL: Councillor[] = [
+  { id: 'meer', name: '范·德·梅尔', title: '大花农', pref: { forward: 3, option: 0, void: -2 }, side: 'grower', stance: '卖出去的花，钱就得收回来。' },
+  { id: 'schaep', name: '斯哈普', title: '放贷人', pref: { forward: 2, option: 1, void: -3 }, side: 'grower', stance: '契约就是契约。今天作废，明天谁还借钱给你？' },
+  { id: 'bloc', name: '布洛克', title: '酒商', pref: { forward: -1, option: 3, void: 0 }, side: 'speculator', stance: '酒馆里的客人要是全破产了，谁来喝酒？' },
+  { id: 'spiegel', name: '斯皮格尔', title: '公证人', pref: { forward: 0, option: 2, void: 0 }, stance: '各让一步，总比打一百场官司强。' },
+  { id: 'goes', name: '胡斯', title: '教会长老', pref: { forward: -1, option: 0, void: 3 }, stance: '赌债不是债。这个冬天本就不该发生。' },
+  { id: 'witt', name: '德·维特', title: '市政官', pref: { forward: 1, option: 1, void: 1 }, stance: '我只看一件事：这座城里会有多少人倾家荡产。' },
+];
 
 export const TULIP_RULES: RuleCardDef[] = [
   {
