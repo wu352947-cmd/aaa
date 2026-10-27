@@ -9,7 +9,9 @@ import { DecisionModal, RuleCardModal, type UiSettings } from './Modals';
 import { Night } from './Night';
 import { OrderTicket } from './OrderTicket';
 import { PlanBook } from './PlanBook';
+import { saveGame } from './save';
 import { OrderBookCard, PositionCard, TapeCard } from './SidePanels';
+import { sound } from './sound';
 
 // 每分钟行情的现实耗时（毫秒）。布局期一天约 40 秒，决战日按分钟慢慢推进。
 const SPEEDS = {
@@ -35,7 +37,8 @@ export function GameScreen({ game, llm, ui, onSettings, onEnd }: { game: Game; l
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [chartMode, setChartMode] = useState<'intraday' | 'daily'>('intraday');
   const [intelSeen, setIntelSeen] = useState(0);
-  const cursor = useRef(0);
+  // 读档恢复的局面不再重播旧事件
+  const cursor = useRef(game.log.length ? game.events.length : 0);
   const toastId = useRef(0);
   const dlg = useDialogues(game, llm);
 
@@ -65,13 +68,55 @@ export function GameScreen({ game, llm, ui, onSettings, onEnd }: { game: Game; l
       }
       if (e.kind === 'pause') {
         toast(e.text, 'danger');
+        if (ui.sound) sound.bell(true);
         stop = true;
         continue;
       }
+      if (ui.sound && (e.kind === 'liquidation' || e.kind === 'phase')) sound.bell(e.kind === 'liquidation');
       toast(e.text, e.kind === 'liquidation' || e.kind === 'margin' ? 'danger' : 'info');
     }
     return stop;
-  }, [game, toast, ui.mentor]);
+  }, [game, toast, ui.mentor, ui.sound]);
+
+  // 自动存档：动作发生、换日或换阶段时写一次；行情推进中每 30 分钟写一次
+  const lastSave = useRef('');
+  useEffect(() => {
+    const key = `${game.log.length}|${game.dayIndex}|${game.phase}|${paused ? game.t : Math.floor(game.t / 30)}`;
+    if (key === lastSave.current) return;
+    lastSave.current = key;
+    saveGame(game);
+  });
+  useEffect(() => {
+    const flush = () => saveGame(game);
+    window.addEventListener('pagehide', flush);
+    return () => window.removeEventListener('pagehide', flush);
+  }, [game]);
+
+  // 声音：浏览器要求先有一次交互
+  useEffect(() => {
+    if (!ui.sound) {
+      sound.stop();
+      return;
+    }
+    const kick = () => sound.start();
+    window.addEventListener('pointerdown', kick);
+    window.addEventListener('keydown', kick);
+    return () => {
+      window.removeEventListener('pointerdown', kick);
+      window.removeEventListener('keydown', kick);
+    };
+  }, [ui.sound]);
+  useEffect(() => () => sound.stop(), []);
+  useEffect(() => {
+    if (!ui.sound) return;
+    const bars = game.market.bars;
+    const trading = game.phase === 'trading' && !paused;
+    const v = trading && bars.length ? bars[bars.length - 1].v / (game.day.vDay / 330) : 0;
+    sound.setCrowd(trading ? Math.min(1, Math.log2(1 + v) / 4) : 0);
+    const eqNow = game.equity();
+    const use = eqNow > 0 ? game.marginNeed() / eqNow : game.player.pos ? 2 : 0;
+    sound.setHeart(game.phase === 'trading' && use > 0.8 ? Math.min(150, 64 + (use - 0.8) * 120) : 0);
+  });
 
   // 时钟
   useEffect(() => {

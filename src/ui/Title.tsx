@@ -1,8 +1,21 @@
 import { useState } from 'react';
 import type { Scenario } from '../engine/game';
 import { cls } from './format';
+import type { SaveData } from './save';
 
-export function Title({ scenario, onStart, onSettings }: { scenario: Scenario; onStart: () => void; onSettings: () => void }) {
+export function Title({
+  scenario,
+  save,
+  onStart,
+  onContinue,
+  onSettings,
+}: {
+  scenario: Scenario;
+  save: SaveData | null;
+  onStart: () => void;
+  onContinue: () => void;
+  onSettings: () => void;
+}) {
   const [archive, setArchive] = useState(false);
   return (
     <div className="title-screen paper">
@@ -19,8 +32,13 @@ export function Title({ scenario, onStart, onSettings }: { scenario: Scenario; o
           </div>
         </div>
         <div className="title-actions">
-          <button className="btn primary" onClick={onStart}>
-            开始
+          {save && (
+            <button className="btn primary" onClick={onContinue} title={`存于 ${new Date(save.savedAt).toLocaleString('zh-CN')}`}>
+              继续：{save.label}
+            </button>
+          )}
+          <button className={cls('btn', !save && 'primary')} onClick={onStart}>
+            {save ? '新的一局' : '开始'}
           </button>
           <button className="btn" onClick={() => setArchive(!archive)}>
             史料馆

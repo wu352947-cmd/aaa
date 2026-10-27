@@ -82,6 +82,7 @@ export interface UiSettings {
   colors: 'cn' | 'us' | 'cb';
   motion: 'full' | 'reduced';
   mentor: boolean;
+  sound: boolean;
 }
 
 export function SettingsModal({
@@ -184,6 +185,10 @@ export function SettingsModal({
         <label className="check">
           <input type="checkbox" checked={ui.mentor} onChange={(e) => setUi({ ...ui, mentor: e.target.checked })} />
           显示老交易员导师的提醒（他也有自己的仓位，建议不一定对）
+        </label>
+        <label className="check">
+          <input type="checkbox" checked={ui.sound} onChange={(e) => setUi({ ...ui, sound: e.target.checked })} />
+          声音：交易大厅的人声随成交量起落，仓位越危险心跳越快，关键时刻响钟
         </label>
         <div className="actions">
           <button className="btn" onClick={onClose}>

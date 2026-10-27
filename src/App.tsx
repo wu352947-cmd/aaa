@@ -6,19 +6,21 @@ import { EndingScreen } from './ui/EndingScreen';
 import { GameScreen } from './ui/GameScreen';
 import { SettingsModal, type UiSettings } from './ui/Modals';
 import { Setup } from './ui/Setup';
+import { clearSave, loadSave, restore, type SaveData } from './ui/save';
 import { Title } from './ui/Title';
 
 type Screen = 'title' | 'setup' | 'game' | 'ending';
 const UI_KEY = 'chouma.ui';
+const UI_DEFAULT: UiSettings = { colors: 'cn', motion: 'full', mentor: true, sound: true };
 
 function loadUi(): UiSettings {
   try {
     const raw = localStorage.getItem(UI_KEY);
-    if (raw) return { colors: 'cn', motion: 'full', mentor: true, ...JSON.parse(raw) };
+    if (raw) return { ...UI_DEFAULT, ...JSON.parse(raw) };
   } catch {
     /* 无法读取本地存储时使用默认值 */
   }
-  return { colors: 'cn', motion: 'full', mentor: true };
+  return { ...UI_DEFAULT };
 }
 
 export default function App() {
@@ -27,6 +29,7 @@ export default function App() {
   const [llm, setLlm] = useState<LlmSettings>(loadLlm);
   const [ui, setUiState] = useState<UiSettings>(loadUi);
   const [settings, setSettings] = useState(false);
+  const [save, setSave] = useState<SaveData | null>(loadSave);
 
   const setUi = (u: UiSettings) => {
     setUiState(u);
@@ -42,7 +45,11 @@ export default function App() {
     document.documentElement.dataset.motion = ui.motion;
   }, [ui]);
 
-  const onEnd = useCallback(() => setScreen('ending'), []);
+  const onEnd = useCallback(() => {
+    clearSave();
+    setSave(null);
+    setScreen('ending');
+  }, []);
 
   // 底线：每越过一次，画面就褪去一点颜色
   const lines = game?.linesCrossed ?? 0;
@@ -50,7 +57,24 @@ export default function App() {
 
   return (
     <div className="app" style={{ filter }}>
-      {screen === 'title' && <Title scenario={S327} onStart={() => setScreen('setup')} onSettings={() => setSettings(true)} />}
+      {screen === 'title' && (
+        <Title
+          scenario={S327}
+          save={save}
+          onStart={() => setScreen('setup')}
+          onContinue={() => {
+            if (!save) return;
+            try {
+              setGame(restore(S327, save));
+              setScreen('game');
+            } catch {
+              clearSave();
+              setSave(null);
+            }
+          }}
+          onSettings={() => setSettings(true)}
+        />
+      )}
       {screen === 'setup' && (
         <Setup
           scenario={S327}
@@ -62,7 +86,16 @@ export default function App() {
         />
       )}
       {screen === 'game' && game && <GameScreen key={game.seed + game.factionId} game={game} llm={llm} ui={ui} onSettings={() => setSettings(true)} onEnd={onEnd} />}
-      {screen === 'ending' && game?.ending && <EndingScreen game={game} onAgain={() => setScreen('setup')} onTitle={() => setScreen('title')} />}
+      {screen === 'ending' && game?.ending && (
+        <EndingScreen
+          game={game}
+          onAgain={() => setScreen('setup')}
+          onTitle={() => {
+            setSave(loadSave());
+            setScreen('title');
+          }}
+        />
+      )}
       {settings && <SettingsModal llm={llm} setLlm={setLlm} ui={ui} setUi={setUi} onClose={() => setSettings(false)} />}
     </div>
   );
