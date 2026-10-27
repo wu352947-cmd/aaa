@@ -73,6 +73,12 @@ const FLAVOR: Record<string, { pre: string[]; post: string[] }> = {
   zhou: { pre: ['侬听我讲，', '老早阿拉在场里，', '小朋友，', ''], post: ['。', '，侬自家想想。', '，晓得伐？'] },
   qian: { pre: ['老板，', '哎呀老板，', ''], post: ['。', '，发财发财。', '，价钱好商量。'] },
   shen: { pre: ['', '我告诉你，', ''], post: ['。', '，这是规律。'] },
+  jan: { pre: ['嘿！', '朋友，', ''], post: ['！', '，明天就不是这个价了！'] },
+  pieter: { pre: ['唉，', '这个嘛，', ''], post: ['。', '，够买好几袋面粉了。'] },
+  cornelis: { pre: ['……', '年轻人，', ''], post: ['。', '，花是不会说谎的。'] },
+  maritje: { pre: ['先生，', '容我想想，', ''], post: ['。', '，万一呢？'] },
+  dirck: { pre: ['哈哈，', '朋友，', ''], post: ['。', '，生意就是生意。'] },
+  hendrick: { pre: ['啊，', '你瞧，', ''], post: ['。', '，这可是春天的金子。'] },
 };
 
 export function templateLine(intent: DialogueIntent, salt = 0): string {

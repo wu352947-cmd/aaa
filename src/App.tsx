@@ -8,8 +8,10 @@ import { SettingsModal, type UiSettings } from './ui/Modals';
 import { Setup } from './ui/Setup';
 import { clearSave, loadSave, restore, type SaveData } from './ui/save';
 import { Title } from './ui/Title';
+import { TulipScreen, TulipSetup } from './ui/TulipScreen';
+import { TulipGame } from './scenarios/tulip/game';
 
-type Screen = 'title' | 'setup' | 'game' | 'ending';
+type Screen = 'title' | 'setup' | 'game' | 'ending' | 'tulip-setup' | 'tulip';
 const UI_KEY = 'chouma.ui';
 const UI_DEFAULT: UiSettings = { colors: 'cn', motion: 'full', mentor: true, sound: true };
 
@@ -30,6 +32,7 @@ export default function App() {
   const [ui, setUiState] = useState<UiSettings>(loadUi);
   const [settings, setSettings] = useState(false);
   const [save, setSave] = useState<SaveData | null>(loadSave);
+  const [tulip, setTulip] = useState<TulipGame | null>(null);
 
   const setUi = (u: UiSettings) => {
     setUiState(u);
@@ -61,7 +64,7 @@ export default function App() {
         <Title
           scenario={S327}
           save={save}
-          onStart={() => setScreen('setup')}
+          onStart={(which) => setScreen(which === 'tulip' ? 'tulip-setup' : 'setup')}
           onContinue={() => {
             if (!save) return;
             try {
@@ -75,6 +78,17 @@ export default function App() {
           onSettings={() => setSettings(true)}
         />
       )}
+      {screen === 'tulip-setup' && (
+        <TulipSetup
+          onBack={() => setScreen('title')}
+          onBegin={(f) => {
+            setTulip(new TulipGame(Math.random().toString(36).slice(2, 8), f));
+            setScreen('tulip');
+            window.scrollTo({ top: 0 });
+          }}
+        />
+      )}
+      {screen === 'tulip' && tulip && <TulipScreen key={tulip.seed} game={tulip} llm={llm} onExit={() => setScreen('title')} onTo327={() => setScreen('setup')} />}
       {screen === 'setup' && (
         <Setup
           scenario={S327}

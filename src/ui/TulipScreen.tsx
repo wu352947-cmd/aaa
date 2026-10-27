@@ -1,0 +1,453 @@
+import { useCallback, useState } from 'react';
+import { speak } from '../llm/director';
+import { ERA_1637_HAARLEM } from '../llm/era';
+import type { LlmSettings } from '../llm/settings';
+import { ANNUAL_WAGE, APRIL_VALUE, EVENINGS, HOST, TULIP_NPCS, TULIP_RULES, TULIP_SOURCES, WINE_MONEY } from '../scenarios/tulip/data';
+import { TulipGame, type Settlement, type TulipFaction } from '../scenarios/tulip/game';
+import { tulipIntent } from '../scenarios/tulip/talk';
+import { cls } from './format';
+import { RuleCardModal } from './Modals';
+
+const fl = (n: number) => `${Math.round(n).toLocaleString()} 盾`;
+const sgn = (n: number) => (n > 0 ? '+' : n < 0 ? '−' : '') + fl(Math.abs(n));
+
+const SEATS: { id: TulipFaction | 'council'; name: string; blurb: string; locked?: string }[] = [
+  { id: 'speculator', name: '酒馆投机客', blurb: '你口袋里只有 100 荷兰盾，手里一个球茎也没有。但在这里，签约不用付钱。' },
+  { id: 'grower', name: '球茎种植者', blurb: '你城外的花田里埋着 6 份“瑞士人”，四月才能挖出来。酒馆里的人愿意现在就出价。' },
+  { id: 'council', name: '行会议员', blurb: '二月底，你要在阿姆斯特丹的会上决定：这些合约还算不算数。', locked: '后续开放' },
+];
+
+interface Bubble {
+  npc: string;
+  text: string;
+  pending?: boolean;
+  source?: 'llm' | 'template';
+}
+
+export function TulipSetup({ onBegin, onBack }: { onBegin: (f: TulipFaction) => void; onBack: () => void }) {
+  const [seat, setSeat] = useState<TulipFaction>('speculator');
+  return (
+    <div className="setup paper tavern-paper">
+      <div className="setup-inner">
+        <div style={{ letterSpacing: '0.3em', fontSize: 12, color: 'var(--ink-soft)' }}>新 手 第 一 课</div>
+        <h2>酒馆里的花</h2>
+        <div className="engraved-rule" />
+        <div className="prologue">
+          <p>1636 年冬天，荷兰哈勒姆。郁金香球茎的价格已经涨了好几个月，买卖它的人却从来没见过自己买的花——球茎埋在地里，要到四月才挖得出来。</p>
+          <p>这一课没有 K 线，也没有交易所。只有一间酒馆、一群人、几块写着粉笔字的石板。你会学到：价格是人谈出来的；一张约定可以比你的口袋大得多；而规则一改，谁赚谁赔就全变了。</p>
+        </div>
+        <div className="section-label">选择你的座位</div>
+        <div className="faction-grid">
+          {SEATS.map((x) => (
+            <button key={x.id} className={cls('faction', seat === x.id && 'selected', x.locked && 'locked')} disabled={!!x.locked} onClick={() => !x.locked && setSeat(x.id as TulipFaction)}>
+              <h3>{x.name}</h3>
+              <p>{x.blurb}</p>
+              {x.locked && <div className="secret">{x.locked}</div>}
+            </button>
+          ))}
+        </div>
+        <div className="setup-footer">
+          <button className="btn" onClick={onBack}>
+            ← 返回
+          </button>
+          <button className="btn primary" onClick={() => onBegin(seat)}>
+            推开金鹿酒馆的门 →
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export function TulipScreen({ game, llm, onExit, onTo327 }: { game: TulipGame; llm: LlmSettings; onExit: () => void; onTo327: () => void }) {
+  const [, setRev] = useState(0);
+  const bump = () => setRev((x) => x + 1);
+  const [bubbles, setBubbles] = useState<Bubble[]>([]);
+  const [offers, setOffers] = useState<Record<string, string>>({});
+  const [card, setCard] = useState<string | null>('forward-intro');
+  const [seen, setSeen] = useState<Set<string>>(new Set());
+
+  const showCard = useCallback(
+    (id: string) => {
+      if (seen.has(id)) return;
+      setSeen((s) => new Set(s).add(id));
+      setCard(id);
+    },
+    [seen],
+  );
+
+  const say = (npcId: string, talk: ReturnType<TulipGame['act']>) => {
+    if (!talk) return;
+    const persona = TULIP_NPCS.find((n) => n.id === npcId)!;
+    const key = Math.random().toString(36).slice(2);
+    setBubbles((b) => [...b.filter((x) => x.npc !== npcId), { npc: npcId, text: key, pending: true }]);
+    speak(llm, persona, ERA_1637_HAARLEM, tulipIntent(game, talk), { salt: game.evening }).then((line) =>
+      setBubbles((b) => b.map((x) => (x.pending && x.text === key ? { npc: npcId, text: line.text, source: line.source } : x))),
+    );
+  };
+
+  const act = (npcId: string, kind: 'accept' | 'counter') => {
+    const before = game.contracts.length;
+    const talk = kind === 'accept' ? game.act({ type: 'accept', npc: npcId }) : game.act({ type: 'counter', npc: npcId, price: Number(offers[npcId]) || 0 });
+    say(npcId, talk);
+    if (game.contracts.length > before) {
+      if (game.contracts.length === 1) showCard('forward');
+      else if (game.contracts.length === 2) showCard('wine-money');
+      if (game.leverage() >= 3) showCard('leverage');
+    }
+    bump();
+  };
+
+  const leave = () => {
+    game.act({ type: 'leave' });
+    setBubbles([]);
+    setOffers({});
+    if (game.phase === 'table' && game.night.kind === 'crash') showCard('counterparty');
+    if (game.phase === 'ruling') showCard('option');
+    bump();
+    window.scrollTo({ top: 0 });
+  };
+
+  const rule = card && card !== 'forward-intro' ? TULIP_RULES.find((r) => r.id === card) : null;
+
+  if (game.phase === 'ending') return <TulipEnding game={game} onExit={onExit} onTo327={onTo327} />;
+  if (game.phase === 'ruling')
+    return (
+      <>
+        <TulipRuling game={game} onNext={() => (game.finish(), bump())} />
+        {rule && <RuleCardModal card={rule} onClose={() => setCard(null)} />}
+      </>
+    );
+
+  const ev = game.night;
+  const paperPnl = game.contracts.reduce((a, c) => a + game.paper(c), 0);
+  const notional = game.contracts.reduce((a, c) => a + c.price, 0);
+
+  return (
+    <div className="tavern">
+      <div className="tavern-inner">
+        <header className="tavern-head">
+          <div>
+            <div className="tavern-date">
+              {ev.date} · {ev.label}
+            </div>
+            <div className="tavern-dots" aria-label={`第 ${game.evening + 1} 夜，共 ${EVENINGS.length} 夜`}>
+              {EVENINGS.map((e, i) => (
+                <i key={e.date} className={cls(i < game.evening && 'past', i === game.evening && 'now', e.kind === 'crash' && 'crash')} title={`${e.date} ${e.label}`} />
+              ))}
+            </div>
+          </div>
+          <div className="tavern-purse">
+            <span>口袋里</span>
+            <b>{fl(game.cash)}</b>
+            {game.faction === 'grower' && <span>花田里还有 {game.bulbs} 份球茎</span>}
+          </div>
+        </header>
+
+        <div className="host">
+          <span className="host-name">
+            {HOST.name}（{HOST.title}）
+          </span>
+          {ev.intro.map((p, i) => (
+            <p key={i}>{p}</p>
+          ))}
+          {game.evening > 0 && ev.kind === 'normal' && game.impact > 0.02 && <p className="host-aside">“托你的福，今晚大家心里的价都高了一截。”——你上次买得多，桌边的人都看在眼里。</p>}
+          {game.evening > 0 && ev.kind === 'normal' && game.impact < -0.02 && <p className="host-aside">“你上回卖了不少，今晚大家都压着价。”</p>}
+        </div>
+
+        <div className="tavern-grid">
+          <section className="table" aria-label="石板">
+            {game.quotes.map((q) => {
+              const n = TULIP_NPCS.find((x) => x.id === q.npc)!;
+              const b = bubbles.find((x) => x.npc === q.npc);
+              return (
+                <div key={q.npc} className={cls('seat', q.done && 'gone')}>
+                  <div className="seat-head">
+                    <span className="avatar">{n.avatar}</span>
+                    <span>
+                      <b>{n.name}</b> <span className="seat-title">{n.title}</span>
+                    </span>
+                  </div>
+                  <div className={cls('slate', q.side)}>
+                    <span className="slate-verb">{q.side === 'buy' ? '想买' : '想卖'}</span>
+                    <span className="slate-price">{q.done ? '——' : `${q.price} 盾`}</span>
+                    <span className="slate-unit">一份 · 春天交货</span>
+                  </div>
+                  {b && <div className={cls('seat-bubble', b.pending && 'typing')}>{b.pending ? '' : b.text}</div>}
+                  {!q.done && (
+                    <div className="seat-actions">
+                      <button className="btn small primary" onClick={() => act(q.npc, 'accept')}>
+                        {q.side === 'buy' ? `卖给他 ${q.price}` : `向他买 ${q.price}`}
+                      </button>
+                      <form
+                        className="haggle"
+                        onSubmit={(e) => {
+                          e.preventDefault();
+                          act(q.npc, 'counter');
+                        }}
+                      >
+                        <input
+                          id={`offer-${q.npc}`}
+                          inputMode="numeric"
+                          placeholder="还价"
+                          aria-label={`向${n.name}还价`}
+                          value={offers[q.npc] ?? ''}
+                          onChange={(e) => setOffers({ ...offers, [q.npc]: e.target.value.replace(/\D/g, '') })}
+                        />
+                        <button className="btn small" disabled={!offers[q.npc]}>
+                          还价
+                        </button>
+                      </form>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </section>
+
+          <aside className="ledger">
+            <h3>你的合约簿</h3>
+            {game.contracts.length === 0 && <p className="ledger-empty">还没有签任何约。点“向他买”或“卖给他”，就是签下一份春天交货的约定。</p>}
+            {game.contracts.map((c) => {
+              const n = TULIP_NPCS.find((x) => x.id === c.npc)!;
+              const p = game.paper(c);
+              return (
+                <div key={c.id} className="ledger-row">
+                  <span>
+                    {c.side === 'buy' ? '向' : '卖给'}
+                    {n.name}
+                    <small>{EVENINGS[c.evening].date.slice(5)}</small>
+                  </span>
+                  <span className="num">{c.price} 盾</span>
+                  <span className={cls('num', p > 0 ? 'gain' : p < 0 ? 'loss' : '')}>{sgn(p)}</span>
+                </div>
+              );
+            })}
+            {game.contracts.length > 0 && (
+              <div className="ledger-sum">
+                <div>
+                  <span>合约总额</span>
+                  <b className="num">{fl(notional)}</b>
+                </div>
+                <div title="按今晚大家心里的价算。这只是纸面上的数字：春天之前，没有人真的付过钱。">
+                  <span>纸面盈亏</span>
+                  <b className={cls('num', paperPnl > 0 ? 'gain' : paperPnl < 0 ? 'loss' : '')}>{sgn(paperPnl)}</b>
+                </div>
+                <div>
+                  <span>相当于手艺人的工钱</span>
+                  <b className="num">{(notional / ANNUAL_WAGE).toFixed(1)} 年</b>
+                </div>
+              </div>
+            )}
+            <h3 style={{ marginTop: 18 }}>前几晚的成交</h3>
+            <ul className="prints">
+              {game.prints.slice(0, game.evening).map((ps, i) => (
+                <li key={i}>
+                  <span>{EVENINGS[i].date.slice(5)}</span>
+                  <span className="num">{ps.length ? `${Math.round(ps.reduce((a, b) => a + b, 0) / ps.length)} 盾（${ps.length} 笔）` : '你没有成交'}</span>
+                </li>
+              ))}
+              {game.evening === 0 && <li className="ledger-empty">今晚是第一夜。</li>}
+            </ul>
+            <p className="ledger-note">每成交一份，买方付给卖方 {WINE_MONEY} 盾酒钱。除此之外，春天之前谁都不用付钱。</p>
+          </aside>
+        </div>
+
+        <div className="tavern-foot">
+          <span>每个人今晚只跟你成交一次；还价两次谈不拢，他就不理你了。</span>
+          <button className="btn primary" onClick={leave}>
+            {game.evening >= EVENINGS.length - 1 ? '离开酒馆，等二月底的消息 →' : '离开酒馆，等下一个夜晚 →'}
+          </button>
+        </div>
+      </div>
+      {card === 'forward-intro' && (
+        <div className="overlay" onClick={() => setCard(null)}>
+          <div className="rule-card paper" onClick={(e) => e.stopPropagation()}>
+            <div className="kicker">怎 么 玩</div>
+            <h3>在石板上谈价钱</h3>
+            <div className="plain">每个人的石板上写着他想买或想卖的价。你可以直接成交，也可以写一个数字还价。他心里有一个不说出口的底价：够到了就成交，够不到他会让一半。</div>
+            <div className="why">你买得多，下一晚大家心里的价就会被你抬高一点——市场是人组成的，你也是其中一个。</div>
+            <div className="actions" style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 12 }}>
+              <button className="btn primary" onClick={() => setCard(null)}>
+                坐下
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {rule && <RuleCardModal card={rule} detail={rule.id === 'leverage' ? `合约总额 ${fl(notional)}，口袋里 ${fl(game.cash)}` : undefined} onClose={() => setCard(null)} />}
+    </div>
+  );
+}
+
+function SettleTable({ s, title }: { s: Settlement; title: string }) {
+  return (
+    <div className="settle">
+      <h4>{title}</h4>
+      {s.lines.map((l) => (
+        <div key={l.contract.id} className="settle-row">
+          <span>
+            {l.contract.side === 'buy' ? '买入' : '卖出'} {l.contract.price} 盾
+            <small>{l.note}</small>
+          </span>
+          <span className={cls('num', l.amount > 0 ? 'gain' : l.amount < 0 ? 'loss' : '')}>{sgn(l.amount)}</span>
+        </div>
+      ))}
+      {s.bulbsValue > 0 && (
+        <div className="settle-row">
+          <span>
+            花田里剩下的球茎<small>按四月每份 {APRIL_VALUE} 盾</small>
+          </span>
+          <span className="num">{fl(s.bulbsValue)}</span>
+        </div>
+      )}
+      <div className="settle-total">
+        <span>最后身家</span>
+        <b className={cls('num', s.total < 0 && 'loss')}>{fl(s.total)}</b>
+      </div>
+    </div>
+  );
+}
+
+function TulipRuling({ game, onNext }: { game: TulipGame; onNext: () => void }) {
+  const fwd = game.settle('forward');
+  const opt = game.settle('option');
+  return (
+    <div className="setup paper tavern-paper">
+      <div className="setup-inner">
+        <div style={{ letterSpacing: '0.3em', fontSize: 12, color: 'var(--seal)', fontWeight: 700 }}>1637 年 2 月 24 日 · 阿姆斯特丹</div>
+        <h2>花商行会的决定</h2>
+        <div className="engraved-rule" />
+        <div className="prologue">
+          <p>崩盘之后，城里到处是付不起钱的买家和要不到钱的卖家。各地的花商派代表到阿姆斯特丹开会。</p>
+          <p>会上宣布：去年十一月底以后签下的这些约定，不再当作非履行不可的买卖，而是当作“选择权”——买方只要付合约价的 3.5%，就可以走开。</p>
+        </div>
+        <div className="section-label">同样的合约，换一条规则</div>
+        {game.contracts.length === 0 ? (
+          <p>你一份约都没有签。这条新规则跟你无关——你是这间酒馆里少数能安稳睡觉的人。</p>
+        ) : (
+          <div className="settle-grid">
+            <SettleTable s={fwd} title="如果还按原来的约定（远期）" />
+            <SettleTable s={opt} title="按行会的新规则（期权）" />
+          </div>
+        )}
+        <p style={{ fontSize: 13, color: 'var(--ink-soft)' }}>四月球茎挖出来时，一份“瑞士人”实际只能卖 {APRIL_VALUE} 盾左右（重建）。</p>
+        <div className="setup-footer">
+          <span />
+          <button className="btn primary" onClick={onNext}>
+            看看这个冬天留下了什么 →
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function TulipEnding({ game, onExit, onTo327 }: { game: TulipGame; onExit: () => void; onTo327: () => void }) {
+  const fwd = game.settle('forward');
+  const opt = game.settle('option');
+  const start = game.startWealth;
+  const final = opt.total;
+  const bought = game.contracts.filter((c) => c.side === 'buy').length;
+  const sold = game.contracts.length - bought;
+  const ruleHelped = opt.total - fwd.total;
+  let headline: string;
+  if (game.contracts.length === 0) headline = '一个冬天，一份约也没签';
+  else if (fwd.total < 0 && opt.total >= 0) headline = '一纸裁决，救下一个破产的投机客';
+  else if (ruleHelped < -50) headline = '卖得最高的人，拿到的最少';
+  else if (final > start) headline = '在石板上赚到了真钱';
+  else headline = '交了学费的冬天';
+
+  const lessons = [
+    {
+      q: '价格为什么动？',
+      a: game.prints.flat().length
+        ? `因为桌边的人愿意出更高的价。你一共成交 ${game.prints.flat().length} 笔，你买得多的晚上，下一晚大家心里的价就被你抬高了。崩盘那一晚，价格跌下来不是因为花变差了，而是因为买家没有来。`
+        : '因为桌边的人愿意出更高的价——直到二月三日那一晚，买家没有来。花还是那些花，变的是人。',
+    },
+    {
+      q: '谁赚了谁的钱？',
+      a:
+        game.contracts.length === 0
+          ? '你没有下场。赚到钱的，是在最高处卖出、又碰巧遇到守信买家的人；赔钱的，是在最高处签约买入的人。'
+          : `你买入 ${bought} 份、卖出 ${sold} 份。按原来的约定，你最后的身家是 ${fl(fwd.total)}；按行会的新规则，是 ${fl(opt.total)}。`,
+    },
+    {
+      q: '规则在哪里保护或伤害了你？',
+      a:
+        ruleHelped > 0
+          ? `行会把远期改成期权，替你挡下了 ${fl(ruleHelped)} 的损失——这笔损失落到了卖给你的人头上。`
+          : ruleHelped < 0
+            ? `行会把远期改成期权，让你少拿了 ${fl(-ruleHelped)}——买方付 3.5% 就走了，剩下的损失落到了你头上。`
+            : '这条新规则对你没有影响。但对许多人来说，它决定了是倾家荡产还是安然无恙。',
+    },
+  ];
+
+  return (
+    <div className="ending" style={{ background: '#1b130d' }}>
+      <div className="ending-inner">
+        <div className="front-page paper tavern-paper">
+          <div className="masthead">
+            <div className="name" style={{ fontSize: 26, letterSpacing: '0.15em' }}>真嘴与贪财的对话</div>
+            <div className="meta">
+              <span>仿 1637 年流行的对话体小册子</span>
+              <span>哈勒姆</span>
+            </div>
+          </div>
+          <div className="headline">{headline}</div>
+          <div className="subhead">
+            开局身家 {fl(start)} → 最后身家 {fl(final)}
+            {final < 0 ? `（欠下相当于 ${(-final / ANNUAL_WAGE).toFixed(1)} 年工钱的债）` : ''}
+          </div>
+          <div className="engraved-rule" />
+          <div className="front-grid">
+            <div>
+              <h4>这一课的三个问题</h4>
+              {lessons.map((l) => (
+                <div key={l.q} style={{ marginBottom: 12 }}>
+                  <b style={{ fontFamily: 'var(--serif)' }}>{l.q}</b>
+                  <p style={{ textIndent: 0, margin: '4px 0 0' }}>{l.a}</p>
+                </div>
+              ))}
+            </div>
+            <div className="history-col">
+              <h4>历史上的这个冬天</h4>
+              <p style={{ fontSize: 14 }}>1636 年冬天，荷兰各城的酒馆里，郁金香球茎以“春天交货”的约定反复转手，价格在几个月里涨了许多倍。</p>
+              <p style={{ fontSize: 14 }}>1637 年 2 月 3 日，哈勒姆的买家突然不再出价，市场随之崩落。</p>
+              <p style={{ fontSize: 14 }}>2 月 24 日，花商行会宣布把这些远期约定改作期权：买方付合约价的 3.5% 即可解约。有经济学家认为，正是这种预期让此前的价格显得疯狂——买方以为自己最多只赔 3.5%。</p>
+            </div>
+          </div>
+        </div>
+        <div className="sources" style={{ marginTop: 18 }}>
+          {TULIP_SOURCES.map((s) => (
+            <div key={s.id} className="source-card paper">
+              <h5>{s.title}</h5>
+              <div>{s.body}</div>
+              <div style={{ marginTop: 8, fontSize: 12 }}>
+                出处：
+                {s.url ? (
+                  <a href={s.url} target="_blank" rel="noreferrer">
+                    {s.cite}
+                  </a>
+                ) : (
+                  s.cite
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+        <div style={{ display: 'flex', gap: 10, justifyContent: 'center', marginTop: 28, flexWrap: 'wrap' }}>
+          <button className="btn" onClick={onExit}>
+            回到标题
+          </button>
+          <button className="btn primary" onClick={onTo327}>
+            下一课：327 · 最后八分钟 →
+          </button>
+        </div>
+        <p className="faint" style={{ textAlign: 'center', fontSize: 12, marginTop: 18 }}>
+          游戏不构成投资建议。真实市场的风险远比游戏复杂。
+        </p>
+      </div>
+    </div>
+  );
+}
