@@ -20,6 +20,7 @@
   --serif: 'Noto Serif SC', 'Source Han Serif SC', 'Songti SC', serif;
   --sans: 'Noto Sans SC', 'Source Han Sans SC', 'PingFang SC', 'Microsoft YaHei', sans-serif;
   --mono: 'JetBrains Mono', 'SFMono-Regular', Menlo, Consolas, monospace;
+  color-scheme: dark;
 }
 :root[data-colors='cb'] {
   --up: #3b82f6;
@@ -610,6 +611,7 @@ textarea {
 }
 .actionbar {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
   padding: 10px 14px;
   border-top: 1px solid var(--line);
@@ -1326,4 +1328,40 @@ textarea {
 .scroll-note {
   font-size: 12px;
   color: var(--muted);
+}
+
+@media (max-width: 640px) {
+  .core-btn {
+    min-width: 0;
+    flex: 1 1 30%;
+    padding: 8px 10px;
+    font-size: 14px;
+  }
+  .core-btn .kbd,
+  .actionbar > .muted {
+    display: none;
+  }
+  .meters {
+    margin-left: 0;
+    gap: 12px;
+  }
+  .title-card {
+    padding: 32px 18px;
+  }
+  .title-card h1 {
+    font-size: 52px;
+  }
+  .wf-row {
+    grid-template-columns: 96px 1fr 56px;
+  }
+  .verbs {
+    grid-template-columns: repeat(3, 1fr);
+  }
+  .front-page,
+  .newspaper {
+    padding: 18px 16px;
+  }
+  .headline {
+    font-size: 24px;
+  }
 }
