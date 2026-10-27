@@ -16,7 +16,7 @@ const sgn = (n: number) => (n > 0 ? '+' : n < 0 ? '−' : '') + fl(Math.abs(n));
 const SEATS: { id: TulipFaction | 'council'; name: string; blurb: string; locked?: string }[] = [
   { id: 'speculator', name: '酒馆投机客', blurb: '你口袋里只有 100 荷兰盾，手里一个球茎也没有。但在这里，签约不用付钱。' },
   { id: 'grower', name: '球茎种植者', blurb: '你城外的花田里埋着 6 份“瑞士人”，四月才能挖出来。酒馆里的人愿意现在就出价。' },
-  { id: 'council', name: '行会议员', blurb: '你不下场。每晚两点影响力：贴告示、定规矩、收税、游说议员——二月底，七位议员投票决定这些约定算不算数。' },
+  { id: 'council', name: '行会议员', blurb: '你不下场，但你手里有权力。七个夜晚，酒馆里的人一份份签下约定；你每晚有两点影响力，可以贴告示、定规矩、收印花钱、登门游说其他议员。二月底，七位议员在阿姆斯特丹的会上投票决定：这些约定还算不算数。' },
 ];
 
 interface Bubble {
@@ -35,7 +35,8 @@ export function TulipSetup({ onBegin, onBack }: { onBegin: (f: TulipFaction) => 
         <h2>酒馆里的花</h2>
         <div className="engraved-rule" />
         <div className="prologue">
-          <p>1636 年冬，哈勒姆。球茎埋在地里，四月才挖得出来；酒馆里买卖的，是一张张“春天交货”的约定。</p>
+          <p>1636 年冬天，荷兰哈勒姆。郁金香球茎的价格已经涨了好几个月，买卖它的人却从来没见过自己买的花——球茎埋在地里，要到四月才挖得出来。</p>
+          <p>这一课没有 K 线，也没有交易所。只有一间酒馆、一群人、几块写着粉笔字的石板。你会学到：价格是人谈出来的；一张约定可以比你的口袋大得多；而规则一改，谁赚谁赔就全变了。</p>
         </div>
         <div className="section-label">选择你的座位</div>
         <div className="faction-grid">
@@ -307,7 +308,7 @@ export function TulipScreen({ game, llm, onExit, onTo327 }: { game: TulipGame; l
         )}
 
         <div className="tavern-foot">
-          <span>{council ? '桌边的人彼此出价，谈得拢就签。' : '每人今晚只跟你成交一次；还价两次谈不拢，他就不理你了。'}</span>
+          <span>{council ? '你在角落里记账。桌边的人彼此出价，谈得拢就签。' : '每个人今晚只跟你成交一次；还价两次谈不拢，他就不理你了。'}</span>
           <button className="btn primary" onClick={leave}>
             {game.evening >= EVENINGS.length - 1 ? '离开酒馆，等二月底的消息 →' : '离开酒馆，等下一个夜晚 →'}
           </button>

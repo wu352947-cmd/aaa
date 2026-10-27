@@ -151,12 +151,12 @@ export const GME: Scenario = {
         g.decision = {
           id: 'nscc',
           title: '凌晨五点，清算所来电',
-          body: `清算所要你开盘前缴足 ${fmtYi(req)} 押金。你账上 ${fmtYi(cap)}${gap > 0 ? `，缺 ${fmtYi(gap)}` : '，够了'}。`,
+          body: `客户这几天买的股票要到 T+2 才交收。清算所按这只股票的波动重新计算了你的风险押金：今天开盘前要缴足 ${fmtYi(req)}。你的账上有 ${fmtYi(cap)}${gap > 0 ? `，还缺 ${fmtYi(gap)}` : '——够了'}。`,
           choices: [
             ...(gap <= 0 ? [{ id: 'open', label: '照常开放', detail: '押金已经够了。你前几天做的准备，换来了今天的从容。' }] : []),
             ...(gap > 0 && gap <= 1_500_000_000 ? [{ id: 'cap', label: '限购：每位客户最多再买几股', detail: '押金要求降 15 亿美元，够了。客户能买，但买不多。' }] : []),
-            { id: 'restrict', label: '限制买入：客户只能卖出', detail: '押金要求大幅下降，公司能活下来。客户会愤怒。' },
-            ...(gap > 0 ? [{ id: 'raise', label: `连夜融资 ${fmtYi(gap)}，保持开放`, detail: '股东被稀释，但客户想买就能买。' }] : []),
+            { id: 'restrict', label: '限制买入：客户只能卖出', detail: '押金要求会大幅下降，公司能活下来。客户会愤怒。' },
+            ...(gap > 0 ? [{ id: 'raise', label: `连夜融资 ${fmtYi(gap)}，保持开放`, detail: '股东权益被稀释，但客户想买就能买。' }] : []),
             { id: 'nothing', label: '什么都不做', detail: '赌清算所会通融。' },
           ],
         };

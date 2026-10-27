@@ -25,8 +25,9 @@ export function Setup({ scenario, onBegin, onBack }: { scenario: Scenario; onBeg
         <div className="section-label">当年的规则</div>
         <div className="rule-strip">
           {cards.map((c) => (
-            <div key={c.id} className="rule-mini" title={`${c.plain}\n\n${c.why}`}>
+            <div key={c.id} className="rule-mini" title={c.why}>
               <b>{c.title}</b>
+              <div>{c.plain}</div>
             </div>
           ))}
         </div>
@@ -44,13 +45,12 @@ export function Setup({ scenario, onBegin, onBack }: { scenario: Scenario; onBeg
         </div>
 
         <div className="section-label">给自己定一条底线</div>
+        <p style={{ marginTop: -4, fontSize: 13, color: 'var(--ink-soft)' }}>越过它不会扣分，但会改变画面的颜色和结局的文字。</p>
         <div className="principles">
           {scenario.principles.map((p) => (
             <button key={p.id} className={cls('principle', principle === p.id && 'selected')} onClick={() => setPrinciple(p.id)}>
               <b style={{ fontFamily: 'var(--serif)' }}>{p.label}</b>
-              <div style={{ fontSize: 12 }} title="越过它不会扣分，但会改变画面的颜色和结局的文字。">
-                {p.desc}
-              </div>
+              <div style={{ fontSize: 12 }}>{p.desc}</div>
             </button>
           ))}
         </div>
@@ -62,7 +62,7 @@ export function Setup({ scenario, onBegin, onBack }: { scenario: Scenario; onBeg
           <span style={{ fontSize: 12, color: 'var(--ink-soft)' }}>
             随机种子{' '}
             <input value={seed} onChange={(e) => setSeed(e.target.value)} style={{ width: 90, background: 'transparent', border: '1px solid var(--ink-soft)', padding: '2px 6px' }} />
-
+            （同一种子 + 同样的操作 = 同一局）
           </span>
           <button className="btn primary" onClick={() => onBegin(faction, principle, seed || 'chouma')}>
             以「{f.name}」入场 →

@@ -275,8 +275,8 @@ export const S327: Scenario = {
         m.sentiment = Math.min(1, m.sentiment + 0.5);
       }
     }
-    if (d === 0) mentor(g, '327 每口面值 2 万元，价格动 1 元，每口赚赔 200 元。没有涨跌停——侬要当心。');
-    if (d === BATTLE) mentor(g, '今朝是 23 号。消息市里头，最先动的那个席位就是答案。盯牢逐笔。');
+    if (d === 0) mentor(g, '327 合约每口面值 2 万元，价格涨 1 元，每口赚赔 200 元。期货可以当天买卖，没有涨跌停——侬要当心。');
+    if (d === BATTLE) mentor(g, '今朝是 23 号。阿拉老早讲过，消息市里头，最先动的那个席位就是答案。盯牢逐笔。');
   },
 
   onTick(g) {
@@ -295,9 +295,9 @@ export const S327: Scenario = {
     g.pending.push(...followOrders(g));
 
     // 布局期的消息节点
-    if (d === 1 && t === mi('10:30')) news(g, 'vol', '国债期货成交连创新高', '327 持仓量突破历史纪录。', 0.95);
+    if (d === 1 && t === mi('10:30')) news(g, 'vol', '国债期货成交连创新高', '327 合约持仓量突破历史纪录，多空双方都在加码。', 0.95);
     if (d === 2 && t === mi('14:00')) rumor(g, 'mof-visit', '财政部的人这两天在开会', '大户室里有人说，财政部正在研究 327 的贴息方案。', '大户室传言', 0.6);
-    if (d === 3 && t === mi('11:00')) news(g, 'cpi', '通胀仍处高位，保值贴补率居高不下', '到期国债的实际兑付价可能高于票面本息。', 0.9);
+    if (d === 3 && t === mi('11:00')) news(g, 'cpi', '通胀仍处高位，保值贴补率居高不下', '市场普遍预期，到期国债的实际兑付价将高于票面本息。', 0.9);
 
     if (!g.isBattleDay) return;
 
@@ -307,16 +307,16 @@ export const S327: Scenario = {
       g.decision = {
         id: 'insider-add',
         title: '消息还没公开',
-        body: '贴息方案已经定了，上午就会传开。现在加仓，就是利用未公开信息交易。',
+        body: '你从内部渠道得知：贴息方案已经定了，今天上午就会传开。现在加仓，等于抢在所有人前面——也等于利用未公开信息交易。',
         choices: [
-          { id: 'hold', label: '按兵不动', detail: '等消息公开。' },
-          { id: 'add', label: '抢先加仓 60 万口', detail: '内幕交易：交易记录可被追溯。', danger: true },
+          { id: 'hold', label: '按兵不动', detail: '等消息公开后再行动。' },
+          { id: 'add', label: '抢先加仓 60 万口', detail: '内幕交易嫌疑：交易记录可被追溯。', danger: true },
         ],
         countdown: 25,
       };
     }
     if (t === n0 && !flag(g, 'mofPublic')) {
-      rumor(g, 'mof-rumor', '财政部将提高 327 国债兑付价', '消息从几个大户室同时传出来：327 要贴息。', '场内', 0.9);
+      rumor(g, 'mof-rumor', '财政部将提高 327 国债兑付价', '消息从几个大户室同时传出来：327 要贴息，兑付价远高于 132 元。', '场内', 0.9);
       m.sentiment = Math.min(1, m.sentiment + 0.5);
       g.push({ kind: 'pause', text: '消息传开了。' });
     }
@@ -329,11 +329,11 @@ export const S327: Scenario = {
       g.decision = {
         id: 'ally-flip',
         title: '风向变了',
-        body: `327 要贴息。你还有 ${wan(-Math.min(0, g.player.pos))} 空单，锁仓协议没到期。谁先动，谁拿走最多。`,
+        body: `消息传开了：327 要贴息。你手里还有 ${wan(-Math.min(0, g.player.pos))} 空单，和申江证券的锁仓协议还没到期。谁先动，谁就拿走最多。`,
         choices: [
-          { id: 'hold', label: '守约：继续锁仓', detail: '赌消息不会兑现。' },
-          { id: 'flip', label: '空翻多：两分钟内买入 240 万口', detail: '撕毁锁仓协议。', danger: true },
-          { id: 'cover', label: '只平空：买入 80 万口', detail: '抽身离场。同样算撕毁协议。' },
+          { id: 'hold', label: '守约：继续锁仓', detail: '和申江证券站在一起，赌消息不会兑现。' },
+          { id: 'flip', label: '空翻多：两分钟内买入 240 万口', detail: '平掉空单再做多 160 万口。撕毁锁仓协议。', danger: true },
+          { id: 'cover', label: '只平空：买入 80 万口', detail: '抽身离场，不做多。同样算撕毁协议。' },
         ],
         countdown: 25,
       };
@@ -343,11 +343,13 @@ export const S327: Scenario = {
       g.decision = {
         id: 'after-flip',
         title: flipped ? '盟友倒戈' : '价格在涨',
-        body: `价格 ${p2(m.last)} 元。权益 ${fmtYi(g.equity())}，需要保证金 ${fmtYi(g.marginNeed())}。`,
+        body: flipped
+          ? `辽北发展空翻多，价格已到 ${p2(m.last)} 元。你的权益还剩 ${fmtYi(g.equity())}，需要保证金 ${fmtYi(g.marginNeed())}。`
+          : `消息推着价格涨到 ${p2(m.last)} 元。你的权益还剩 ${fmtYi(g.equity())}。`,
         choices: [
           { id: 'hold', label: '扛住不动', detail: '赌消息不会兑现。' },
-          { id: 'cut-half', label: '止损：平掉一半空单', detail: '10 分钟内分批买入。' },
-          { id: 'press', label: '加空打压', detail: '超出限额与保证金的违规下单。', danger: true },
+          { id: 'cut-half', label: '止损：平掉一半空单', detail: '在 10 分钟内分批买入平仓。' },
+          { id: 'press', label: '加空打压', detail: '超出持仓限额与保证金的违规下单。', danger: true },
         ],
         countdown: 30,
       };
@@ -356,11 +358,11 @@ export const S327: Scenario = {
       g.decision = {
         id: 'last-eight',
         title: '还剩十五分钟',
-        body: `价格 ${p2(m.last)} 元，权益 ${fmtYi(g.equity())}，空单 ${wan(-g.player.pos)}。保证金早已不够。`,
+        body: `价格 ${p2(m.last)} 元。按这个价收盘，你的权益是 ${fmtYi(g.equity())}，空单 ${wan(-g.player.pos)}。账上的保证金早已不够。`,
         choices: [
-          { id: 'hold', label: '扛到收盘', detail: '什么都不做。' },
+          { id: 'hold', label: '扛到收盘', detail: '什么都不做，等交割。' },
           { id: 'cover', label: '认赔：平掉全部空单', detail: '保住公司，接受巨亏。' },
-          { id: 'dump', label: '最后八分钟：超额透支砸盘', detail: '16:22 起抛出 1040 万口。严重违规，可被追溯。', danger: true },
+          { id: 'dump', label: '最后八分钟：超额透支砸盘', detail: '16:22 起 8 分钟内抛出 1040 万口。严重违规，交易记录可被追溯。', danger: true },
         ],
         countdown: 30,
       };
@@ -371,10 +373,10 @@ export const S327: Scenario = {
         g.decision = {
           id: 'defend',
           title: '空方砸盘',
-          body: `席位 011 在不计成本地抛售，价格 ${p2(m.last)} 元。`,
+          body: `席位 011 正在不计成本地抛售，价格已跌到 ${p2(m.last)} 元。你的多单正在快速缩水。`,
           choices: [
             { id: 'wait', label: '不动', detail: '赌交易所会出手。' },
-            { id: 'defend', label: '护盘：买到持仓限额', detail: '5 分钟内买入。' },
+            { id: 'defend', label: '护盘：用剩余额度买入', detail: '在 5 分钟内买入至持仓限额。' },
             { id: 'cut', label: '平仓锁利', detail: '卖出全部多单。' },
           ],
           countdown: 20,
@@ -403,7 +405,7 @@ export const S327: Scenario = {
       g.decision = {
         id: 'buy-dip',
         title: '暴跌',
-        body: `五分钟内从 151 元跌到 ${p2(m.last)} 元。有人在喊“抄底”。`,
+        body: `五分钟内价格从 151 元跌到 ${p2(m.last)} 元。大户室里一片尖叫。有人在喊“抄底”。`,
         choices: [
           { id: 'wait', label: '观望', detail: '看不懂，不碰。' },
           { id: 'buy', label: '抄底买入', detail: '用全部可用保证金买入。' },
@@ -498,11 +500,11 @@ export const S327: Scenario = {
       facts: [`收盘价 ${p2(rc.close)} 元`, `较前一日${change >= 0 ? '上涨' : '下跌'} ${p2(Math.abs(change))} 元`],
     });
 
-    if (d === 0) rumor(g, 'tiexi-1', '财政部可能对 327 贴息', '钱有福压低声音：“老板，327 要贴息，消息是从北京来的。”', '钱有福', 0.7);
-    if (d === 1) mentor(g, '逐笔里的大单都带着席位号。哪家席位是哪家公司，场内的老人都晓得。想知道，来问我。');
+    if (d === 0) rumor(g, 'tiexi-1', '听说财政部可能对 327 贴息', '钱有福在大户室里压低声音：“老板，327 要贴息，消息是从北京来的。”', '钱有福', 0.7);
+    if (d === 1) mentor(g, '逐笔里那些大单都带着席位号。102、217、011……哪家席位是哪家公司，场内的老人都晓得。想知道，来问我。');
     if (d === 2) {
-      news(g, 'su-article', '《沪上财经报》：327 多空分歧加大', '空方测算兑付价约 132 元，多方押注贴息。', 0.85);
-      rumor(g, 'zc-visit', '某多方机构最近常去财政部门', '有人看到中财信托的人进出财政部门。', '大户室传言', 0.8);
+      news(g, 'su-article', '《沪上财经报》：327 多空分歧加大', '空方测算到期兑付价约 132 元，多方则押注财政部贴息。报道援引“接近多方人士”称，“政策面的变化值得关注”。', 0.85);
+      rumor(g, 'zc-visit', '某多方机构最近常去财政部门', '有人看到中财信托的人进出财政部门的办公楼。', '大户室传言', 0.8);
     }
     if (d === 3 || d === 4) decideFlip(g);
     // 被你背叛过的人会故意放假消息钓你
@@ -511,13 +513,13 @@ export const S327: Scenario = {
       rumor(g, 'gao-bait', '贴息方案被财政部否了', '钱有福一进门就嚷：“老板，贴息黄了！327 要跌回去！”', '钱有福', 0.05);
     }
     if (d === 3 && g.factionId === 'ally') {
-      rumor(g, 'wei-dinner', '魏国梁请你吃饭：“风向要变了”', '饭桌上魏国梁只说了一句：“高总，锁仓的事，自己的账自己算。”', '魏国梁', 0.9);
+      rumor(g, 'wei-dinner', '魏国梁请你吃饭：“风向要变了”', '饭桌上魏国梁只说了一句：“高总，锁仓的事，自己的账自己算。”他没提贴息，但也没否认。', '魏国梁', 0.9);
     }
     if (d === 4) {
       if (g.npc('gao') && flag(g, 'gaoFlip') && flag(g, 'seatsKnown') && g.factionId === 'short') {
-        g.addIntel({ id: 'ev-gao', title: '席位 217 在锁仓期内悄悄买入', body: '逐笔里，辽北发展的 217 分几笔买入平空。他准备倒戈了。', source: '你的盘后复核', credibility: 1, kind: 'evidence', against: 'gao' });
+        g.addIntel({ id: 'ev-gao', title: '席位 217 在锁仓期内悄悄买入', body: '今天逐笔里，辽北发展的 217 席位分几笔买入平空。这违反了你们的锁仓协议，也是他准备倒戈的证据。', source: '你的盘后复核', credibility: 1, kind: 'evidence', against: 'gao' });
       }
-      mentor(g, '明朝就是 23 号。消息一出，谁先动谁赢。');
+      mentor(g, '明朝就是 23 号。消息市，消息一出，谁先动谁赢。侬手里的仓位，自己想清爽。');
       if (isOfficial(g) && !flag(g, 'mofPublic')) g.addIntel({ id: 'reg-eve', title: '明天可能出事', body: '申江与关联席位的空单、中财的多单，都在限额边上。贴息消息随时会出来。', source: '交易部值班记录', credibility: 1, kind: 'system' });
     }
   },
@@ -542,7 +544,7 @@ export const S327: Scenario = {
         g.addPlanFromScript({ label: '背叛：抢先平空 40%', cond: 'now', price: 0, side: 'buy', qty: q, spread: 5 });
         return out(true, ['锁仓同盟破裂', '已加入计划书：开盘后 5 分钟内平掉 40% 空单', `${n.name} 关系 -40`], {
           playerMove: '打电话通知对方：锁仓协议作废，我先走一步',
-          convey: ['你这是不讲究', '行，那就各走各的'],
+          convey: ['你这是不讲究', '行，那就各走各的，到时候别怪兄弟不客气'],
           tone: 'hostile',
         });
       }
@@ -826,22 +828,23 @@ function reckon(g: Game): Ending {
       archetype = '流星';
       title = '八分钟无效';
       headline = `最后八分钟交易无效 327 收盘价定为 ${p2(official)} 元`;
-      subhead = '空方巨额透支砸盘被认定违规，公司蒙受巨亏';
+      subhead = '空方巨额透支砸盘被认定违规，公司蒙受巨亏，有关人员被立案调查';
       body.push('你做了历史上那个人做过的事。八分钟里你抛出的每一口都被记录在案，当晚全部作废。');
+      body.push('结果和历史一样：违规没有改变价格，只改变了你的结局。');
       g.heat = 100;
     } else if (g.factionId === 'short') {
       if (Math.abs(p.pos) < SHORT_POS * 0.5 && r > -0.25) {
         id = 'restraint';
         title = '认赔离场';
         headline = '申江证券提前减仓 避过 327 风暴';
-        subhead = '空方主力在消息落地前后减仓离场';
+        subhead = '空方主力在消息落地前后减仓离场，公司元气尚存';
         body.push('你没有赌。认赔很疼，但公司明天还会开门。');
       } else if (Math.abs(p.pos) < SHORT_POS * 0.5) {
         id = 'late-cover';
         title = '断臂求生';
         headline = `申江证券高位认赔 亏损 ${fmtYi(Math.max(0, startEq - eq))}`;
-        subhead = '没有越线，也没能等来转机';
-        body.push('你在最贵的时候认了赔。公司还在，但元气大伤。');
+        subhead = '空方主力在收盘前平掉空单，没有越线，也没能等来转机';
+        body.push('你在最贵的时候认了赔。没有越过任何一条线——公司还在，但元气大伤。');
       } else {
         id = 'held';
         title = '扛到收盘';
@@ -865,7 +868,7 @@ function reckon(g: Game): Ending {
         subhead = '历史在这里拐了一个弯';
         body.push(flag(g, 'shenReported') ? '你递上去的那份证据让申江在尾盘缩了手。' : '这一天的结局和史书上不一样了。');
       }
-      if (flag(g, 'insider')) body.push('但你在消息公开前加仓的记录还在。所有交易都留痕。');
+      if (flag(g, 'insider')) body.push('但你在消息公开前加仓的记录还在。所有交易都留痕——旧账迟早被翻出。');
       archetype = r >= 0.15 ? (clean ? '猎手' : '流星') : clean ? '长青者' : '蛀虫';
     } else if (g.factionId === 'ally') {
       const gain = eq - startEq;
@@ -874,7 +877,7 @@ function reckon(g: Game): Ending {
         title = '倒戈';
         headline = gain >= 0 ? `辽北发展空翻多 一日获利 ${fmtYi(gain)}` : '辽北发展空翻多 未能获利';
         subhead = '锁仓盟友在消息传开时抢先倒戈';
-        body.push('第一个跑，赚得最多。申江到收盘才知道，盟友早就不在了。');
+        body.push('你做了历史上那个人做过的事：第一个跑，赚得最多。申江证券到收盘才知道，盟友早就不在了。');
         if (flag(g, 'fakeLoyal')) body.push('前一晚你还在饭桌上拍胸脯。沈立行不会忘记这顿饭。');
       } else if (flag(g, 'allyCovered')) {
         id = 'ally-cover';
@@ -887,7 +890,7 @@ function reckon(g: Game): Ending {
         title = '守约';
         headline = gain < 0 ? `辽北发展信守锁仓 随空方亏损 ${fmtYi(-gain)}` : '辽北发展信守锁仓';
         subhead = '盟友没有倒戈，那一分钟的暴涨没有到来';
-        body.push('你守住了协议。没有你的那一推，上午的暴涨没那么猛——你改变了历史，也付出了代价。');
+        body.push('你守住了协议。没有你的那一推，上午的暴涨来得没那么猛——你改变了历史，也付出了代价。');
         if (flag(g, 'allyPaid')) body.push('可你收了中财的钱。魏国梁会记得。');
       }
       if (voided && p.pos > 0) body.push('尾盘的砸盘被宣布无效，你的多单按砸盘前的价格结算。');
@@ -897,8 +900,14 @@ function reckon(g: Game): Ending {
       title = r >= 0 ? '活下来了' : '交了学费';
       headline = voided && flag(g, 'boughtDip') ? '散户：我的单子被取消了' : r >= 0 ? '大户室里的幸存者' : '327 风暴中的小散';
       subhead = voided ? '交易所宣布违规时段的交易无效，期间所有成交一并作废' : '';
-      if (voided && flag(g, 'boughtDip')) body.push('你抄的底被交易所一笔勾销。违规者受罚的同时，那几分钟里成交的人也一起被抹掉了。');
-      body.push(Math.abs(r) < 0.001 ? '你一口也没有交易，原样带着八万块离开了大户室。' : r > 0 ? '你带着比来时多一点的钱离开了大户室。' : '你带着比来时少的钱离开了大户室。');
+      if (voided && flag(g, 'boughtDip')) body.push('你抄的底，被交易所一笔勾销。违规者受罚的同时，所有在那几分钟里成交的人也一起被抹掉了。');
+      body.push(
+        Math.abs(r) < 0.001
+          ? '你一口也没有交易，原样带着八万块离开了大户室。至少你亲眼看见了这场仗是怎么打的。'
+          : r > 0
+            ? '你带着比来时多一点的钱离开了大户室。'
+            : '你带着比来时少的钱离开了大户室。至少你看懂了这场仗是怎么打的。',
+      );
       archetype = r >= 0.15 ? (clean ? '猎手' : '流星') : clean ? '长青者' : '蛀虫';
     }
     // 余波里的选择
@@ -926,7 +935,7 @@ function reckon(g: Game): Ending {
   if (g.linesCrossed > 0) body.push(`你越过了自己定下的底线「${g.principle.label}」${g.linesCrossed} 次。`);
 
   const history = [
-    '1995 年 2 月 23 日上午，市场传出财政部将提高 327 国债兑付价的消息。空方盟友辽国发空翻多，价格一分钟内上涨 2 元。',
+    '1995 年 2 月 23 日上午，市场传出财政部将提高 327 国债兑付价的消息。空方盟友辽国发空翻多，价格一分钟内上涨 2 元，十分钟内上涨 3.77 元。',
     '16:22 之后，空方主力在最后八分钟内抛出 1056 万口卖单，把价格从 151.30 元砸到 147.40 元。',
     '当晚上交所宣布 16:22:13 之后的交易无效，327 合约当日收盘价为 151.30 元。同年 5 月 17 日，中国证监会暂停国债期货交易试点。',
   ];
@@ -1067,15 +1076,15 @@ export function groupName(g: Game, who: string): string {
 function briefing(g: Game): string {
   switch (g.factionId) {
     case 'short':
-      return '空单 220 万口，均价 147.90 元。与辽北发展锁仓。限额 300 万口，保证金 2.5%。按 A 打开手段。';
+      return '申江证券持有 327 空单 220 万口，均价 147.90 元。你与辽北发展签有锁仓同盟：交割前任何一方不得平仓。交易所持仓限额 300 万口，保证金 2.5%。你的手段（借壳分仓、放风、协议平仓……）按 A 打开。';
     case 'long':
-      return '多单 150 万口，均价 147.60 元。限额 300 万口，保证金 2.5%。你的消息比市场早——别让人知道。按 A 打开手段。';
+      return '中财信托持有 327 多单 150 万口，均价 147.60 元。持仓限额 300 万口，保证金 2.5%。你的消息比市场早——但不能让人知道。你的手段（拉拢辽北、媒体吹风、对倒……）按 A 打开。';
     case 'ally':
-      return '空单 80 万口，账上 25 亿元。与申江锁仓。按 A 打开手段。';
+      return '辽北发展持有 327 空单 80 万口，均价 148.00 元，账上 25 亿元。你和申江证券签有锁仓同盟：交割前任何一方不得平仓。持仓限额 300 万口。你的手段（悄悄平空、和中财谈条件……）按 A 打开。';
     case 'official':
-      return `你不下单。政治资本 ${st(g).cap} 点，每晚恢复 1 点。H 停市、N 风险提示、M 提保证金、C 只许平仓；收盘后按 A 打开全部手段。`;
+      return `你是上交所交易部的负责人。你不下单，但看得到每家会员的持仓与保证金。你手里有 ${st(g).cap} 点政治资本，每晚恢复 1 点：盘中可以停市（H）、发风险提示（N）、提保证金（M）、限令会员只许平仓（C）；收盘后还能稽查、追保、改规则、请财政部提前公告、召集协议平仓（按 A 打开全部手段）。当晚，你要裁决这一天的成交算不算数。`;
     default:
-      return '8 万元。一口 327 约需 740 元保证金，价格动 1 元，每口赚赔 200 元。';
+      return '你有 8 万元。一口 327 合约要交约 740 元保证金，价格每动 1 元，每口赚赔 200 元。';
   }
 }
 

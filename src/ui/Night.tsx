@@ -65,6 +65,9 @@ export function Recap({ game, dayIdx }: { game: Game; dayIdx?: number }) {
           ))}
         </ul>
       )}
+      <p className="faint" style={{ fontSize: 12, marginBottom: 0 }}>
+        每一笔主动成交都会推动盘口；加总起来就是今天的涨跌。“历史引力”一栏是做市资金把价格拉回真实走势的力量。
+      </p>
     </div>
   );
 }
