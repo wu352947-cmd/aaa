@@ -80,6 +80,8 @@ export interface Intel {
   kind: 'news' | 'rumor' | 'evidence' | 'clue' | 'mentor' | 'system';
   /** 可用于“告发”的证据所指向的 NPC */
   against?: string;
+  /** 消息树：这条消息从源头到你经过的每一环；altered 表示在这一环被改动或编造 */
+  chain?: { who: string; said: string; altered?: boolean }[];
   read?: boolean;
 }
 

@@ -403,6 +403,11 @@ export const S327: Scenario = {
       rumor(g, 'zc-visit', '某多方机构最近常去财政部门', '有人看到中财信托的人进出财政部门的办公楼。', '大户室传言', 0.8);
     }
     if (d === 3 || d === 4) decideFlip(g);
+    // 被你背叛过的人会故意放假消息钓你
+    const lock = g.alliances.find((x) => x.id === 'lock' && x.npc === 'gao' && x.brokenBy === 'player');
+    if (lock && lock.brokenDay != null && lock.brokenDay < d && d < BATTLE) {
+      rumor(g, 'gao-bait', '贴息方案被财政部否了', '钱有福一进门就嚷：“老板，贴息黄了！327 要跌回去！”', '钱有福', 0.05);
+    }
     if (d === 3 && g.factionId === 'ally') {
       rumor(g, 'wei-dinner', '魏国梁请你吃饭：“风向要变了”', '饭桌上魏国梁只说了一句：“高总，锁仓的事，自己的账自己算。”他没提贴息，但也没否认。', '魏国梁', 0.9);
     }
@@ -570,13 +575,46 @@ export const S327: Scenario = {
 
 // ───────────── 辅助：消息、导师、底线 ─────────────
 
+// 消息树：每条消息从源头到玩家经过的每一环，结局时揭晓
+type Chain = NonNullable<Intel['chain']>;
+const CHAINS: Record<string, Chain> = {
+  'tiexi-1': [
+    { who: '财政部', said: '内部讨论是否对到期国债贴息' },
+    { who: '魏国梁（中财信托）', said: '贴息基本定了', altered: true },
+    { who: '钱有福', said: '327 要贴息，消息是从北京来的' },
+  ],
+  'mof-visit': [
+    { who: '财政部', said: '正在研究到期国债的保值贴补与贴息方案' },
+    { who: '中财信托的交易员', said: '上面在开会，327 的事快定了', altered: true },
+    { who: '大户室', said: '财政部正在研究 327 的贴息方案' },
+  ],
+  'su-article': [
+    { who: '苏晓的采访', said: '空方测算兑付价约 132 元，多方押注贴息' },
+    { who: '《沪上财经报》', said: '327 多空分歧加大' },
+  ],
+  'zc-visit': [
+    { who: '苏晓（记者）', said: '看见中财信托的人进出财政部门' },
+    { who: '大户室', said: '某多方机构最近常去财政部门' },
+  ],
+  'wei-dinner': [{ who: '魏国梁', said: '锁仓的事，自己的账自己算' }],
+  'mof-rumor': [
+    { who: '财政部', said: '决定提高 327 国债的兑付价' },
+    { who: '中财信托', said: '消息来了，赶紧吃货' },
+    { who: '几个大户室', said: '327 要贴息，兑付价远高于 132 元' },
+  ],
+  'gao-bait': [
+    { who: '高振宇', said: '放出风声：贴息方案被否了', altered: true },
+    { who: '钱有福', said: '老板，贴息黄了' },
+  ],
+};
+
 function news(g: Game, id: string, title: string, body: string, cred: number) {
   if (g.intel.some((i) => i.id === id)) return;
-  g.addIntel({ id, title, body, source: '《沪上财经报》', credibility: cred, kind: 'news' });
+  g.addIntel({ id, title, body, source: '《沪上财经报》', credibility: cred, kind: 'news', chain: CHAINS[id] });
 }
-function rumor(g: Game, id: string, title: string, body: string, source: string, cred: number) {
+function rumor(g: Game, id: string, title: string, body: string, source: string, cred: number, chain?: Chain) {
   if (g.intel.some((i) => i.id === id)) return;
-  g.addIntel({ id, title: `听说${title.startsWith('听说') ? title.slice(2) : title}`, body, source, credibility: cred, kind: 'rumor' });
+  g.addIntel({ id, title: `听说${title.startsWith('听说') ? title.slice(2) : title}`, body, source, credibility: cred, kind: 'rumor', chain: chain ?? CHAINS[id] });
 }
 function mentor(g: Game, text: string) {
   if (!g.npc('zhou')) return;
@@ -757,6 +795,12 @@ function exchange(g: Game, npcId: string, option: string | undefined, out: Out):
         good ? '钱有福：“老板，这条是北京的朋友亲口讲的，23 号前后就出来。”' : '钱有福：“不急，下个月才公布，老板还有时间。”',
         '钱有福',
         good ? 0.85 : 0.35,
+        good
+          ? [
+              { who: '北京的“朋友”', said: '贴息定了，23 号前后公布' },
+              { who: '钱有福', said: '北京的朋友亲口讲的' },
+            ]
+          : [{ who: '钱有福', said: '下个月才公布——没有任何来源，是他顺口编的', altered: true }],
       );
       g.relate('qian', 5, '你买了他的消息');
       return out(true, ['支付 20 万元', '获得一条传言（真假自辨）'], { playerMove: '花钱买他手里的消息', convey: [good ? '北京那边已经定了，就这几天' : '不急，下个月才公布'], tone: 'smug' });

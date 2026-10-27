@@ -209,3 +209,23 @@ describe('新座位：交易所值班官员', () => {
     expect(new Game(S327, 'x', 'retail', 'no-violation').market.ex.deck.marginRate).toBe(0.025);
   });
 });
+
+describe('消息树', () => {
+  it('结局时每条传言都带着从源头到玩家的传递链，并标出被改动的一环', () => {
+    const g = runIdle('short', 'tree');
+    const tiexi = g.intel.find((i) => i.id === 'tiexi-1')!;
+    expect(tiexi.chain!.length).toBeGreaterThan(1);
+    expect(tiexi.chain!.some((h) => h.altered)).toBe(true);
+  });
+
+  it('背叛过高振宇的空方会收到他放的假消息；守约的不会', () => {
+    const betray = new Game(S327, 'bait', 'short', 'no-violation');
+    while (betray.phase === 'trading') betray.tick();
+    betray.act({ type: 'social', verb: 'betray', npc: 'gao' });
+    const g = replay(S327, 'bait', 'short', 'no-violation', betray.log);
+    const bait = g.intel.find((i) => i.id === 'gao-bait');
+    expect(bait).toBeDefined();
+    expect(bait!.credibility).toBeLessThan(0.2);
+    expect(runIdle('short', 'bait').intel.some((i) => i.id === 'gao-bait')).toBe(false);
+  });
+});

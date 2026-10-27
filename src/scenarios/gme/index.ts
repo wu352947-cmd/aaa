@@ -224,6 +224,7 @@ export const GME: Scenario = {
     if (d === 2) news(g, 'tweet', '一位科技富豪在收盘后发推：“Gamestonk!!”', '盘后交易里，股价应声暴涨。明天开盘会在哪里，没人说得准。', 0.95);
     if (d === 3) {
       if (!isPlayer(g, GW)) rumor(g, 'gw-closed', '传闻灰狼资本已经平掉了空单', '灰狼资本对媒体表示，已经结清了这只股票的空头头寸。论坛上没人相信。', '财经电视', 0.8);
+      if (g.factionId === 'retail') rumor(g, 'si-still', '空头一股都没平，还有 140% 的空单', '论坛置顶帖：“他们说平仓了？看数据！空单还是 140%！”', '投资论坛', 0.2);
       if (g.factionId === 'broker') rumor(g, 'nscc-warn', '清算所风险部门来电', '对方提醒：明早的押金要求可能会“大幅上升”。具体数字，凌晨才会出来。', '清算所', 1);
       mentor(g, '1987 年那次，我们也以为今天就是最疯的一天。');
     }
@@ -341,13 +342,43 @@ export const GME: Scenario = {
 
 // ───────────── 辅助 ─────────────
 
+// 消息树：每条消息从源头到玩家经过的每一环，结局时揭晓
+type Chain = { who: string; said: string; altered?: boolean }[];
+const CHAINS: Record<string, Chain> = {
+  'cat-post': [
+    { who: '老猫', said: '晒出账户截图：“我就是喜欢这只股票”' },
+    { who: '论坛', said: '老猫赚翻了，大家一起上！', altered: true },
+  ],
+  si: [
+    { who: '公布的卖空数据', said: '卖空股数约为流通股的一倍多（两周前的统计）' },
+    { who: '财经电视', said: '空单超过流通股' },
+  ],
+  'si-still': [
+    { who: '两周前的卖空数据', said: '卖空比例约 140%' },
+    { who: '论坛', said: '空头一股都没平，还有 140% 等着我们', altered: true },
+  ],
+  bailout: [
+    { who: '堡垒集团等两家基金', said: '向灰狼资本注资 27.5 亿美元' },
+    { who: '财经电视', said: '空头的子弹又多了' },
+  ],
+  tweet: [
+    { who: '一位科技富豪', said: '“Gamestonk!!”' },
+    { who: '论坛', said: '连他都站在我们这边了', altered: true },
+  ],
+  'gw-closed': [
+    { who: '灰狼资本', said: '已结清这只股票的空头头寸' },
+    { who: '财经电视', said: '灰狼资本已经平仓' },
+    { who: '论坛', said: '他们在撒谎，空头还在里面', altered: true },
+  ],
+};
+
 function news(g: Game, id: string, title: string, body: string, cred: number) {
   if (g.intel.some((i) => i.id === id)) return;
-  g.addIntel({ id, title, body, source: '财经电视', credibility: cred, kind: 'news' });
+  g.addIntel({ id, title, body, source: '财经电视', credibility: cred, kind: 'news', chain: CHAINS[id] });
 }
 function rumor(g: Game, id: string, title: string, body: string, source: string, cred: number) {
   if (g.intel.some((i) => i.id === id)) return;
-  g.addIntel({ id, title, body, source, credibility: cred, kind: 'rumor' });
+  g.addIntel({ id, title, body, source, credibility: cred, kind: 'rumor', chain: CHAINS[id] });
 }
 function mentor(g: Game, text: string) {
   g.addIntel({ id: `bill-${g.dayIndex}-${g.intel.length}`, title: text.slice(0, 22) + (text.length > 22 ? '…' : ''), body: text, source: '比尔', credibility: 0.8, kind: 'mentor' });

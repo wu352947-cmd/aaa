@@ -1,4 +1,4 @@
-import type { Game } from '../engine/game';
+import type { Game, Intel } from '../engine/game';
 import { Chart } from './Chart';
 import { cls } from './format';
 import { Recap } from './Night';
@@ -107,6 +107,8 @@ export function EndingScreen({ game, onAgain, onTitle }: { game: Game; onAgain: 
           <Recap game={game} />
         </div>
 
+        <MessageTree game={game} />
+
         <div className="section-label" style={{ color: 'var(--text)' }}>
           史料卡
         </div>
@@ -141,5 +143,55 @@ export function EndingScreen({ game, onAgain, onTitle }: { game: Game; onAgain: 
         </p>
       </div>
     </div>
+  );
+}
+
+function verdict(i: Intel): [string, string] {
+  if (i.credibility >= 0.8) return ['属实', 'true'];
+  if (i.credibility >= 0.4) return ['半真半假', 'half'];
+  return ['假消息', 'false'];
+}
+
+/** 消息树：你听到的每条消息，从源头到你经过了谁、在哪一环被改动（设计文档 7.4） */
+function MessageTree({ game }: { game: Game }) {
+  const items = game.intel.filter((i) => i.chain?.length).reverse();
+  if (!items.length) return null;
+  return (
+    <>
+      <div className="section-label" style={{ color: 'var(--text)' }}>
+        消息树
+      </div>
+      <p className="muted" style={{ marginTop: -4, fontSize: 13 }}>
+        这些天你听到的每一条消息，现在可以看到它们是从哪里来的、经过了谁、在哪一环被改了样。
+      </p>
+      <div className="mtree">
+        {items.map((i) => {
+          const [label, cls] = verdict(i);
+          return (
+            <div key={i.id} className="mtree-row">
+              <div className="mtree-head">
+                <span className={`mtree-verdict ${cls}`}>{label}</span>
+                <b>{i.title}</b>
+                <span className="faint">
+                  {game.scenario.days[i.day]?.date.slice(5)} {i.time} · 你从「{i.source}」听到
+                </span>
+              </div>
+              <ol className="mtree-chain">
+                {i.chain!.map((h, k) => (
+                  <li key={k} className={h.altered ? 'altered' : ''}>
+                    <span className="mtree-who">{h.who}</span>
+                    <span className="mtree-said">“{h.said}”</span>
+                    {h.altered && <span className="mtree-flag">在这里被改了</span>}
+                  </li>
+                ))}
+                <li className="mtree-you">
+                  <span className="mtree-who">你</span>
+                </li>
+              </ol>
+            </div>
+          );
+        })}
+      </div>
+    </>
   );
 }

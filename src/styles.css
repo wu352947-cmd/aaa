@@ -1690,3 +1690,94 @@ textarea {
   border-color: var(--seal);
   background: rgba(163, 39, 31, 0.05);
 }
+
+/* ───────── 消息树 ───────── */
+.mtree {
+  display: grid;
+  gap: 10px;
+}
+.mtree-row {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px 14px;
+  min-width: 0;
+}
+.mtree-head {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  flex-wrap: wrap;
+  font-size: 14px;
+}
+.mtree-head .faint {
+  font-size: 12px;
+}
+.mtree-verdict {
+  font-size: 11px;
+  padding: 1px 7px;
+  border-radius: 2px;
+  border: 1px solid currentColor;
+  white-space: nowrap;
+}
+.mtree-verdict.true {
+  color: var(--down);
+}
+.mtree-verdict.half {
+  color: var(--warn);
+}
+.mtree-verdict.false {
+  color: var(--up);
+}
+.mtree-chain {
+  list-style: none;
+  padding: 0;
+  margin: 10px 0 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 0;
+  align-items: stretch;
+}
+.mtree-chain li {
+  display: grid;
+  align-content: start;
+  gap: 2px;
+  padding: 6px 10px;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  font-size: 12px;
+  max-width: 260px;
+  min-width: 0;
+}
+.mtree-chain li + li {
+  margin-left: 22px;
+  position: relative;
+}
+.mtree-chain li + li::before {
+  content: '→';
+  position: absolute;
+  left: -17px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--muted);
+}
+.mtree-chain li.altered {
+  border-color: color-mix(in srgb, var(--up) 60%, transparent);
+}
+.mtree-who {
+  font-weight: 600;
+}
+.mtree-said {
+  color: var(--muted);
+}
+.mtree-flag {
+  color: var(--up);
+  font-size: 11px;
+}
+.mtree-chain li.mtree-you {
+  background: var(--paper);
+  color: var(--ink);
+  border-color: var(--gold-dim);
+  align-content: center;
+}
