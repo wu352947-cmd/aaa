@@ -5,7 +5,7 @@ import { st } from '../scenarios/s327/common';
 import { BATTLE } from '../scenarios/s327/data';
 import { TULIP_NPCS } from '../scenarios/tulip/data';
 import { replayTulip, TulipGame } from '../scenarios/tulip/game';
-import { Game, replay } from './game';
+import { Game, replay, traderArchetype } from './game';
 
 /** 跑到第 day 晚停下 */
 function toNight(g: Game, day: number): Game {
@@ -295,4 +295,24 @@ describe('每个座位每晚都收牌、能打就打、不能打就换算：整�
       expect(g.drafted.length).toBeGreaterThan(2);
       expect(Number.isFinite(g.settle('option').total)).toBe(true);
     });
+});
+
+describe('猎手要跑赢“开局仓位拿着不动”', { timeout: 60000 }, () => {
+  it('判定规则', () => {
+    expect(traderArchetype(0.6, 0.6, true)).toBe('长青者');
+    expect(traderArchetype(0.8, 0.6, true)).toBe('猎手');
+    expect(traderArchetype(0.6, 0.6, false)).toBe('流星');
+    expect(traderArchetype(-0.7, -0.7, true)).toBe('出局者');
+    expect(traderArchetype(-0.7, -0.7, true, false)).toBe('长青者');
+  });
+  it('327 中财：什么都不做也赚钱，但不算猎手', () => {
+    const g = finish(new Game(S327, 'hold', 'long', 'no-violation'));
+    expect(g.ending!.stats.find(([k]) => k === '收益率')![1]).not.toMatch(/^-/);
+    expect(g.ending!.archetype).not.toBe('猎手');
+    expect(g.ending!.body.join('')).toContain('主要是历史');
+  });
+  it('散户起义：拿着不动的散户不算猎手', () => {
+    const g = finish(new Game(GME, 'hold', 'retail', 'no-violation'));
+    expect(g.ending!.archetype).not.toBe('猎手');
+  });
 });

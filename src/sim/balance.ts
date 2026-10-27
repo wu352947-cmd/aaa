@@ -112,6 +112,19 @@ export const POLICIES: Policy[] = [
     decide: (_g, d, r) => pick(r, d.choices).id,
   },
   {
+    // 更像真人：每晚只出一手，日报不细看
+    name: '偶尔出手',
+    night(g, r) {
+      if (g.offer) g.act({ type: 'draft', id: pick(r, g.offer) });
+      fileAudits(g, 'blank', r);
+      const open = g.cards().filter((x) => x.when !== 'trading' && !x.blocked);
+      if (open.length) tryPlay(g, pick(r, open), r);
+      for (const c of g.handCards()) if (c.foe) g.act({ type: 'convert', id: c.id });
+    },
+    trading() {},
+    decide: (_g, d) => safe(d),
+  },
+  {
     name: '只换算',
     night(g) {
       if (g.offer) g.act({ type: 'draft', id: g.offer[0] });

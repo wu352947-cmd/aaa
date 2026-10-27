@@ -1,5 +1,6 @@
 import { fmtYi, newAccount } from '../../engine/exchange';
 import type { DialogueIntent, Ending, Game, Scenario, SocialOutcome } from '../../engine/game';
+import { holdReturn, traderArchetype } from '../../engine/game';
 import { MINUTES_PER_DAY, type Actor, type Market } from '../../engine/market';
 import type { OrderReq } from '../../engine/types';
 import { addCrowdFlow, crowdFlowOrders } from '../../engine/flows';
@@ -195,6 +196,8 @@ export const S327: Scenario = {
     if (g.factionId === 'short') g.alliances.push({ id: 'lock', npc: 'gao', terms: lockTerms, lockUntilDay: BATTLE, penalty: 0 });
     if (g.factionId === 'ally') g.alliances.push({ id: 'lock', npc: 'shen', terms: lockTerms, lockUntilDay: BATTLE, penalty: 0 });
     g.flags.startEq = ex.equity(g.player);
+    g.flags.startPos = g.player.pos;
+    g.flags.startMark = ex.last;
     // 交易所认得每一个席位
     if (isOfficial(g)) g.flags.seatsKnown = true;
     STATE.set(g, {
@@ -815,6 +818,7 @@ function reckon(g: Game): Ending {
   const dumped = !!(flag(g, 'npcDump') || flag(g, 'playerDump'));
   const clean = g.heatTier() <= 1 && g.linesCrossed === 0 && !flag(g, 'insider');
   const used = (k: string) => s.used.has(k);
+  const rHold = holdReturn(g, official);
 
   let id = 'survive';
   let title = '';
@@ -867,7 +871,7 @@ function reckon(g: Game): Ending {
         body.push('你既没有认赔，也没有越线。价格没有给你第二次机会。');
       }
       if (flag(g, 'interviewed') && official > 15000) body.push('你在报纸上喊的“132 元”，如今成了圈里的笑话。');
-      archetype = r >= 0.15 ? (clean ? '猎手' : '流星') : r <= -0.6 ? '出局者' : clean ? '长青者' : '蛀虫';
+      archetype = traderArchetype(r, rHold, clean);
     } else if (g.factionId === 'long') {
       if (voided) {
         id = 'long-win';
@@ -883,7 +887,7 @@ function reckon(g: Game): Ending {
         body.push(flag(g, 'shenReported') ? '你递上去的那份证据让申江在尾盘缩了手。' : '这一天的结局和史书上不一样了。');
       }
       if (flag(g, 'insider')) body.push('但你在消息公开前加仓的记录还在。所有交易都留痕——旧账迟早被翻出。');
-      archetype = r >= 0.15 ? (clean ? '猎手' : '流星') : clean ? '长青者' : '蛀虫';
+      archetype = traderArchetype(r, rHold, clean, false);
     } else if (g.factionId === 'ally') {
       const gain = eq - startEq;
       if (flag(g, 'allyFlipped')) {
@@ -908,7 +912,7 @@ function reckon(g: Game): Ending {
         if (flag(g, 'allyPaid')) body.push('可你收了中财的钱。魏国梁会记得。');
       }
       if (voided && p.pos > 0) body.push('尾盘的砸盘被宣布无效，你的多单按砸盘前的价格结算。');
-      archetype = r >= 0.15 ? (clean ? '猎手' : '流星') : r <= -0.6 ? '出局者' : clean ? '长青者' : '蛀虫';
+      archetype = traderArchetype(r, rHold, clean);
     } else {
       id = 'retail';
       title = r >= 0 ? '活下来了' : '交了学费';
@@ -922,8 +926,10 @@ function reckon(g: Game): Ending {
             ? '你带着比来时多一点的钱离开了大户室。'
             : '你带着比来时少的钱离开了大户室。至少你看懂了这场仗是怎么打的。',
       );
-      archetype = r >= 0.15 ? (clean ? '猎手' : '流星') : clean ? '长青者' : '蛀虫';
+      archetype = traderArchetype(r, rHold, clean, false);
     }
+    if (r >= 0.15 && clean && archetype !== '猎手' && rHold > 0)
+      body.push(`可要是开局的仓位拿着不动、一口不交易，收益是 ${(rHold * 100).toFixed(0)}%。这一局替你赚钱的，主要是历史。`);
     // 余波里的选择
     if (used('bailout')) body.push('主管部门的注资保住了公司，也让你从此说话不算数了。');
     if (used('cooperate')) body.push('你主动交出了交易记录。调查结论比预想的轻。');
@@ -941,6 +947,7 @@ function reckon(g: Game): Ending {
     stats = [
       ['最终权益', fmtYi(eq)],
       ['收益率', `${(r * 100).toFixed(1)}%`],
+      ['开局仓位不动的话', `${(rHold * 100).toFixed(1)}%`],
       ['监管热度', `第 ${g.heatTier()} 级`],
       ['声望', String(g.reputation)],
       ['越过底线', `${g.linesCrossed} 次`],

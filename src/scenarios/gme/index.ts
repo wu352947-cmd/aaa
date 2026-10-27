@@ -1,6 +1,7 @@
 import { fmtYi, newAccount } from '../../engine/exchange';
 import { addCrowdFlow, crowdFlowOrders } from '../../engine/flows';
 import type { CardDef, CardResult, DialogueIntent, Ending, ExchangeOffer, Game, Meter, Scenario, SocialOutcome } from '../../engine/game';
+import { holdReturn, traderArchetype } from '../../engine/game';
 import type { Actor, Market } from '../../engine/market';
 import { DRAFT_GME, gmeClocks, gmeDraftPlay } from './plans';
 import { BATTLE_2021, DAYS_2021, DECK_2021, FACTIONS_2021, NPCS_2021, NYSE, PARAMS_2021, PRINCIPLES_2021, PROLOGUE_2021, RULES_2021, SOURCES_2021, START_2021 } from './data';
@@ -122,6 +123,7 @@ export const GME: Scenario = {
     if (g.factionId === 'retail') g.alliances.push({ id: 'diamond', npc: 'jack', terms: '钻石手公约：价格到月球之前，一股不卖', lockUntilDay: BATTLE_2021, penalty: 0 });
     g.flags.startEq = ex.equity(g.player);
     g.flags.startPos = g.player.pos;
+    g.flags.startMark = ex.last;
     g.seenRules.add('short-squeeze');
     g.addIntel({ id: 'brief', title: '开局简报', body: briefing(g), source: '你的笔记', credibility: 1, kind: 'system' });
   },
@@ -522,6 +524,7 @@ function reckon(g: Game): Ending {
   const close = g.market.closePrices[g.market.closePrices.length - 1];
   const restricted = !!flag(g, 'restrictActive');
   const clean = g.heatTier() <= 1 && g.linesCrossed === 0;
+  const rHold = holdReturn(g, close);
   let id = '';
   let title = '';
   let headline = '';
@@ -565,7 +568,8 @@ function reckon(g: Game): Ending {
       body.push('没有了被迫卖出的散户，史料里那场一个多小时的暴跌没有发生——空头为此多付了一大笔钱。');
     } else {
       id = 'broker-restrict';
-      archetype = '守门人';
+      // 公司活下来了；可用户信任跌到这个地步，这一关算不上守住
+      archetype = (g.flags.trust as number) >= 30 ? '守门人' : '流星';
       title = '限制买入';
       headline = '羽毛证券限制买入 散户怒火冲天';
       subhead = '押金要求随之大降，公司活了下来';
@@ -587,7 +591,7 @@ function reckon(g: Game): Ending {
     headline = covered ? `灰狼资本平掉空单 亏损 ${fmtYi(Math.max(0, startEq - eq))}` : `灰狼资本扛过逼空 账面${eq >= startEq ? '盈利' : '亏损'} ${fmtYi(Math.abs(eq - startEq))}`;
     subhead = flag(g, 'bailout') ? '月中接受 27.5 亿美元注资' : '没有接受外部注资';
     body.push(covered ? '你买回了每一股空单。你的每一笔回补，都是这场逼空的一部分燃料。' : '你没有平仓。散户被限制买入，替你挡下了最凶的那一段——这不是你的功劳，是规则的。');
-    archetype = r >= 0.15 ? (clean ? '猎手' : '流星') : r <= -0.6 ? '出局者' : clean ? '长青者' : '蛀虫';
+    archetype = traderArchetype(r, rHold, clean);
   } else {
     const sold = p.pos < ((flag(g, 'startPos') as number) || 0);
     id = 'retail';
@@ -596,7 +600,8 @@ function reckon(g: Game): Ending {
     subhead = restricted ? '上午十点后，券商只允许卖出' : '';
     if (restricted) body.push('上午十点，你的券商关上了买入的门。你没做错任何事，规则在你最需要它的时候站到了另一边——原因不是阴谋，是 T+2 交收下清算所的押金要求。');
     body.push(sold ? '你卖了。论坛叫你“纸手”，你的账户叫你“赢家”。' : '你守住了公约。这一天之后，价格还会再冲高一次，然后回到 90 美元。');
-    archetype = r >= 0.15 ? (clean ? '猎手' : '流星') : clean ? '长青者' : '蛀虫';
+    archetype = traderArchetype(r, rHold, clean, false);
+    if (r >= 0.15 && clean && archetype !== '猎手' && rHold > 0) body.push(`可要是开局的股票拿着不动、一股不交易，收益是 ${(rHold * 100).toFixed(0)}%。这一局替你赚钱的，主要是行情。`);
   }
   if (g.linesCrossed > 0) body.push(`你越过了自己定下的底线「${g.principle.label}」${g.linesCrossed} 次。`);
 
@@ -631,6 +636,7 @@ function reckon(g: Game): Ending {
       : [
           ['最终权益', fmtYi(eq)],
           ['收益率', `${(r * 100).toFixed(1)}%`],
+          ['开局仓位不动的话', `${(rHold * 100).toFixed(1)}%`],
           ['声望', String(g.reputation)],
           ['越过底线', `${g.linesCrossed} 次`],
         ],

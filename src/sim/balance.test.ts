@@ -73,7 +73,7 @@ describe('平衡性模拟', { timeout: 3_600_000 }, () => {
   it('每个座位、每种打法都跑得完', () => {
     const runs: Run[] = [];
     for (const { scenario, seats } of SEATS)
-      for (const seat of seats)
+      for (const seat of seats.filter((x) => !process.env.BALANCE_ONLY || process.env.BALANCE_ONLY.split(',').includes(`${scenario.id}:${x}`)))
         // 平时只跑“照章办事”一局，保证模拟脚本本身没坏
         for (const p of N ? POLICIES : POLICIES.filter((x) => x.name === '照章办事'))
           for (const s of N ? SEEDS : ['smoke']) {
@@ -82,7 +82,7 @@ describe('平衡性模拟', { timeout: 3_600_000 }, () => {
             runs.push(r);
           }
     const truns: TulipRun[] = [];
-    for (const p of TULIP_POLICIES)
+    for (const p of process.env.BALANCE_ONLY ? [] : TULIP_POLICIES)
       for (const seat of p.seats)
         for (const s of N ? SEEDS : ['smoke']) {
           const r = runTulip(seat, p, s);

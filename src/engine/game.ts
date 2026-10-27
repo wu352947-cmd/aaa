@@ -917,3 +917,25 @@ export function replay(scenario: Scenario, seed: string, faction: FactionId, pri
   }
   return g;
 }
+
+/**
+ * 开局仓位拿着不动、一笔不交易，按 price 结算的收益率。
+ * 剧本在 setup 里记下 startEq / startPos / startMark。
+ */
+export function holdReturn(g: Game, price: Fen): number {
+  const start = Number(g.flags.startEq) || 1;
+  const pos = Number(g.flags.startPos) || 0;
+  const mark = Number(g.flags.startMark ?? price);
+  return (pos * ((price - mark) / 100) * g.market.ex.deck.multiplier) / Math.abs(start);
+}
+
+/**
+ * 交易座位的人物类型。猎手不只要赚钱，还要比“拿着开局仓位不动”多赚一截——
+ * 否则这一局是历史替你赚的，不是你。
+ */
+export function traderArchetype(r: number, rHold: number, clean: boolean, canBust = true): Ending['archetype'] {
+  if (r >= 0.15 && !clean) return '流星';
+  if (r >= 0.15 && r - rHold >= 0.1) return '猎手';
+  if (canBust && r <= -0.6) return '出局者';
+  return clean ? '长青者' : '蛀虫';
+}
