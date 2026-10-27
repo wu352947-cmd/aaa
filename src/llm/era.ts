@@ -36,7 +36,17 @@ export const ERA_1637_HAARLEM: EraPack = {
   safeNumbers: [1636, 1637],
 };
 
+export const ERA_2021_NY: EraPack = {
+  id: '2021-newyork',
+  place: '2021 年 1 月疫情中的纽约，散户们在手机应用和投资论坛上交易',
+  lexicon: ['钻石手', '纸手', '到月球', '火箭', '论坛', '截图', '看涨期权', '空头', '回补', '借券费', '清算所', '押金', '零佣金', '散户', '对冲基金'],
+  anachronisms: ['ChatGPT', '拆股后', '元宇宙'],
+  foreknowledge: ['听证会', '国会听证', '2月2日', '二月二日', '90 美元', '九十美元', '325', '483', '112', '员工报告'],
+  safeNumbers: [2021, 2020],
+};
+
 ERAS[ERA_1995_SH.id] = ERA_1995_SH;
+ERAS[ERA_2021_NY.id] = ERA_2021_NY;
 ERAS[ERA_1637_HAARLEM.id] = ERA_1637_HAARLEM;
 
 export function eraOf(id: string | undefined): EraPack {

@@ -59,7 +59,7 @@ export function OrderTicket({
   return (
     <div className="drawer">
       <div className="drawer-head">
-        <h3>{side === 'buy' ? '买入' : '卖出'} · {game.scenario.id === 's327' ? '327 合约' : game.scenario.title}</h3>
+        <h3>{side === 'buy' ? '买入' : '卖出'} · {game.scenario.instrument ?? game.scenario.title}</h3>
         <button className="btn ghost small" onClick={onClose}>
           关闭 <span className="kbd">Esc</span>
         </button>

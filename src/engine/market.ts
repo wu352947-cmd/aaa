@@ -344,7 +344,8 @@ export class Market {
     this.t++;
     // 涨跌幅区间暂停（LULD）：价格在窗口内偏离超过区间，暂停若干分钟
     const luld = this.deck.luld;
-    if (luld && this.bars.length > luld.window) {
+    // 复牌后的一个窗口内不再检查，避免价格回到中枢时连环暂停
+    if (luld && this.bars.length > luld.window && this.t >= this.haltUntil + luld.window) {
       const ref = this.bars[this.bars.length - 1 - luld.window].c;
       if (Math.abs(ex.last - ref) / ref > luld.band) {
         this.haltUntil = this.t + luld.pause;

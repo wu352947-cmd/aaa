@@ -55,13 +55,13 @@ export function PositionCard({ game }: { game: Game }) {
         <dd>{money(eq)}</dd>
         <dt>持仓</dt>
         <dd>{p.pos === 0 ? '空仓' : <span className={p.pos > 0 ? 'up' : 'down'}>{p.pos > 0 ? '多' : '空'} {qty(Math.abs(p.pos))}</span>}</dd>
-        <dt title="（最新价 − 持仓均价）× 每元 200 元 × 持仓口数。每天收盘后结转进现金（逐日盯市）">浮动盈亏</dt>
+        <dt title="（最新价 − 持仓均价）× 合约乘数 × 持仓数量。每天收盘后结转进现金（逐日盯市）">浮动盈亏</dt>
         <dd className={dir(upnl)}>{signed(upnl, money)}</dd>
         {open && (
           <>
-            <dt title="逐日盯市后，均价重置为前一日结算价">持仓均价</dt>
+            <dt title={game.market.ex.deck.markToMarket ? "逐日盯市后，均价重置为前一日结算价" : "买入或卖空的平均成本"}>持仓均价</dt>
             <dd>{p.pos ? price(p.avg) : '—'}</dd>
-            <dt title="持仓口数 × 每口合约价值 × 2.5%">
+            <dt title="持仓数量 × 每单位价值 × 保证金比例">
               <Term k="保证金">所需保证金</Term>
             </dt>
             <dd>{money(need)}</dd>

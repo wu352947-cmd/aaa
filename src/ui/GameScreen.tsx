@@ -42,10 +42,10 @@ export function GameScreen({ game, llm, ui, onSettings, onEnd }: { game: Game; l
   const toastId = useRef(0);
   const dlg = useDialogues(game, llm);
   const observer = !!game.faction.observer;
-  const canHalt = game.phase === 'trading' && !game.flags[`halt-${game.dayIndex}`] && game.market.t >= game.market.haltUntil;
+  const tools = observer ? (game.scenario.observerTools?.(game) ?? []) : [];
   const todayViolations = [...game.market.ex.accounts.values()].reduce((a, x) => a + (x.exempt ? 0 : x.violations), 0);
   const regulate = useCallback(
-    (what: 'halt' | 'margin') => {
+    (what: string) => {
       if (game.phase !== 'trading') return;
       game.act({ type: 'decision', id: 'reg', choice: what });
       bump();
@@ -169,8 +169,7 @@ export function GameScreen({ game, llm, ui, onSettings, onEnd }: { game: Game; l
       if (k === ' ') {
         e.preventDefault();
         setPaused((p) => !p);
-      } else if (observer && k === 'h') regulate('halt');
-      else if (observer && k === 'm') regulate('margin');
+      } else if (observer && tools.some((t) => t.key === k && !t.disabled)) regulate(tools.find((t) => t.key === k)!.id);
       else if (!observer && k === 'b') setDrawer('buy');
       else if (!observer && k === 's') setDrawer('sell');
       else if (!observer && k === 'p') setDrawer('plan');
@@ -179,7 +178,7 @@ export function GameScreen({ game, llm, ui, onSettings, onEnd }: { game: Game; l
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [game, ruleCard, observer, regulate]);
+  }, [game, ruleCard, observer, regulate, tools]);
 
   const ex = game.market.ex;
   const eq = game.equity();
@@ -331,13 +330,12 @@ export function GameScreen({ game, llm, ui, onSettings, onEnd }: { game: Game; l
       <div className="actionbar">
         {observer ? (
           <>
-            <button className="core-btn sell" disabled={!canHalt} onClick={() => regulate('halt')} title="327 合约暂停撮合 15 分钟。每天限一次。">
-              临时停市<span className="kbd">H</span>
-            </button>
-            <button className="core-btn buy" disabled={!!game.flags.marginUp || game.phase !== 'trading'} onClick={() => regulate('margin')} title="保证金比例从 2.5% 提高到 5%，当场生效。">
-              {game.flags.marginUp ? '保证金已提至 5%' : '提高保证金'}
-              <span className="kbd">M</span>
-            </button>
+            {tools.map((t) => (
+              <button key={t.id} className={cls('core-btn', t.tone)} disabled={t.disabled} onClick={() => regulate(t.id)} title={t.title}>
+                {t.label}
+                <span className="kbd">{t.key.toUpperCase()}</span>
+              </button>
+            ))}
           </>
         ) : (
           <>

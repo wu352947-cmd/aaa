@@ -17,6 +17,8 @@ export interface RuleDeck {
   priceLimit: number | null;
   /** 市价单最多吃到偏离最新价多少比例（防止扫空整本订单簿） */
   marketProtect: number;
+  /** 期货式逐日盯市：收盘把浮动盈亏结转进现金、持仓均价重置为结算价 */
+  markToMarket?: boolean;
   /** 下单界面是否提供“超额透支”选项（当年的系统拦不住违规下单） */
   overdraw?: boolean;
   /** 涨跌幅区间暂停：window 分钟内偏离超过 band 即暂停 pause 分钟 */
@@ -248,11 +250,13 @@ export class Exchange {
 
   /** 逐日盯市：把浮动盈亏按结算价结转进现金，持仓均价重置为结算价 */
   settle(price: Fen): void {
+    this.refClose = price;
+    // 股票不做逐日盯市结转：持仓成本保持买入价，盈亏留在浮动盈亏里
+    if (!this.deck.markToMarket) return;
     for (const a of this.accounts.values()) {
       a.cash += this.unrealized(a, price);
       if (a.pos !== 0) a.avg = price;
     }
-    this.refClose = price;
   }
 
   snapshot(): Map<string, Account> {

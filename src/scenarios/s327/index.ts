@@ -122,12 +122,31 @@ export const S327: Scenario = {
   sources: SOURCES,
   prologue: PROLOGUE,
   eraId: '1995-shanghai',
+  instrument: '327 合约',
   paperName: '沪上财经报',
   endingDate: '1995-02-24 星期五',
   setupRules: ['no-price-limit', 'margin', 'position-limit', 'daily-settlement'],
   members: [SHORT, LONG, ALLY],
   lotPresets: [100_000, 500_000],
   groupName: (g, who) => groupName(g, who),
+  observerTools: (g) => [
+    {
+      id: 'halt',
+      label: '临时停市',
+      title: '327 合约暂停撮合 15 分钟。每天限一次。',
+      key: 'h',
+      tone: 'sell',
+      disabled: g.phase !== 'trading' || !!g.flags[`halt-${g.dayIndex}`] || g.market.t < g.market.haltUntil,
+    },
+    {
+      id: 'margin',
+      label: g.flags.marginUp ? '保证金已提至 5%' : '提高保证金',
+      title: '保证金比例从 2.5% 提高到 5%，当场生效。',
+      key: 'm',
+      tone: 'buy',
+      disabled: !!g.flags.marginUp || g.phase !== 'trading',
+    },
+  ],
 
   setup(g) {
     const ex = g.market.ex;

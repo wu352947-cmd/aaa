@@ -12,12 +12,12 @@ export function Title({
 }: {
   scenario: Scenario;
   save: SaveData | null;
-  onStart: (which: 's327' | 'tulip') => void;
+  onStart: (which: 's327' | 'tulip' | 'gme2021') => void;
   onContinue: () => void;
   onSettings: () => void;
 }) {
   const [archive, setArchive] = useState(false);
-  const [which, setWhich] = useState<'s327' | 'tulip'>(save ? 's327' : 'tulip');
+  const [which, setWhich] = useState<'s327' | 'tulip' | 'gme2021'>(save ? (save.scenario as 's327' | 'gme2021') : 'tulip');
   return (
     <div className="title-screen paper">
       <div className="title-card">
@@ -39,6 +39,14 @@ export function Title({
               <div style={{ fontFamily: 'var(--serif)', fontWeight: 700, fontSize: 18 }}>{scenario.title}</div>
               <div style={{ fontSize: 13, color: 'var(--ink-soft)' }}>{scenario.subtitle}</div>
               <div style={{ fontSize: 13, marginTop: 4 }}>五个交易日的布局，一个决战日。五个可扮演的座位。</div>
+            </div>
+          </button>
+          <button className={cls('scenario-ticket', which === 'gme2021' && 'on')} role="radio" aria-checked={which === 'gme2021'} onClick={() => setWhich('gme2021')}>
+            <div className="seal" style={{ fontSize: 16 }}>2021</div>
+            <div>
+              <div style={{ fontFamily: 'var(--serif)', fontWeight: 700, fontSize: 18 }}>散户起义</div>
+              <div style={{ fontSize: 13, color: 'var(--ink-soft)' }}>2021 · 纽约 · 游戏零售股逼空</div>
+              <div style={{ fontSize: 13, marginTop: 4 }}>没有涨跌停，只有熔断式暂停。论坛散户、做空基金、零佣金券商，三个座位。</div>
             </div>
           </button>
         </div>

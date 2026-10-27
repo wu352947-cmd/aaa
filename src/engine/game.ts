@@ -172,6 +172,8 @@ export interface Scenario {
   ruleCards: RuleCardDef[];
   sources: SourceCard[];
   prologue: string[];
+  /** 交易标的的称呼，如“327 合约” */
+  instrument?: string;
   /** 交易时段（默认 1995 年上交所） */
   session?: Session;
   /** 数量与货币单位（默认“口”“元”） */
@@ -188,6 +190,8 @@ export interface Scenario {
   members?: string[];
   /** 下单面板里的快捷数量（机构座位） */
   lotPresets?: number[];
+  /** 监管类座位在交易屏上的工具按钮（点击时以 decision 'reg' 提交 id） */
+  observerTools?(g: Game): { id: string; label: string; title: string; key: string; disabled: boolean; tone: 'buy' | 'sell' }[];
   /** 复盘与逐笔里怎么称呼一个群体或账户 */
   groupName?(g: Game, who: string): string;
   setup(g: Game): void;

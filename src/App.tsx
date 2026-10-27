@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Game } from './engine/game';
 import { loadLlm, type LlmSettings } from './llm/settings';
+import type { Scenario } from './engine/game';
+import { GME } from './scenarios/gme';
 import { S327 } from './scenarios/s327';
 import { EndingScreen } from './ui/EndingScreen';
 import { GameScreen } from './ui/GameScreen';
@@ -10,6 +12,8 @@ import { clearSave, loadSave, restore, type SaveData } from './ui/save';
 import { Title } from './ui/Title';
 import { TulipScreen, TulipSetup } from './ui/TulipScreen';
 import { TulipGame } from './scenarios/tulip/game';
+
+const SCENARIOS: Record<string, Scenario> = { s327: S327, gme2021: GME };
 
 type Screen = 'title' | 'setup' | 'game' | 'ending' | 'tulip-setup' | 'tulip';
 const UI_KEY = 'chouma.ui';
@@ -33,6 +37,7 @@ export default function App() {
   const [settings, setSettings] = useState(false);
   const [save, setSave] = useState<SaveData | null>(loadSave);
   const [tulip, setTulip] = useState<TulipGame | null>(null);
+  const [scenario, setScenario] = useState<Scenario>(S327);
 
   const setUi = (u: UiSettings) => {
     setUiState(u);
@@ -64,11 +69,17 @@ export default function App() {
         <Title
           scenario={S327}
           save={save}
-          onStart={(which) => setScreen(which === 'tulip' ? 'tulip-setup' : 'setup')}
+          onStart={(which) => {
+            if (which === 'tulip') setScreen('tulip-setup');
+            else {
+              setScenario(SCENARIOS[which]);
+              setScreen('setup');
+            }
+          }}
           onContinue={() => {
             if (!save) return;
             try {
-              setGame(restore(S327, save));
+              setGame(restore(SCENARIOS[save.scenario] ?? S327, save));
               setScreen('game');
             } catch {
               clearSave();
@@ -88,18 +99,30 @@ export default function App() {
           }}
         />
       )}
-      {screen === 'tulip' && tulip && <TulipScreen key={tulip.seed} game={tulip} llm={llm} onExit={() => setScreen('title')} onTo327={() => setScreen('setup')} />}
+      {screen === 'tulip' && tulip && (
+        <TulipScreen
+          key={tulip.seed}
+          game={tulip}
+          llm={llm}
+          onExit={() => setScreen('title')}
+          onTo327={() => {
+            setScenario(S327);
+            setScreen('setup');
+          }}
+        />
+      )}
       {screen === 'setup' && (
         <Setup
-          scenario={S327}
+          key={scenario.id}
+          scenario={scenario}
           onBack={() => setScreen('title')}
           onBegin={(f, p, seed) => {
-            setGame(new Game(S327, seed, f, p));
+            setGame(new Game(scenario, seed, f, p));
             setScreen('game');
           }}
         />
       )}
-      {screen === 'game' && game && <GameScreen key={game.seed + game.factionId} game={game} llm={llm} ui={ui} onSettings={() => setSettings(true)} onEnd={onEnd} />}
+      {screen === 'game' && game && <GameScreen key={game.scenario.id + game.seed + game.factionId} game={game} llm={llm} ui={ui} onSettings={() => setSettings(true)} onEnd={onEnd} />}
       {screen === 'ending' && game?.ending && (
         <EndingScreen
           game={game}
