@@ -211,7 +211,9 @@ describe('监管座位：交易所监管负责人', () => {
   it('裁决“违规后无效”复现历史结局', () => {
     const g = play({ ruling: 'void' });
     expect(g.flags.voided).toBe(true);
-    expect(g.ending?.archetype).toBe('守门人');
+    expect(g.ending?.id).toBe('official-void');
+    // 上面交代的事一件不办，档案上的去向不会好看
+    expect(['守门人', '流星']).toContain(g.ending?.archetype);
   });
 
   it('只撤销透支成交：正常成交保留，没有无辜的人被一起抹掉', () => {

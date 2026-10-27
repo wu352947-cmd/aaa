@@ -5,12 +5,14 @@ import type { LlmSettings } from '../llm/settings';
 import { ANNUAL_WAGE, APRIL_VALUE, COUNCIL, EVENINGS, HOST, MEANS, TULIP_NPCS, TULIP_RULES, TULIP_SOURCES, WINE_MONEY } from '../scenarios/tulip/data';
 import { RULE_NAME, TulipGame, type Settlement, type TulipFaction, type TulipRule } from '../scenarios/tulip/game';
 import { CardList } from './Cards';
+import { ClocksList, DirectivesList, DraftOffer } from './Plans';
 import { PixelPortrait, PixelScene } from './Pixel';
 import { clearSave, saveTulip } from './save';
 import { tulipIntent } from '../scenarios/tulip/talk';
 import { cls } from './format';
 import { RuleCardModal } from './Modals';
 
+const councilName = (id: string) => COUNCIL.find((c) => c.id === id)?.name ?? id;
 const fl = (n: number) => `${Math.round(n).toLocaleString()} 盾`;
 const sgn = (n: number) => (n > 0 ? '+' : n < 0 ? '−' : '') + fl(Math.abs(n));
 
@@ -297,12 +299,37 @@ export function TulipScreen({ game, llm, onExit, onTo327 }: { game: TulipGame; l
             <p className="ledger-note">每成交一份，买方付给卖方 {WINE_MONEY} 盾酒钱。除此之外，春天之前谁都不用付钱。</p>
               </>
             )}
+            {council && game.directives().length > 0 && (
+              <>
+                <h3 style={{ marginTop: 18 }}>市政官的交代</h3>
+                <DirectivesList dirs={game.directives()} era="1637" names={councilName} />
+              </>
+            )}
+            <h3 style={{ marginTop: 18 }}>对手动向</h3>
+            <ClocksList clocks={game.clocks()} era="1637" />
           </aside>
         </div>
 
         {game.cards().length > 0 && (
           <section className="tavern-cards">
             <h3>{council ? '今晚你能做的事' : '桌边的手段'}</h3>
+            {game.offer && (
+              <DraftOffer
+                tone="paper"
+                cards={game.offerCards()}
+                handFull={game.hand.length >= game.maxHand}
+                onTake={(id) => {
+                  game.act({ type: 'draft', id });
+                  saveTulip(game);
+                  bump();
+                }}
+                onSkip={() => {
+                  game.act({ type: 'draft', id: null });
+                  saveTulip(game);
+                  bump();
+                }}
+              />
+            )}
             <CardList
               cards={game.cards()}
               result={(id) => {
@@ -311,6 +338,11 @@ export function TulipScreen({ game, llm, onExit, onTo327 }: { game: TulipGame; l
               }}
               onPlay={(id, target) => {
                 game.act({ type: 'card', id, target });
+                saveTulip(game);
+                bump();
+              }}
+              onConvert={(id) => {
+                game.act({ type: 'convert', id });
                 saveTulip(game);
                 bump();
               }}
@@ -551,6 +583,11 @@ function CouncilVote({ game, pick, setPick, onNext }: { game: TulipGame; pick: T
             }}
             onPlay={(id, target) => {
               game.act({ type: 'card', id, target });
+              saveTulip(game);
+              bump((x) => x + 1);
+            }}
+            onConvert={(id) => {
+              game.act({ type: 'convert', id });
               saveTulip(game);
               bump((x) => x + 1);
             }}

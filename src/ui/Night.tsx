@@ -9,6 +9,7 @@ import { cls, price, qty, signed } from './format';
 import { IntelList } from './IntelPanel';
 import { PixelScene } from './Pixel';
 import { eraOfScenario } from '../pixel/palettes';
+import { ClocksList, DirectivesList, DocSheetView, DraftOffer } from './Plans';
 
 const WHY: Record<string, string> = {
   gravity: '没有人持续投钱时，做市与套利资金会把价格拉回真实走势附近',
@@ -79,7 +80,11 @@ export function Night({ game, llm, dlg, showMentor, onSleep }: { game: Game; llm
   const paper = game.papers[game.papers.length - 1];
   const [hl, setHl] = useState<{ headline: string; sub: string; source: string } | null>(null);
   const hasCards = game.cards().length > 0;
-  const [tab, setTab] = useState<'recap' | 'people' | 'intel' | 'cards'>(game.isAftermath && hasCards ? 'cards' : 'recap');
+  const docs = game.scenario.docs?.(game) ?? [];
+  const clocks = game.scenario.clocks?.(game) ?? [];
+  const dirs = game.scenario.directives?.(game) ?? [];
+  const era = eraOfScenario(game.scenario.id);
+  const [tab, setTab] = useState<'recap' | 'people' | 'intel' | 'cards' | 'plans' | 'docs'>(game.isAftermath && hasCards ? 'cards' : 'recap');
   useEffect(() => {
     setHl(null);
     if (paper) headline(llm, eraOf(game.scenario.eraId), paper, game.day.date).then(setHl);
@@ -119,6 +124,16 @@ export function Night({ game, llm, dlg, showMentor, onSleep }: { game: Game; llm
             <button className={cls(tab === 'recap' && 'on')} onClick={() => setTab('recap')}>
               收盘复盘
             </button>
+            {(clocks.length > 0 || dirs.length > 0) && (
+              <button className={cls(tab === 'plans' && 'on')} onClick={() => setTab('plans')}>
+                动向
+              </button>
+            )}
+            {docs.length > 0 && (
+              <button className={cls(tab === 'docs' && 'on')} onClick={() => setTab('docs')}>
+                日报{docs.some((d) => !d.filed) && <span className="badge-dot" />}
+              </button>
+            )}
             {hasCards && (
               <button className={cls(tab === 'cards' && 'on')} onClick={() => setTab('cards')}>
                 手段
@@ -131,7 +146,48 @@ export function Night({ game, llm, dlg, showMentor, onSleep }: { game: Game; llm
               情报
             </button>
           </div>
+          {game.offer && (
+            <DraftOffer
+              cards={game.offerCards()}
+              handFull={game.hand.length >= game.maxHand}
+              onTake={(id) => {
+                game.act({ type: 'draft', id });
+                setTab('cards');
+                bump((x) => x + 1);
+              }}
+              onSkip={() => {
+                game.act({ type: 'draft', id: null });
+                bump((x) => x + 1);
+              }}
+            />
+          )}
           {tab === 'recap' && <Recap game={game} />}
+          {tab === 'plans' && (
+            <div className="recap">
+              {dirs.length > 0 && (
+                <>
+                  <h3>上级指示</h3>
+                  <DirectivesList dirs={dirs} era={era} names={(id) => game.npc(id)?.name ?? id} />
+                </>
+              )}
+              <h3>对手动向</h3>
+              <ClocksList clocks={clocks} era={era} />
+            </div>
+          )}
+          {tab === 'docs' && (
+            <div className="recap">
+              {docs.map((d) => (
+                <DocSheetView
+                  key={d.id}
+                  doc={d}
+                  onFile={(marks) => {
+                    game.act({ type: 'doc', id: d.id, marks });
+                    bump((x) => x + 1);
+                  }}
+                />
+              ))}
+            </div>
+          )}
           {tab === 'cards' && (
             <div className="recap">
               <CardsBody game={game} onPlayed={() => bump((x) => x + 1)} />

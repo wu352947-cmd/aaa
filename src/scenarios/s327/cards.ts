@@ -22,6 +22,7 @@ import {
   wan,
 } from './common';
 import { BATTLE } from './data';
+import { breakDirective } from './plans';
 
 const R = (ok: boolean, title: string, effects: string[], reply?: CardResult['reply']): CardResult => ({ ok, title, effects, reply });
 const rel = (g: Game, npc: string, d: number, memory?: string) => {
@@ -53,7 +54,8 @@ export { condition };
 
 const hasEvidence = (g: Game, id: string) => {
   const s = st(g);
-  if (id === SHORT || id === HIDE) return s.evidence.has('split');
+  if (id === SHORT) return s.evidence.has('split') || !!flag(g, 'shenMisreport');
+  if (id === HIDE) return s.evidence.has('split');
   if (id === LONG) return s.evidence.has('wei');
   if (id === ALLY) return s.evidence.has('gao');
   return false;
@@ -379,6 +381,7 @@ export function regPlay(g: Game, id: string, target?: string): CardResult {
       return R(true, '临时停市 15 分钟', fx);
     }
     case 'notice':
+      breakDirective(g, 'quiet', '风险提示放出了口风');
       spendCap(g, 1);
       s.used.add(`notice-${d}`);
       m.sentiment *= 0.3;
@@ -386,6 +389,7 @@ export function regPlay(g: Game, id: string, target?: string): CardResult {
       addOrder(g, 2);
       return R(true, '交易所发布风险提示', ['政治资本 −1', '散户情绪降温', '全体会员威慑 +1', '秩序 +2', rel(g, 'su', 3)].filter(Boolean));
     case 'margin-now':
+      breakDirective(g, 'no-margin', '交易所动了保证金');
       spendCap(g, 2);
       ex.deck.marginRate = 0.05;
       g.flags.marginUp = true;
@@ -395,7 +399,7 @@ export function regPlay(g: Game, id: string, target?: string): CardResult {
       return R(true, '保证金提高到 5%，当场生效', ['政治资本 −2', '全体会员关系 −5', '收盘时押金不够的会员会被追保']);
     case 'closeonly': {
       const a = ex.acct(target!);
-      const ev = hasEvidence(g, target!) || a.violations > 0;
+      const ev = hasEvidence(g, target!) || a.violations > 0 || !!flag(g, 'coBacked');
       spendCap(g, ev ? 1 : 2);
       a.closeOnly = true;
       g.flags[`co-${target}-${d}`] = true;
@@ -412,6 +416,7 @@ export function regPlay(g: Game, id: string, target?: string): CardResult {
     }
     case 'call': {
       g.energy--;
+      st(g).know.add(tNpc);
       addDeter(g, target!, 1.5);
       const fx = [`${tName} 威慑 +1.5`, rel(g, tNpc, -4, '交易所打电话“提醒”')];
       const shenDesperate = condition(g, SHORT) !== 'ok' || usage(g, SHORT) > 0.85;
@@ -430,6 +435,7 @@ export function regPlay(g: Game, id: string, target?: string): CardResult {
       return R(true, `致电 ${tName}`, fx.filter(Boolean), { who: target === HIDE ? '浦江实业经办人' : (g.npc(tNpc)?.name ?? tName), text: reply });
     }
     case 'inspect':
+      st(g).know.add(tNpc);
       spendCap(g, 1);
       g.energy--;
       s.used.add(`insp-${target}`);
@@ -449,6 +455,7 @@ export function regPlay(g: Game, id: string, target?: string): CardResult {
       });
     }
     case 'margin':
+      breakDirective(g, 'no-margin', '交易所动了保证金');
       spendCap(g, 1);
       g.flags.marginNext = 0.05;
       for (const n of ['shen', 'wei', 'gao']) if (g.npc(n)) g.relate(n, -4, '交易所提高保证金');
@@ -513,6 +520,7 @@ export function regPlay(g: Game, id: string, target?: string): CardResult {
       return R(true, '向证监会汇报', ['政治资本 +2', rel(g, 'yan', 5, '及时汇报')].filter(Boolean), { who: '严正', text: '情况我知道了。该出手就出手，出了事要第一时间报。' });
     }
     case 'brief': {
+      breakDirective(g, 'quiet', '吹风会放出了口风');
       spendCap(g, 1);
       s.used.add(`brief-${d}`);
       if (target === 'name-shen') {

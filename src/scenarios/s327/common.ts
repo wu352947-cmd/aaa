@@ -1,5 +1,5 @@
 import type { Account } from '../../engine/exchange';
-import type { Game, Intel } from '../../engine/game';
+import type { Directive, DocSheet, Game, Intel } from '../../engine/game';
 import { minuteIndex as mi } from '../../engine/market';
 import type { Fen } from '../../engine/types';
 
@@ -39,6 +39,39 @@ export interface State {
   resolved: Map<string, string>;
   /** 监控警报：今天已经报过的 */
   alerted: Set<string>;
+  /** 摸清了谁的盘算（人物 id；'all' 表示全部） */
+  know: Set<string>;
+  /** 上级指示 */
+  dirs: Directive[];
+  /** 会员日报：第几晚 → 报表与真相 */
+  audits: Map<number, { sheet: DocSheet; truth: Record<string, string> }>;
+  /** 各会员当天开盘时的持仓 */
+  memberStart: Record<string, number>;
+  /** 借来的钱：结局时要还（元） */
+  debt: number;
+}
+
+export const knows = (g: Game, npc: string) => {
+  const k = st(g).know;
+  return k.has('all') || k.has(npc);
+};
+
+/** 贴息消息传开的那一分钟：财政部提前公告时就是开盘 */
+export const newsMinute = (g: Game) => (flag(g, 'mofPublic') ? 0 : mi('9:58'));
+
+/**
+ * 空方（玩家不扮演时）在 16:15 的盘算。
+ * 保证金还够——不必砸；被盯得太紧——认赔一部分；盯得一般——小砸；没人管——超额透支砸到底。
+ */
+export function shenPlan(g: Game): 'blocked' | 'hold' | 'cover' | 'small' | 'dump' {
+  const ex = g.market.ex;
+  const a = ex.acct(SHORT);
+  if (a.closeOnly) return 'blocked';
+  if (ex.equity(a) >= ex.marginReq(a.pos)) return 'hold';
+  const d = deter(g, SHORT);
+  if (d >= 4) return 'cover';
+  if (d >= 2) return 'small';
+  return 'dump';
 }
 
 export const STATE = new WeakMap<Game, State>();

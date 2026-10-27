@@ -2044,3 +2044,308 @@ textarea {
   height: clamp(110px, 20vh, 180px);
   aspect-ratio: auto;
 }
+
+/* ───────── 对手动向：进度钟 ───────── */
+.clocks {
+  display: grid;
+  gap: 4px;
+}
+.clock-row {
+  border-radius: 6px;
+}
+.clock-head {
+  width: 100%;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 8px;
+  align-items: center;
+  background: none;
+  border: none;
+  padding: 3px 2px;
+  text-align: left;
+  border-radius: 6px;
+}
+.clock-head:hover {
+  background: rgba(127, 127, 127, 0.08);
+}
+.clock-name {
+  font-size: 13px;
+  line-height: 1.3;
+}
+.clock-row.unknown .clock-name {
+  color: var(--muted);
+  font-style: italic;
+}
+.clock-row.settled {
+  opacity: 0.7;
+}
+.clock-state {
+  display: block;
+  font-size: 11px;
+  color: var(--faint);
+  font-style: normal;
+}
+.clock-body {
+  font-size: 12px;
+  line-height: 1.55;
+  padding: 2px 4px 8px 38px;
+  display: grid;
+  gap: 3px;
+}
+.clock-body b {
+  font-weight: 600;
+}
+.clock-counter {
+  color: var(--gold);
+}
+.clock-dial .seg {
+  fill: rgba(127, 127, 127, 0.16);
+  stroke: var(--bg);
+  stroke-width: 1.5;
+}
+.clock-dial .seg.on {
+  fill: var(--muted);
+}
+.clock-dial.threat .seg.on {
+  fill: var(--up);
+}
+.clock-dial.friend .seg.on {
+  fill: var(--gold);
+}
+.clock-dial.defused .seg.on {
+  fill: var(--faint);
+}
+.clock-dial .rim {
+  fill: none;
+  stroke: rgba(127, 127, 127, 0.35);
+  stroke-width: 1;
+}
+
+/* ───────── 上级指示 ───────── */
+.directives {
+  display: grid;
+  gap: 8px;
+}
+.directive {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 8px;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.directive.met,
+.directive.failed {
+  opacity: 0.75;
+}
+.dir-from {
+  font-size: 12px;
+  color: var(--muted);
+}
+.dir-status {
+  font-size: 11px;
+  border-radius: 3px;
+  padding: 0 5px;
+  margin-left: 4px;
+  border: 1px solid currentColor;
+}
+.dir-status.open {
+  color: var(--warn);
+}
+.dir-status.met {
+  color: var(--down);
+}
+.dir-status.failed {
+  color: var(--up);
+}
+.dir-text {
+  font-family: var(--serif);
+  font-size: 13px;
+}
+.dir-stakes {
+  color: var(--faint);
+  font-size: 11px;
+}
+
+/* ───────── 案头文书：会员日报 ───────── */
+.docsheet {
+  display: grid;
+  gap: 8px;
+}
+.doc-note {
+  font-size: 12px;
+  color: var(--muted);
+  margin: 0;
+}
+.doc-scroll {
+  overflow-x: auto;
+}
+.doc-table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 12px;
+}
+.doc-table th,
+.doc-table td {
+  border-bottom: 1px solid var(--line);
+  padding: 5px 4px;
+  text-align: left;
+  white-space: nowrap;
+}
+.doc-table th {
+  color: var(--muted);
+  font-weight: 500;
+}
+.doc-table th.cleared,
+.doc-table td.cleared {
+  background: rgba(48, 164, 108, 0.08);
+}
+.doc-table th.cleared::after {
+  content: ' ✓';
+  color: var(--down);
+}
+.doc-table td.num {
+  text-align: right;
+}
+.doc-table tr.flagged td {
+  background: rgba(229, 72, 77, 0.1);
+}
+.doc-mark {
+  font-size: 12px;
+  padding: 2px 4px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  border-radius: 4px;
+  color: var(--muted);
+}
+.doc-mark.flag {
+  color: #fff;
+  background: var(--up);
+  border-color: var(--up);
+}
+.doc-foot {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+}
+
+/* ───────── 每晚选卡 ───────── */
+.draft {
+  border: 1px solid var(--gold-dim);
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin-bottom: 12px;
+  background: rgba(201, 163, 91, 0.06);
+}
+.draft-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  align-items: baseline;
+  font-size: 12px;
+  margin-bottom: 8px;
+}
+.draft-head b {
+  font-size: 14px;
+  color: var(--gold);
+}
+.draft-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 8px;
+}
+.draft-card {
+  border: 1px solid var(--line);
+  border-left: 3px solid #cfd3dc;
+  border-radius: 6px;
+  background: var(--panel-2);
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.draft-card.grey {
+  border-left-color: #7d8494;
+}
+.draft-card.black {
+  border-left-color: var(--black);
+}
+.draft-card.foe {
+  border-style: dashed;
+}
+.draft-foot {
+  margin-top: auto;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+}
+.draft-skip {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 10px;
+  margin-top: 6px;
+}
+.warn-text {
+  color: var(--warn);
+  font-size: 12px;
+}
+.ac-foe {
+  font-size: 12px;
+  color: var(--warn);
+}
+.ac-btns {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.badge-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--up);
+  margin-left: 4px;
+  vertical-align: middle;
+}
+.recap h3 + .directives,
+.recap .directives {
+  margin-bottom: 12px;
+}
+
+/* 酒馆里的纸面版本 */
+.ledger .clock-name,
+.ledger .dir-text {
+  color: var(--ink);
+}
+.ledger .clock-row.unknown .clock-name,
+.ledger .clock-state,
+.ledger .dir-from,
+.ledger .dir-stakes,
+.ledger .clock-body .faint {
+  color: var(--ink-soft);
+}
+.ledger .clock-counter {
+  color: #7a4e12;
+}
+.ledger .clock-dial .seg {
+  stroke: var(--paper);
+  fill: rgba(43, 29, 18, 0.12);
+}
+.ledger .clock-dial .seg.on {
+  fill: var(--ink-soft);
+}
+.ledger .clock-dial.threat .seg.on {
+  fill: #a3271f;
+}
+.ledger .clock-dial.friend .seg.on {
+  fill: #9a6b1f;
+}
+.draft.paper {
+  background: rgba(233, 178, 90, 0.08);
+  border-color: rgba(233, 178, 90, 0.5);
+}

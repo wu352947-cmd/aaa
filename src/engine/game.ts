@@ -171,6 +171,73 @@ export interface CardDef {
   status?: string;
   /** 交易屏上的快捷键（同时显示为快捷按钮） */
   key?: string;
+  /** 手牌：不打出，也可以换算成本钱，如“+1 点政治资本” */
+  convert?: string;
+  /** 对手的牌：自己用不了，换算时触发对手的事件（这里写触发什么） */
+  foe?: string;
+}
+
+/**
+ * 对手的进度钟：人物正在推进的计划。满格时计划落地。
+ * 没摸清之前只看得到“有人在准备什么”；打听、稽查之后才知道是什么、怎么拦。
+ */
+export interface Clock {
+  id: string;
+  /** 谁的计划（人物 id，用来画头像） */
+  who: string;
+  name: string;
+  segs: number;
+  filled: number;
+  known: boolean;
+  /** 满格时会发生什么 */
+  then: string;
+  /** 眼下的盘算（摸清之后才显示） */
+  now?: string;
+  /** 怎么打断、推迟或利用它 */
+  counter?: string;
+  tone: 'threat' | 'friend' | 'neutral';
+  state?: 'running' | 'fired' | 'defused';
+}
+
+/** 上级指示：早上下来，收盘或第二天见分晓 */
+export interface Directive {
+  id: string;
+  day: number;
+  /** 下指示的人物 id */
+  from: string;
+  text: string;
+  /** 办到与办砸的后果 */
+  stakes: string;
+  status: 'open' | 'met' | 'failed';
+  verdict?: string;
+}
+
+/** 案头文书：一张要逐行核对、签字的报表 */
+export interface DocSheet {
+  id: string;
+  title: string;
+  from: string;
+  note: string;
+  cols: string[];
+  /** 每一列从哪里来：申报的（可能有假）还是结算部的（可靠） */
+  colSource?: ('reported' | 'cleared' | 'label')[];
+  rows: { id: string; cells: string[] }[];
+  /** 每一行能下的结论；第一项是默认（无误） */
+  marks: { id: string; label: string }[];
+  /** 签过之后：每行的结论与结算 */
+  filed?: { marks: Record<string, string>; result: CardResult };
+}
+
+/** 每晚选卡：从这个座位的牌堆里发三张，收下一张进手牌 */
+export interface DraftRules {
+  /** 这个座位的整副牌（含当前是否被挡住） */
+  deck(g: Game): CardDef[];
+  /** 今晚能不能发这张 */
+  offerable(g: Game, c: CardDef): boolean;
+  /** 不打出，换算成本钱 */
+  convert(g: Game, id: string): CardResult;
+  /** 每晚发几张（默认 3） */
+  size?: number;
 }
 
 export interface CardResult {
@@ -247,6 +314,16 @@ export interface Scenario {
   playCard?(g: Game, id: string, target?: string): CardResult;
   /** 顶栏指标；不提供时显示权益、监管热度与声望 */
   meters?(g: Game): Meter[] | undefined;
+  /** 对手动向：各人物计划的进度钟 */
+  clocks?(g: Game): Clock[];
+  /** 上级指示（监管座位） */
+  directives?(g: Game): Directive[];
+  /** 今晚案头要核对的文书 */
+  docs?(g: Game): DocSheet[];
+  /** 在文书上签字：marks 是每一行的结论 */
+  fileDoc?(g: Game, id: string, marks: Record<string, string>): CardResult;
+  /** 每晚选卡 */
+  draft?: DraftRules;
   /** 复盘与逐笔里怎么称呼一个群体或账户 */
   groupName?(g: Game, who: string): string;
   setup(g: Game): void;
@@ -288,6 +365,9 @@ export type PlayerAction =
   | { type: 'social'; verb: Verb; npc: string; option?: string }
   | { type: 'decision'; id: string; choice: string }
   | { type: 'card'; id: string; target?: string }
+  | { type: 'convert'; id: string }
+  | { type: 'draft'; id: string | null }
+  | { type: 'doc'; id: string; marks: Record<string, string> }
   | { type: 'end-night' };
 
 export interface LoggedAction {
@@ -353,6 +433,14 @@ export class Game {
   papers: { day: number; headline: string; sub: string; facts: string[] }[] = [];
   /** 打过的行动卡与结算结果 */
   cardLog: { day: number; time: string; id: string; name: string; target?: string; result: CardResult }[] = [];
+  /** 手牌：每晚选来的一次性卡 */
+  hand: string[] = [];
+  /** 今晚发到面前、还没选的牌 */
+  offer: string[] | null = null;
+  /** 收下过的牌（不会再发） */
+  drafted: string[] = [];
+  readonly maxHand = 3;
+  private readonly rngDraft: Rng;
 
   constructor(
     readonly scenario: Scenario,
@@ -363,6 +451,7 @@ export class Game {
     this.rng = new Rng(`${scenario.id}:${seed}`);
     this.rngSocial = this.rng.fork('social');
     this.rngScript = this.rng.fork('script');
+    this.rngDraft = this.rng.fork('draft');
     // 规则卡组按局复制：监管者盘中调整保证金只影响这一局
     setUnits(scenario.units ?? { qty: '口', cur: '元' });
     this.market = new Market({ ...scenario.deck }, scenario.params, `${scenario.id}:${seed}:market`, scenario.startPrice, scenario.session ?? SSE_1995);
@@ -402,7 +491,32 @@ export class Game {
 
   /** 当前能打出的行动卡（含被挡住的，供界面显示原因） */
   cards(): CardDef[] {
-    return this.scenario.cards?.(this) ?? [];
+    return [...this.handCards(), ...(this.scenario.cards?.(this) ?? [])];
+  }
+
+  /** 手牌按收下的顺序排；对手的牌只能换算 */
+  handCards(): CardDef[] {
+    const deck = this.scenario.draft?.deck(this) ?? [];
+    return this.hand
+      .map((id) => deck.find((c) => c.id === id))
+      .filter((c): c is CardDef => !!c)
+      .map((c) => ({ ...c, group: '手牌', blocked: c.foe ? '对手的牌：只能换算' : c.blocked }));
+  }
+
+  /** 今晚发到面前的牌 */
+  offerCards(): CardDef[] {
+    const deck = this.scenario.draft?.deck(this) ?? [];
+    return (this.offer ?? []).map((id) => deck.find((c) => c.id === id)).filter((c): c is CardDef => !!c);
+  }
+
+  private dealOffer(): void {
+    const dr = this.scenario.draft;
+    this.offer = null;
+    if (!dr || this.ending) return;
+    const pool = dr.deck(this).filter((c) => !this.drafted.includes(c.id) && dr.offerable(this, c));
+    const out: string[] = [];
+    while (out.length < (dr.size ?? 3) && pool.length) out.push(pool.splice(Math.floor(this.rngDraft.next() * pool.length), 1)[0].id);
+    if (out.length) this.offer = out;
   }
 
   /** 这张卡此刻能不能打：时段、是否被挡住、对象是否合法 */
@@ -505,14 +619,45 @@ export class Game {
           return null;
         }
         const result = this.scenario.playCard(this, action.id, action.target);
-        this.cardLog.push({ day: this.dayIndex, time: this.phase === 'night' ? '夜' : this.time, id: card.id, name: card.name, target: action.target, result });
-        this.push({ kind: 'card', text: `${result.title}${result.effects.length ? '：' + result.effects.join('，') : ''}` });
+        this.hand = this.hand.filter((x) => x !== action.id);
+        this.logCard(card, result, action.target);
+        return null;
+      }
+      case 'convert': {
+        const dr = this.scenario.draft;
+        const card = this.handCards().find((x) => x.id === action.id);
+        if (!dr || !card || this.decision || this.ending) return null;
+        const result = dr.convert(this, action.id);
+        this.hand = this.hand.filter((x) => x !== action.id);
+        this.logCard(card, result);
+        return null;
+      }
+      case 'draft': {
+        if (!this.offer || this.phase !== 'night') return null;
+        if (action.id) {
+          if (!this.offer.includes(action.id) || this.hand.length >= this.maxHand) return null;
+          this.hand.push(action.id);
+          this.drafted.push(action.id);
+        }
+        this.offer = null;
+        return null;
+      }
+      case 'doc': {
+        const doc = this.scenario.docs?.(this).find((d) => d.id === action.id);
+        if (!doc || doc.filed || !this.scenario.fileDoc) return null;
+        const result = this.scenario.fileDoc(this, action.id, action.marks);
+        this.logCard({ id: action.id, name: doc.title }, result);
         return null;
       }
       case 'end-night':
         this.endNight();
         return null;
     }
+  }
+
+  private logCard(card: { id: string; name: string }, result: CardResult, target?: string): void {
+    this.cardLog.push({ day: this.dayIndex, time: this.phase === 'night' ? '夜' : this.time, id: card.id, name: card.name, target, result });
+    this.push({ kind: 'card', text: `${result.title}${result.effects.length ? '：' + result.effects.join('，') : ''}` });
   }
 
   onRuleHits(hits: RuleHit[]): void {
@@ -540,6 +685,7 @@ export class Game {
       this.scenario.onDayStart(this);
       this.push({ kind: 'phase', text: `${this.day.date} ${this.day.label}` });
       this.scenario.onNight(this);
+      this.dealOffer();
       return;
     }
     this.phase = 'trading';
@@ -710,6 +856,7 @@ export class Game {
     this.energy = this.maxEnergy;
     this.heat = Math.max(this.heatPeak * 0.3, this.heat - 1);
     this.scenario.onNight(this);
+    this.dealOffer();
   }
 
   private endNight(): void {
@@ -719,6 +866,8 @@ export class Game {
       this.ending = this.scenario.reckon(this);
       return;
     }
+    // 没选的牌不留到明天
+    this.offer = null;
     this.dayIndex++;
     this.startDay();
   }
@@ -735,7 +884,7 @@ export class Game {
     const parts: (string | number)[] = [this.dayIndex, this.market.t, ex.last, ex.trades.length, this.heat.toFixed(4), this.reputation];
     for (const a of [...ex.accounts.values()].sort((x, y) => x.id.localeCompare(y.id))) parts.push(a.id, a.pos, a.cash.toFixed(2));
     for (const n of [...this.npcs.values()].sort((x, y) => x.id.localeCompare(y.id))) parts.push(n.id, n.relation);
-    parts.push(...this.market.closePrices);
+    parts.push(...this.market.closePrices, ...this.hand);
     let h = 2166136261 >>> 0;
     const s = parts.join('|');
     for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 16777619);

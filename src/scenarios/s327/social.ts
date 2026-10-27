@@ -113,6 +113,11 @@ export function probe(g: Game, npcId: string, out: Out): SocialOutcome {
   }
   const s = stance(g, npcId, false);
   const effects: string[] = [];
+  // 当面聊过，才摸得清他在盘算什么
+  if (!st(g).know.has(npcId) && ['shen', 'gao', 'wei', 'lu'].includes(npcId)) {
+    st(g).know.add(npcId);
+    effects.push(`摸清了${n.name}的盘算（见“对手动向”）`);
+  }
   if (npcId !== 'chen') {
     g.relate(npcId, 3, '你主动找他聊行情');
     effects.push(`${n.name} 关系 +3`);

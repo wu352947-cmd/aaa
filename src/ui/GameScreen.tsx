@@ -12,6 +12,8 @@ import { DecisionModal, RuleCardModal, type UiSettings } from './Modals';
 import { Night } from './Night';
 import { OrderTicket } from './OrderTicket';
 import { PlanBook } from './PlanBook';
+import { ClocksCard, DirectivesCard } from './Plans';
+import { eraOfScenario } from '../pixel/palettes';
 import { saveGame } from './save';
 import { MembersCard, OrderBookCard, PositionCard, StakeCard, TapeCard } from './SidePanels';
 import { sound } from './sound';
@@ -337,6 +339,8 @@ export function GameScreen({ game, llm, ui, onSettings, onEnd }: { game: Game; l
         </div>
         <div className="side">
           {observer ? <MembersCard game={game} /> : <PositionCard game={game} />}
+          <DirectivesCard dirs={(game.scenario.directives?.(game) ?? []).filter((d) => d.status === 'open')} era={eraOfScenario(game.scenario.id)} names={(id) => game.npc(id)?.name ?? id} />
+          <ClocksCard clocks={game.scenario.clocks?.(game) ?? []} era={eraOfScenario(game.scenario.id)} />
           {observer && <StakeCard game={game} />}
           <OrderBookCard game={game} />
           <TapeCard game={game} />

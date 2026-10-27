@@ -27,6 +27,10 @@ export function CardsBody({ game, onPlayed }: { game: Game; onPlayed?: () => voi
         game.act({ type: 'card', id, target });
         onPlayed?.();
       }}
+      onConvert={(id) => {
+        game.act({ type: 'convert', id });
+        onPlayed?.();
+      }}
     />
   );
 }
@@ -38,6 +42,7 @@ export function CardList({
   offPhase = '',
   result,
   onPlay,
+  onConvert,
   tone,
 }: {
   cards: CardDef[];
@@ -45,13 +50,17 @@ export function CardList({
   offPhase?: string;
   result: (id: string) => { result: CardResult; time?: string; latest?: boolean } | undefined;
   onPlay: (id: string, target?: string) => void;
+  /** 手牌不打出、换算成本钱 */
+  onConvert?: (id: string) => void;
   tone?: 'paper';
 }) {
   const [targets, setTargets] = useState<Record<string, string>>({});
   const [showOther, setShowOther] = useState(false);
   const now = (c: CardDef) => phaseOk(c) && !c.blocked;
-  const groups = [...new Set(cards.filter(phaseOk).map((c) => c.group))];
-  const other = cards.filter((c) => !phaseOk(c));
+  // 手牌随时都摊开：不是时候打，也能换算
+  const shown = (c: CardDef) => phaseOk(c) || !!c.convert;
+  const groups = [...new Set(cards.filter(shown).map((c) => c.group))];
+  const other = cards.filter((c) => !shown(c));
   const play = (c: CardDef) => {
     onPlay(c.id, targets[c.id] ?? (c.targets?.length === 1 ? c.targets[0].id : undefined));
     const rest = { ...targets };
@@ -62,7 +71,7 @@ export function CardList({
     <div className={cls('cards', tone)}>
       {cards.length === 0 && <p className="faint">这个座位没有可用的手段。</p>}
       {groups.map((gname) => {
-        const list = cards.filter((c) => c.group === gname && phaseOk(c)).sort((a, b) => Number(now(b)) - Number(now(a)));
+        const list = cards.filter((c) => c.group === gname && shown(c)).sort((a, b) => Number(now(b)) - Number(now(a)));
         return (
           <div key={gname} className="card-group">
             <div className="card-group-title">{gname}</div>
@@ -81,7 +90,7 @@ export function CardList({
                     <span className="ac-when">{WHEN[c.when]}</span>
                   </div>
                   <div className="ac-does">{c.does}</div>
-                  <div className="ac-cost">代价：{c.cost}</div>
+                  {c.foe ? <div className="ac-foe">{c.foe}</div> : <div className="ac-cost">代价：{c.cost}</div>}
                   {c.targets && c.targets.length > 1 && usable && (
                     <div className="ac-targets">
                       {c.targets.map((t) => (
@@ -99,10 +108,19 @@ export function CardList({
                     ) : (
                       <span />
                     )}
-                    <button className={cls('btn small', usable && !(c.targets && !tgt) && 'primary')} disabled={!usable || (!!c.targets && !tgt)} onClick={() => play(c)}>
-                      {c.targets && !tgt ? '先选对象' : '打出'}
-                      {c.key && <span className="kbd">{c.key.toUpperCase()}</span>}
-                    </button>
+                    <span className="ac-btns">
+                      {c.convert && onConvert && (
+                        <button className="btn small ghost" onClick={() => onConvert(c.id)} title="不打出这张牌，换算成本钱">
+                          换算 {c.convert}
+                        </button>
+                      )}
+                      {!c.foe && (
+                        <button className={cls('btn small', usable && !(c.targets && !tgt) && 'primary')} disabled={!usable || (!!c.targets && !tgt)} onClick={() => play(c)}>
+                          {c.targets && !tgt ? '先选对象' : '打出'}
+                          {c.key && <span className="kbd">{c.key.toUpperCase()}</span>}
+                        </button>
+                      )}
+                    </span>
                   </div>
                   {res && (
                     <div className={cls('card-result', !res.result.ok && 'fail', res.latest && 'latest')}>

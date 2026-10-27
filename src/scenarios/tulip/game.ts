@@ -1,6 +1,7 @@
-import type { CardDef, CardResult } from '../../engine/game';
+import type { CardDef, CardResult, Clock, Directive } from '../../engine/game';
 import { Rng } from '../../engine/rng';
 import { APRIL_VALUE, COUNCIL, EVENINGS, MEANS, OPTION_FEE, TULIP_NPCS, WINE_MONEY, type Councillor, type Evening } from './data';
+import { breakTulipDirective, tulipClocks, tulipConvert, tulipDeck, tulipDirectives, tulipDirectivesOpen, tulipDirectivesVote, tulipDraftPlay, tulipOfferable } from './plans';
 
 /**
  * 酒馆里的花：新手教程剧本的引擎。
@@ -59,7 +60,9 @@ export type TulipAction =
   | { type: 'counter'; npc: string; price: number }
   | { type: 'leave' }
   | { type: 'rule'; rule: TulipRule }
-  | { type: 'card'; id: string; target?: string };
+  | { type: 'card'; id: string; target?: string }
+  | { type: 'convert'; id: string }
+  | { type: 'draft'; id: string | null };
 
 export interface Settlement {
   rule: TulipRule;
@@ -90,7 +93,7 @@ export class TulipGame {
   private nextId = 1;
   private netTonight = 0;
   /** 放风带来的下一晚额外推动 */
-  private boost = 0;
+  boost = 0;
 
   // ── 行会议员 ──
   /** 每晚的影响力：做一件事花 1–2 点，不留到明天 */
@@ -114,12 +117,27 @@ export class TulipGame {
   /** 酒馆老板透露过的底价：npc → 底价 */
   revealed: Record<string, number> = {};
   cardLog: { evening: number; id: string; result: CardResult }[] = [];
+  /** 登门拜访过几位议员 */
+  lobbyVisits = 0;
+  /** 市政官的交代 */
+  dirs: Directive[] = [];
+  /** 摸清了谁的盘算 */
+  know = new Set<string>();
+  /** 赊来的钱：四月结账时还 */
+  debt = 0;
+  // ── 每晚选卡 ──
+  hand: string[] = [];
+  offer: string[] | null = null;
+  drafted: string[] = [];
+  readonly maxHand = 3;
+  private readonly rngDraft: Rng;
 
   constructor(
     readonly seed: string,
     readonly faction: TulipFaction,
   ) {
     this.rng = new Rng(`tulip:${seed}`);
+    this.rngDraft = new Rng(`tulip:${seed}:draft`);
     this.cash = faction === 'grower' ? 60 : faction === 'council' ? 20 : 100;
     this.bulbs = faction === 'grower' ? 6 : 0;
     this.openEvening();
@@ -174,6 +192,46 @@ export class TulipGame {
       }
       this.npcBook.push({ evening: this.evening, buyer: buyers[i].npc, seller: sellers[i].npc, price, heard });
     }
+    tulipDirectivesOpen(this);
+    this.dealOffer();
+  }
+
+  private dealOffer(): void {
+    this.offer = null;
+    const pool = tulipDeck(this).filter((c) => !this.drafted.includes(c.id) && tulipOfferable(this, c));
+    const out: string[] = [];
+    while (out.length < 3 && pool.length) out.push(pool.splice(Math.floor(this.rngDraft.next() * pool.length), 1)[0].id);
+    if (out.length) this.offer = out;
+  }
+
+  handCards(): CardDef[] {
+    const deck = tulipDeck(this);
+    return this.hand
+      .map((id) => deck.find((c) => c.id === id))
+      .filter((c): c is CardDef => !!c)
+      .map((c) => ({ ...c, blocked: c.foe ? '对手的牌：只能换算' : c.blocked }));
+  }
+
+  offerCards(): CardDef[] {
+    const deck = tulipDeck(this);
+    return (this.offer ?? []).map((id) => deck.find((c) => c.id === id)).filter((c): c is CardDef => !!c);
+  }
+
+  clocks(): Clock[] {
+    return tulipClocks(this);
+  }
+
+  directives(): Directive[] {
+    return tulipDirectives(this);
+  }
+
+  addContract(npc: string, side: Side, price: number): void {
+    this.contracts.push({ id: this.nextId++, evening: this.evening, npc, side, price });
+  }
+
+  lobbyAdd(id: string, rule: TulipRule, n: number) {
+    const l = (this.lobby[id] ??= {});
+    l[rule] = (l[rule] ?? 0) + n;
   }
 
   quote(npc: string): Quote | undefined {
@@ -191,7 +249,27 @@ export class TulipGame {
       const c = this.cards().find((x) => x.id === a.id);
       if (!c || c.blocked || (c.targets && !c.targets.some((t) => t.id === a.target))) return null;
       this.log.push(a);
-      this.cardLog.push({ evening: this.evening, id: a.id, result: this.playCard(a.id, a.target) });
+      const result = a.id.startsWith('x-') ? tulipDraftPlay(this, a.id, a.target) : this.playCard(a.id, a.target);
+      this.hand = this.hand.filter((x) => x !== a.id);
+      this.cardLog.push({ evening: this.evening, id: a.id, result });
+      return null;
+    }
+    if (a.type === 'convert') {
+      if (!this.hand.includes(a.id) || this.phase === 'ending') return null;
+      this.log.push(a);
+      const result = tulipConvert(this, a.id);
+      this.hand = this.hand.filter((x) => x !== a.id);
+      this.cardLog.push({ evening: this.evening, id: a.id, result });
+      return null;
+    }
+    if (a.type === 'draft') {
+      if (!this.offer || (a.id && (!this.offer.includes(a.id) || this.hand.length >= this.maxHand))) return null;
+      this.log.push(a);
+      if (a.id) {
+        this.hand.push(a.id);
+        this.drafted.push(a.id);
+      }
+      this.offer = null;
       return null;
     }
     if (this.phase !== 'table') return null;
@@ -235,6 +313,7 @@ export class TulipGame {
     this.boost = 0;
     if (this.evening >= EVENINGS.length - 1) {
       this.phase = 'ruling';
+      this.offer = null;
       // 表决前还有一天可以奔走
       if (this.faction === 'council') this.influence = 2;
       return;
@@ -277,7 +356,8 @@ export class TulipGame {
       return { contract: c, amount: c.price - APRIL_VALUE, note: '收到合约价，按四月价买来球茎交货' };
     });
     const bulbsValue = bulbs * APRIL_VALUE;
-    const total = this.cash + bulbsValue + lines.reduce((a, l) => a + l.amount, 0);
+    // 赊来的钱四月结账时还掉
+    const total = this.cash - this.debt + bulbsValue + lines.reduce((a, l) => a + l.amount, 0);
     return { rule, lines: lines.map((l) => ({ ...l, amount: Math.round(l.amount * 100) / 100 })), bulbsValue, total: Math.round(total * 100) / 100 };
   }
 
@@ -314,7 +394,7 @@ export class TulipGame {
 
   cards(): CardDef[] {
     if (this.phase !== 'table' && !(this.phase === 'ruling' && this.faction === 'council')) return [];
-    return this.faction === 'council' ? this.councilCards() : this.traderCards();
+    return [...this.handCards(), ...(this.faction === 'council' ? this.councilCards() : this.traderCards())];
   }
 
   private traderCards(): CardDef[] {
@@ -467,6 +547,7 @@ export class TulipGame {
       case 'ask-host': {
         this.cash -= 2;
         const q = this.quote(target!)!;
+        if (q.npc === 'cornelis') this.know.add('cornelis');
         // 老板只知道个大概：误差一成以内
         const guess = Math.round(q.reservation * (0.95 + this.rng.next() * 0.1));
         this.revealed[q.npc] = guess;
@@ -480,12 +561,14 @@ export class TulipGame {
     this.influence -= id === 'deposit' ? 2 : id.startsWith('gift') ? 0 : 1;
     switch (id) {
       case 'notice':
+        breakTulipDirective(this, 'hands-off', '贴了告示');
         this.cool += this.cool > 0 ? 0.04 : 0.08;
         return R('告示贴在了酒馆门口', ['之后每晚的价低一截', '影响力 −1'], { who: '范·德·梅尔', text: '你这是砸大家的饭碗。' });
       case 'register':
         this.registered = true;
         return R('从今晚起，约定要到行会登记', ['你能看到之后的全部约定', '影响力 −1']);
       case 'deposit':
+        breakTulipDirective(this, 'hands-off', '收了定金');
         this.deposit = true;
         this.cool += 0.1;
         return R('签约须付一成定金', ['约定会少一半', '价降温', '影响力 −2'], { who: '布洛克', text: '一成定金？那还有几个人签得起！' });
@@ -515,16 +598,13 @@ export class TulipGame {
       // 劝人违背自己的利益更难
       const add = c.pref[rule] < 0 ? 1 : 2;
       this.lobbyAdd(c.id, rule, add);
+      this.lobbyVisits++;
       const now = this.voteOf(c, this.proposal ?? rule);
       return R(`拜访了${c.name}`, [`他对“${RULE_NAME[rule]}”的倾向 +${add}`, `他现在倾向：${RULE_NAME[now]}`, '影响力 −1'], { who: c.name, text: c.stance });
     }
     return R('没有效果', []);
   }
 
-  private lobbyAdd(id: string, rule: TulipRule, n: number) {
-    const l = (this.lobby[id] ??= {});
-    l[rule] = (l[rule] ?? 0) + n;
-  }
 
   // ───────────── 表决 ─────────────
 
@@ -575,6 +655,7 @@ export class TulipGame {
     this.proposal = proposal;
     this.votes = t.votes;
     this.rule = t.winner;
+    tulipDirectivesVote(this);
   }
 
   /** 议员的结局：威望与廉洁 */
@@ -591,6 +672,10 @@ export class TulipGame {
     }
     standing -= 5 * ruined;
     if (this.registered) standing += 5;
+    const met = this.dirs.filter((x) => x.status === 'met').length;
+    const failed = this.dirs.filter((x) => x.status === 'failed').length;
+    standing += 3 * met - 3 * failed;
+    if (this.dirs.length) lines.push(`市政官交代的 ${this.dirs.length} 件事，你办到了 ${met} 件。`);
     if (this.relief) {
       standing += 5;
       lines.push(`钱箱里的 ${Math.round(this.treasury)} 盾救济了倾家荡产的人。`);

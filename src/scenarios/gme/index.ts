@@ -2,6 +2,7 @@ import { fmtYi, newAccount } from '../../engine/exchange';
 import { addCrowdFlow, crowdFlowOrders } from '../../engine/flows';
 import type { CardDef, CardResult, DialogueIntent, Ending, ExchangeOffer, Game, Meter, Scenario, SocialOutcome } from '../../engine/game';
 import type { Actor, Market } from '../../engine/market';
+import { DRAFT_GME, gmeClocks, gmeDraftPlay } from './plans';
 import { BATTLE_2021, DAYS_2021, DECK_2021, FACTIONS_2021, NPCS_2021, NYSE, PARAMS_2021, PRINCIPLES_2021, PROLOGUE_2021, RULES_2021, SOURCES_2021, START_2021 } from './data';
 
 const YOU = 'you';
@@ -98,8 +99,10 @@ export const GME: Scenario = {
   lotPresets: [1_000_000, 5_000_000],
   groupName: (g, who) => groupName(g, who),
   cards: (g) => gmeCards(g),
-  playCard: (g, id, target) => gmePlay(g, id, target),
+  playCard: (g, id, target) => (id.startsWith('x-') ? gmeDraftPlay(g, id) : gmePlay(g, id, target)),
   meters: (g) => (g.factionId === 'broker' ? brokerMeters(g) : undefined),
+  clocks: (g) => gmeClocks(g, requirement),
+  draft: DRAFT_GME,
 
   setup(g) {
     const ex = g.market.ex;
@@ -277,7 +280,13 @@ export const GME: Scenario = {
     if (verb === 'probe') {
       const s = stance(g, npcId);
       g.relate(npcId, 3, '你主动来聊');
-      return out(true, [`${n.name} 关系 +3`], { playerMove: `问${n.name}怎么看这只股票`, ...s });
+      const fx = [`${n.name} 关系 +3`];
+      // 当面聊过，才摸得清他在盘算什么
+      if (['rowan', 'stone', 'jack'].includes(npcId) && !g.flags[`know-${npcId}`]) {
+        g.flags[`know-${npcId}`] = true;
+        fx.push(`摸清了${n.name}的盘算（见“对手动向”）`);
+      }
+      return out(true, fx, { playerMove: `问${n.name}怎么看这只股票`, ...s });
     }
     if (verb === 'exchange') {
       switch (`${npcId}:${option}`) {
@@ -636,6 +645,7 @@ function requirement(g: Game): number {
   if (flag(g, 'marginFull')) req -= 800_000_000;
   if (flag(g, 'optionsOff')) req -= 500_000_000;
   if (flag(g, 'waiver')) req -= 1_600_000_000;
+  if (flag(g, 'nsccFriend')) req -= 300_000_000;
   return req;
 }
 
