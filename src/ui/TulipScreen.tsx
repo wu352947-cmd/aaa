@@ -97,13 +97,17 @@ export function TulipScreen({ game, llm, onExit, onTo327 }: { game: TulipGame; l
   const council = game.faction === 'council';
   const act = (npcId: string, kind: 'accept' | 'counter') => {
     const before = game.contracts.length;
+    const lockedBefore = game.shortDeposit();
     const talk = kind === 'accept' ? game.act({ type: 'accept', npc: npcId }) : game.act({ type: 'counter', npc: npcId, price: Number(offers[npcId]) || 0 });
     say(npcId, talk);
-    if (game.contracts.length > before) {
-      if (game.contracts.length === 1) showCard('forward');
-      else if (game.contracts.length === 2) showCard('wine-money');
-      if (game.leverage() >= 3) showCard('leverage');
-    }
+    // 一次只弹一张规则卡：按顺序挑第一张没看过的，其余留到下一次
+    const due: string[] = [];
+    if (game.contracts.length > before && game.contracts.length === 1) due.push('forward');
+    if (talk?.kind === 'deposit' || game.shortDeposit() > lockedBefore) due.push('short-deposit');
+    if (game.contracts.length > before && game.contracts.length >= 2) due.push('wine-money');
+    if (game.contracts.length > before && game.leverage() >= 3) due.push('leverage');
+    const next = due.find((id) => !seen.has(id));
+    if (next) showCard(next);
     saveTulip(game);
     bump();
   };
@@ -173,6 +177,7 @@ export function TulipScreen({ game, llm, onExit, onTo327 }: { game: TulipGame; l
               <>
                 <span>口袋里</span>
                 <b>{fl(game.cash)}</b>
+                {game.shortDeposit() > 0 && <span>其中押作卖空定金 {fl(game.shortDeposit())}</span>}
               </>
             )}
             {game.faction === 'grower' && <span>花田里还有 {game.bulbs} 份球茎</span>}
@@ -217,6 +222,11 @@ export function TulipScreen({ game, llm, onExit, onTo327 }: { game: TulipGame; l
                     <span className="slate-unit">一份 · 春天交货</span>
                   </div>
                   {game.revealed[q.npc] != null && !q.done && <div className="slate-hint">老板说：底价约 {game.revealed[q.npc]} 盾</div>}
+                  {!council && !q.done && q.side === 'buy' && game.depositNeed(q.price) > 0 && (
+                    <div className={cls('slate-hint', game.depositShort(q.price) > 0 && 'warn-text')}>
+                      你没有球茎可交：卖给他要押 {fl(game.depositNeed(q.price))} 定金{game.depositShort(q.price) > 0 ? '，口袋里不够' : ''}
+                    </div>
+                  )}
                   {b && <div className={cls('seat-bubble', b.pending && 'typing')}>{b.pending ? '' : b.text}</div>}
                   {!q.done && !council && (
                     <div className="seat-actions">
@@ -737,6 +747,11 @@ function TulipEnding({ game, onExit, onTo327 }: { game: TulipGame; onExit: () =>
             : '这条新规则对你没有影响。但对许多人来说，它决定了是倾家荡产还是安然无恙。',
     },
   ];
+  if (game.contracts.some((c) => c.side === 'sell') && game.faction === 'speculator')
+    lessons.push({
+      q: '你卖的花，你有吗？',
+      a: '你一个球茎也没有，卖出去的每一份都是“卖空”：赌春天能用更低的价买来交货。这一次价格崩了，你赌对了；可要是价格一直涨，卖空的亏损是没有上限的。所以买家要你先押定金——你能卖多少，取决于你押得起多少。',
+    });
   if (fwd.unpaid > 0 || opt.unpaid > 0)
     lessons.push({
       q: '花传到最后，落在谁手里？',

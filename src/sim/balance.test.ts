@@ -82,7 +82,7 @@ describe('平衡性模拟', { timeout: 3_600_000 }, () => {
             runs.push(r);
           }
     const truns: TulipRun[] = [];
-    for (const p of process.env.BALANCE_ONLY ? [] : TULIP_POLICIES)
+    for (const p of process.env.BALANCE_ONLY && !process.env.BALANCE_ONLY.split(',').includes('tulip') ? [] : TULIP_POLICIES)
       for (const seat of p.seats)
         for (const s of N ? SEEDS : ['smoke']) {
           const r = runTulip(seat, p, s);

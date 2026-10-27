@@ -24,6 +24,14 @@ export function tulipIntent(g: TulipGame, t: Talk): DialogueIntent {
         convey: npcBuys ? [`${a} 盾太贵了`, `我最多出 ${b} 盾`] : [`${a} 盾太低了`, `少于 ${b} 盾不卖`],
         tone: 'neutral',
       };
+    case 'deposit':
+      return {
+        ...base,
+        verb: 'exchange',
+        playerMove: `想以 ${a} 盾卖给他一份自己并没有的球茎`,
+        convey: [`你手里一个球茎都没有`, `先押 ${b} 盾定金再说`],
+        tone: 'cold',
+      };
     case 'refuse':
       return { ...base, verb: 'exchange', playerMove: `又还价 ${a} 盾`, convey: ['不谈了', '今晚就到这里吧'], tone: 'cold', numbers: [] };
     default:

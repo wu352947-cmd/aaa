@@ -220,6 +220,7 @@ describe('酒馆里的手段', () => {
 describe('击鼓传花', () => {
   it('高位卖给家底薄的人：他倾家荡产，欠你的只还得出一部分', () => {
     const g = new TulipGame('chain', 'speculator');
+    g.cash = 1000; // 押得起卖空定金
     // 让亨德里克（家底 80 盾）出高价买一份
     const q = g.quotes.find((x) => x.npc === 'hendrick')!;
     q.side = 'buy';
@@ -288,5 +289,48 @@ describe('大会发言', () => {
     expect(a.councilVerdict().standing).toBeLessThan(b.councilVerdict().standing);
     expect(a.councilVerdict().lines.some((l) => l.includes('当众力主'))).toBe(true);
     expect(COUNCIL.length).toBe(6);
+  });
+});
+
+describe('卖空定金', () => {
+  function bidAt(g: TulipGame, npc: string, price: number) {
+    const q = g.quotes.find((x) => x.npc === npc)!;
+    q.side = 'buy';
+    q.price = price;
+    q.done = false;
+    return q;
+  }
+
+  it('没有球茎的投机客卖约要押一成：押不起就签不了', () => {
+    const g = new TulipGame('dep', 'speculator');
+    bidAt(g, 'dirck', 600);
+    expect(g.depositNeed(600)).toBe(60);
+    expect(g.act({ type: 'accept', npc: 'dirck' })!.kind).toBe('deal');
+    expect(g.shortDeposit()).toBe(60);
+    bidAt(g, 'maritje', 600);
+    const t = g.act({ type: 'accept', npc: 'maritje' })!;
+    expect(t.kind).toBe('deposit');
+    expect(t.prices).toEqual([600, 60]);
+    expect(g.contracts.length).toBe(1);
+  });
+
+  it('买进的约和自家球茎可以拿来交货，不用押', () => {
+    const g = new TulipGame('dep2', 'grower');
+    expect(g.depositNeed(1000)).toBe(0);
+    const s = new TulipGame('dep3', 'speculator');
+    s.addContract('cornelis', 'buy', 120);
+    expect(s.depositNeed(1000)).toBe(0);
+    expect(s.depositNeed(500)).toBe(0);
+  });
+
+  it('高位卖空不再稳赚大钱：按历史规则，收益被口袋大小封顶', () => {
+    const g = new TulipGame('cap', 'speculator');
+    while (g.phase === 'table') {
+      if (g.night.kind === 'normal' && g.evening >= 2) for (const q of g.quotes.filter((x) => x.side === 'buy' && !x.done)) g.act({ type: 'accept', npc: q.npc });
+      g.act({ type: 'leave' });
+    }
+    const opt = g.settle('option');
+    expect(g.shortDeposit()).toBeLessThanOrEqual(g.cash + 1);
+    expect((opt.total - g.startWealth) / g.startWealth).toBeLessThan(1);
   });
 });

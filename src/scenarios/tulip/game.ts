@@ -1,6 +1,6 @@
 import type { CardDef, CardResult, Clock, Directive } from '../../engine/game';
 import { Rng } from '../../engine/rng';
-import { APRIL_VALUE, COUNCIL, EVENINGS, MEANS, OPTION_FEE, TULIP_NPCS, WINE_MONEY, type Councillor, type Evening } from './data';
+import { APRIL_VALUE, COUNCIL, DEPOSIT, EVENINGS, MEANS, OPTION_FEE, TULIP_NPCS, WINE_MONEY, type Councillor, type Evening } from './data';
 import { breakTulipDirective, tulipClocks, tulipConvert, tulipDeck, tulipDirectives, tulipDirectivesOpen, tulipDirectivesVote, tulipDraftPlay, tulipOfferable } from './plans';
 
 /**
@@ -46,7 +46,7 @@ export interface Contract {
   price: number;
 }
 
-export type TalkKind = 'accept' | 'counter' | 'refuse' | 'deal' | 'absent';
+export type TalkKind = 'accept' | 'counter' | 'refuse' | 'deal' | 'absent' | 'deposit';
 
 export interface Talk {
   npc: string;
@@ -285,11 +285,13 @@ export class TulipGame {
     }
     const q = this.quote(a.npc);
     if (!q || q.done) return { npc: a.npc, kind: 'absent', prices: [] };
-    if (a.type === 'accept') return this.trade(q, q.price);
+    // 手里没有球茎还要卖：先押一成定金，押不起他就不签
+    const short = (price: number) => (q.side === 'buy' && this.depositShort(price) > 0 ? { npc: q.npc, kind: 'deposit' as const, prices: [price, this.depositNeed(price)] } : null);
+    if (a.type === 'accept') return short(q.price) ?? this.trade(q, q.price);
 
     const p = Math.round(a.price);
     const ok = q.side === 'sell' ? p >= q.reservation : p <= q.reservation;
-    if (ok) return this.trade(q, p);
+    if (ok) return short(p) ?? this.trade(q, p);
     if (q.counters >= 2) {
       q.done = true;
       return { npc: q.npc, kind: 'refuse', prices: [p, q.price] };
@@ -325,6 +327,28 @@ export class TulipGame {
     this.evening++;
     if (this.night.kind !== 'normal') this.impact = 0; // 崩盘之后，你一个人的买卖已经无关紧要
     this.openEvening();
+  }
+
+  /**
+   * 卖空定金：卖出的约里，手上的球茎和买进的约都盖不住的那几份，每份押合约价的一成。
+   * 盖不住的按最近签的算。extra 是正要签的一份卖约。
+   */
+  shortDeposit(extra?: number): number {
+    const sells = this.contracts.filter((c) => c.side === 'sell').map((c) => c.price);
+    if (extra != null) sells.push(extra);
+    const covered = this.bulbs + this.contracts.filter((c) => c.side === 'buy').length;
+    const naked = sells.slice(Math.min(sells.length, covered));
+    return naked.reduce((a, p) => a + Math.ceil(p * DEPOSIT), 0);
+  }
+
+  /** 签这份卖约需要的定金（这一份的） */
+  depositNeed(price: number): number {
+    return this.shortDeposit(price) - this.shortDeposit();
+  }
+
+  /** 签这份卖约之后，定金比口袋多出的部分（>0 就签不了） */
+  depositShort(price: number): number {
+    return Math.max(0, this.shortDeposit(price) - (this.cash + WINE_MONEY));
   }
 
   /** 合约按今晚的共识价算的纸面盈亏 */
