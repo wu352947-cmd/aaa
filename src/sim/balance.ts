@@ -171,6 +171,8 @@ export function runGame(scenario: Scenario, seat: string, policy: Policy, seed: 
   const played = g.log.filter((l) => l.action.type === 'card').length;
   const converted = g.log.filter((l) => l.action.type === 'convert').length;
   const end = g.equity();
+  const stat = e?.stats.find(([k]) => k === '收益率')?.[1];
+  const reported = stat ? Number(stat.replace('%', '').replace('−', '-')) / 100 : null;
   return {
     scenario: scenario.id,
     seat,
@@ -178,7 +180,8 @@ export function runGame(scenario: Scenario, seat: string, policy: Policy, seed: 
     seed,
     ending: e?.id ?? '(未结束)',
     archetype: e?.archetype ?? '-',
-    ret: g.faction.observer || !start ? null : (end - start) / Math.abs(start),
+    // 用结局自己报的收益率（已扣掉拆借、透支借来的钱）；没有时才按权益算
+    ret: g.faction.observer || !start ? null : reported != null ? reported : (end - start) / Math.abs(start),
     num,
     played,
     converted,
