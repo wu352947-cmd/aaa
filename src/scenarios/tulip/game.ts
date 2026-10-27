@@ -10,7 +10,16 @@ import { APRIL_VALUE, EVENINGS, OPTION_FEE, TULIP_NPCS, WINE_MONEY, type Evening
  * 同一种子 + 同一串操作必然得到同一局。
  */
 
-export type TulipFaction = 'speculator' | 'grower';
+export type TulipFaction = 'speculator' | 'grower' | 'council';
+export type TulipRule = 'forward' | 'option' | 'void';
+
+/** 桌边 NPC 之间签下的约定（行会议员要裁决的就是它们） */
+export interface NpcDeal {
+  evening: number;
+  buyer: string;
+  seller: string;
+  price: number;
+}
 export type Side = 'buy' | 'sell';
 
 export interface Quote {
@@ -42,10 +51,10 @@ export interface Talk {
   prices: number[];
 }
 
-export type TulipAction = { type: 'accept'; npc: string } | { type: 'counter'; npc: string; price: number } | { type: 'leave' };
+export type TulipAction = { type: 'accept'; npc: string } | { type: 'counter'; npc: string; price: number } | { type: 'leave' } | { type: 'rule'; rule: TulipRule };
 
 export interface Settlement {
-  rule: 'forward' | 'option';
+  rule: TulipRule;
   /** 每份合约在该规则下给玩家带来的现金流（正 = 收到） */
   lines: { contract: Contract; amount: number; note: string }[];
   /** 种植者剩下的球茎按四月价值计 */
@@ -64,6 +73,9 @@ export class TulipGame {
   /** 玩家买卖对共识价的累积推动（比例） */
   impact = 0;
   phase: 'table' | 'ruling' | 'ending' = 'table';
+  /** 2 月 24 日实际采用的规则：历史上是改作期权；扮演行会议员时由玩家决定 */
+  rule: TulipRule = 'option';
+  npcBook: NpcDeal[] = [];
   log: TulipAction[] = [];
   /** 每晚实际成交价，用于“价格记事” */
   prints: number[][] = [];
@@ -75,7 +87,7 @@ export class TulipGame {
     readonly faction: TulipFaction,
   ) {
     this.rng = new Rng(`tulip:${seed}`);
-    this.cash = faction === 'grower' ? 60 : 100;
+    this.cash = faction === 'grower' ? 60 : faction === 'council' ? 0 : 100;
     this.bulbs = faction === 'grower' ? 6 : 0;
     this.openEvening();
   }
@@ -111,6 +123,13 @@ export class TulipGame {
       const price = side === 'buy' ? reservation * (1 - spread) : reservation * (1 + spread);
       return { npc: n.id, side, price: Math.max(1, Math.round(price)), reservation: Math.max(1, Math.round(reservation)), counters: 0, done: false };
     });
+    // 桌边的人彼此之间也在成交：出价最高的买家配要价最低的卖家，谈得拢就签
+    const buyers = this.quotes.filter((q) => q.side === 'buy').sort((a, b) => b.reservation - a.reservation);
+    const sellers = this.quotes.filter((q) => q.side === 'sell').sort((a, b) => a.reservation - b.reservation);
+    for (let i = 0; i < Math.min(buyers.length, sellers.length); i++) {
+      if (buyers[i].reservation < sellers[i].reservation) break;
+      this.npcBook.push({ evening: this.evening, buyer: buyers[i].npc, seller: sellers[i].npc, price: Math.round((buyers[i].reservation + sellers[i].reservation) / 2) });
+    }
   }
 
   quote(npc: string): Quote | undefined {
@@ -118,7 +137,14 @@ export class TulipGame {
   }
 
   act(a: TulipAction): Talk | null {
+    if (a.type === 'rule') {
+      if (this.phase !== 'ruling' || this.faction !== 'council') return null;
+      this.log.push(a);
+      this.rule = a.rule;
+      return null;
+    }
     if (this.phase !== 'table') return null;
+    if (this.faction === 'council' && a.type !== 'leave') return null;
     this.log.push(a);
     if (a.type === 'leave') {
       this.leave();
@@ -180,9 +206,10 @@ export class TulipGame {
    * forward：原本的约定，买方付合约价、拿到只值四月价的球茎；卖方没有球茎就得按四月价买来交货。
    * option：行会裁决后，买方在球茎不值合约价时付 3.5% 走人，卖方只拿到这 3.5%。
    */
-  settle(rule: 'forward' | 'option'): Settlement {
+  settle(rule: TulipRule): Settlement {
     let bulbs = this.bulbs;
     const lines = this.contracts.map((c) => {
+      if (rule === 'void') return { contract: c, amount: 0, note: '合约作废，各自走开' };
       const walk = rule === 'option' && APRIL_VALUE < c.price;
       if (c.side === 'buy') {
         if (walk) return { contract: c, amount: -c.price * OPTION_FEE, note: '付 3.5% 解约' };
@@ -200,9 +227,29 @@ export class TulipGame {
     return { rule, lines: lines.map((l) => ({ ...l, amount: Math.round(l.amount * 100) / 100 })), bulbsValue, total: Math.round(total * 100) / 100 };
   }
 
+  /**
+   * 每个桌边 NPC 在某条规则下的结算净额（含与玩家签的约）。
+   * 卖方按四月价值交出球茎；期权规则下球茎不值合约价时买方付 3.5% 走人。
+   */
+  npcOutcome(rule: TulipRule): Map<string, number> {
+    const out = new Map<string, number>();
+    const add = (id: string, v: number) => out.set(id, (out.get(id) ?? 0) + v);
+    const deal = (buyer: string | null, seller: string | null, k: number) => {
+      if (rule === 'void') return;
+      const walk = rule === 'option' && APRIL_VALUE < k;
+      const toBuyer = walk ? -k * OPTION_FEE : APRIL_VALUE - k;
+      if (buyer) add(buyer, toBuyer);
+      if (seller) add(seller, -toBuyer);
+    };
+    for (const d of this.npcBook) deal(d.buyer, d.seller, d.price);
+    for (const c of this.contracts) deal(c.side === 'sell' ? c.npc : null, c.side === 'buy' ? c.npc : null, c.price);
+    for (const [k, v] of out) out.set(k, Math.round(v));
+    return out;
+  }
+
   /** 开局身家：种植者的球茎按四月实际价值估 */
   get startWealth(): number {
-    return this.faction === 'grower' ? 60 + 6 * APRIL_VALUE : 100;
+    return this.faction === 'grower' ? 60 + 6 * APRIL_VALUE : this.faction === 'council' ? 0 : 100;
   }
 
   finish(): void {

@@ -75,3 +75,39 @@ describe('酒馆里的花', () => {
     expect(fwd.bulbsValue).toBe(5 * APRIL_VALUE);
   });
 });
+
+describe('行会议员', () => {
+  function toRuling(seed = 'council') {
+    const g = new TulipGame(seed, 'council');
+    while (g.phase === 'table') g.act({ type: 'leave' });
+    return g;
+  }
+
+  it('议员不能下场交易，但桌边的人彼此在签约', () => {
+    const g = new TulipGame('council', 'council');
+    const q = g.quotes[0];
+    expect(g.act({ type: 'accept', npc: q.npc })).toBeNull();
+    expect(g.contracts.length).toBe(0);
+    const r = toRuling();
+    expect(r.npcBook.length).toBeGreaterThan(3);
+    expect(r.npcBook.every((d) => EVENINGS[d.evening].kind !== 'crash')).toBe(true);
+  });
+
+  it('三条规则下的输赢：照约履行最狠，作废谁也不赔，期权介于两者之间', () => {
+    const g = toRuling();
+    const sum = (rule: 'forward' | 'option' | 'void') => [...g.npcOutcome(rule).values()];
+    const worst = (rule: 'forward' | 'option' | 'void') => Math.min(0, ...sum(rule));
+    expect(sum('void').every((v) => v === 0)).toBe(true);
+    expect(worst('forward')).toBeLessThan(worst('option'));
+    // 每一笔都是一方付给另一方：总和为零（四舍五入误差以内）
+    expect(Math.abs(sum('forward').reduce((a, b) => a + b, 0))).toBeLessThanOrEqual(6);
+  });
+
+  it('议员的裁决写进动作日志，读档后得到同样的结果', () => {
+    const g = toRuling('saved');
+    g.act({ type: 'rule', rule: 'forward' });
+    const r = replayTulip('saved', 'council', g.log);
+    expect(r.rule).toBe('forward');
+    expect([...r.npcOutcome(r.rule)]).toEqual([...g.npcOutcome(g.rule)]);
+  });
+});

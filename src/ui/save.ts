@@ -1,4 +1,6 @@
 import { replay, type Game, type LoggedAction, type Scenario } from '../engine/game';
+import { EVENINGS } from '../scenarios/tulip/data';
+import { replayTulip, type TulipAction, type TulipFaction, type TulipGame } from '../scenarios/tulip/game';
 
 /**
  * 存档只记“种子 + 动作日志”，读档时用确定性引擎重放到存档那一刻。
@@ -10,7 +12,7 @@ export interface SaveData {
   seed: string;
   faction: string;
   principle: string;
-  log: LoggedAction[];
+  log: LoggedAction[] | TulipAction[];
   at: number;
   label: string;
   savedAt: number;
@@ -61,5 +63,32 @@ export function clearSave(): void {
 }
 
 export function restore(scenario: Scenario, d: SaveData): Game {
-  return replay(scenario, d.seed, d.faction, d.principle, d.log, d.at);
+  return replay(scenario, d.seed, d.faction, d.principle, d.log as LoggedAction[], d.at);
+}
+
+const TULIP_SEAT: Record<TulipFaction, string> = { speculator: '酒馆投机客', grower: '球茎种植者', council: '行会议员' };
+
+export function saveTulip(g: TulipGame): void {
+  if (g.phase === 'ending') return clearSave();
+  const ev = EVENINGS[g.evening];
+  const data: SaveData = {
+    v: 1,
+    scenario: 'tulip',
+    seed: g.seed,
+    faction: g.faction,
+    principle: '',
+    log: g.log,
+    at: g.log.length,
+    label: `酒馆里的花 · ${TULIP_SEAT[g.faction]} · ${g.phase === 'ruling' ? '2 月 24 日' : `${ev.date} ${ev.label}`}`,
+    savedAt: Date.now(),
+  };
+  try {
+    localStorage.setItem(KEY, JSON.stringify(data));
+  } catch {
+    /* 存储不可用时静默放弃 */
+  }
+}
+
+export function restoreTulip(d: SaveData): TulipGame {
+  return replayTulip(d.seed, d.faction as TulipFaction, d.log as TulipAction[]);
 }

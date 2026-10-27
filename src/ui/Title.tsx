@@ -17,7 +17,7 @@ export function Title({
   onSettings: () => void;
 }) {
   const [archive, setArchive] = useState(false);
-  const [which, setWhich] = useState<'s327' | 'tulip' | 'gme2021'>(save ? (save.scenario as 's327' | 'gme2021') : 'tulip');
+  const [which, setWhich] = useState<'s327' | 'tulip' | 'gme2021'>(save ? (save.scenario as 's327' | 'tulip' | 'gme2021') : 'tulip');
   return (
     <div className="title-screen paper">
       <div className="title-card">

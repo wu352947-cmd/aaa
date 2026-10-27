@@ -3,7 +3,8 @@ import { speak } from '../llm/director';
 import { ERA_1637_HAARLEM } from '../llm/era';
 import type { LlmSettings } from '../llm/settings';
 import { ANNUAL_WAGE, APRIL_VALUE, EVENINGS, HOST, TULIP_NPCS, TULIP_RULES, TULIP_SOURCES, WINE_MONEY } from '../scenarios/tulip/data';
-import { TulipGame, type Settlement, type TulipFaction } from '../scenarios/tulip/game';
+import { TulipGame, type Settlement, type TulipFaction, type TulipRule } from '../scenarios/tulip/game';
+import { clearSave, saveTulip } from './save';
 import { tulipIntent } from '../scenarios/tulip/talk';
 import { cls } from './format';
 import { RuleCardModal } from './Modals';
@@ -14,7 +15,7 @@ const sgn = (n: number) => (n > 0 ? '+' : n < 0 ? '−' : '') + fl(Math.abs(n));
 const SEATS: { id: TulipFaction | 'council'; name: string; blurb: string; locked?: string }[] = [
   { id: 'speculator', name: '酒馆投机客', blurb: '你口袋里只有 100 荷兰盾，手里一个球茎也没有。但在这里，签约不用付钱。' },
   { id: 'grower', name: '球茎种植者', blurb: '你城外的花田里埋着 6 份“瑞士人”，四月才能挖出来。酒馆里的人愿意现在就出价。' },
-  { id: 'council', name: '行会议员', blurb: '二月底，你要在阿姆斯特丹的会上决定：这些合约还算不算数。', locked: '后续开放' },
+  { id: 'council', name: '行会议员', blurb: '你不下场，只看。七个夜晚，酒馆里的人一份份签下约定；二月底，你要在阿姆斯特丹的会上决定：这些约定还算不算数。' },
 ];
 
 interface Bubble {
@@ -64,7 +65,7 @@ export function TulipScreen({ game, llm, onExit, onTo327 }: { game: TulipGame; l
   const bump = () => setRev((x) => x + 1);
   const [bubbles, setBubbles] = useState<Bubble[]>([]);
   const [offers, setOffers] = useState<Record<string, string>>({});
-  const [card, setCard] = useState<string | null>('forward-intro');
+  const [card, setCard] = useState<string | null>(game.log.length ? null : 'forward-intro');
   const [seen, setSeen] = useState<Set<string>>(new Set());
 
   const showCard = useCallback(
@@ -86,6 +87,7 @@ export function TulipScreen({ game, llm, onExit, onTo327 }: { game: TulipGame; l
     );
   };
 
+  const council = game.faction === 'council';
   const act = (npcId: string, kind: 'accept' | 'counter') => {
     const before = game.contracts.length;
     const talk = kind === 'accept' ? game.act({ type: 'accept', npc: npcId }) : game.act({ type: 'counter', npc: npcId, price: Number(offers[npcId]) || 0 });
@@ -95,6 +97,7 @@ export function TulipScreen({ game, llm, onExit, onTo327 }: { game: TulipGame; l
       else if (game.contracts.length === 2) showCard('wine-money');
       if (game.leverage() >= 3) showCard('leverage');
     }
+    saveTulip(game);
     bump();
   };
 
@@ -104,6 +107,7 @@ export function TulipScreen({ game, llm, onExit, onTo327 }: { game: TulipGame; l
     setOffers({});
     if (game.phase === 'table' && game.night.kind === 'crash') showCard('counterparty');
     if (game.phase === 'ruling') showCard('option');
+    saveTulip(game);
     bump();
     window.scrollTo({ top: 0 });
   };
@@ -114,7 +118,16 @@ export function TulipScreen({ game, llm, onExit, onTo327 }: { game: TulipGame; l
   if (game.phase === 'ruling')
     return (
       <>
-        <TulipRuling game={game} onNext={() => (game.finish(), bump())} />
+        <TulipRuling
+          game={game}
+          onNext={(rule) => {
+            if (rule) game.act({ type: 'rule', rule });
+            game.finish();
+            clearSave();
+            bump();
+            window.scrollTo({ top: 0 });
+          }}
+        />
         {rule && <RuleCardModal card={rule} onClose={() => setCard(null)} />}
       </>
     );
@@ -138,8 +151,18 @@ export function TulipScreen({ game, llm, onExit, onTo327 }: { game: TulipGame; l
             </div>
           </div>
           <div className="tavern-purse">
-            <span>口袋里</span>
-            <b>{fl(game.cash)}</b>
+            {council ? (
+              <>
+                <span>你的身份</span>
+                <b style={{ fontSize: 18 }}>行会议员</b>
+                <span>只看，不下场</span>
+              </>
+            ) : (
+              <>
+                <span>口袋里</span>
+                <b>{fl(game.cash)}</b>
+              </>
+            )}
             {game.faction === 'grower' && <span>花田里还有 {game.bulbs} 份球茎</span>}
           </div>
         </header>
@@ -174,7 +197,7 @@ export function TulipScreen({ game, llm, onExit, onTo327 }: { game: TulipGame; l
                     <span className="slate-unit">一份 · 春天交货</span>
                   </div>
                   {b && <div className={cls('seat-bubble', b.pending && 'typing')}>{b.pending ? '' : b.text}</div>}
-                  {!q.done && (
+                  {!q.done && !council && (
                     <div className="seat-actions">
                       <button className="btn small primary" onClick={() => act(q.npc, 'accept')}>
                         {q.side === 'buy' ? `卖给他 ${q.price}` : `向他买 ${q.price}`}
@@ -206,6 +229,10 @@ export function TulipScreen({ game, llm, onExit, onTo327 }: { game: TulipGame; l
           </section>
 
           <aside className="ledger">
+            {council ? (
+              <CouncilBook game={game} />
+            ) : (
+              <>
             <h3>你的合约簿</h3>
             {game.contracts.length === 0 && <p className="ledger-empty">还没有签任何约。点“向他买”或“卖给他”，就是签下一份春天交货的约定。</p>}
             {game.contracts.map((c) => {
@@ -250,11 +277,13 @@ export function TulipScreen({ game, llm, onExit, onTo327 }: { game: TulipGame; l
               {game.evening === 0 && <li className="ledger-empty">今晚是第一夜。</li>}
             </ul>
             <p className="ledger-note">每成交一份，买方付给卖方 {WINE_MONEY} 盾酒钱。除此之外，春天之前谁都不用付钱。</p>
+              </>
+            )}
           </aside>
         </div>
 
         <div className="tavern-foot">
-          <span>每个人今晚只跟你成交一次；还价两次谈不拢，他就不理你了。</span>
+          <span>{council ? '你在角落里记账。桌边的人彼此出价，谈得拢就签。' : '每个人今晚只跟你成交一次；还价两次谈不拢，他就不理你了。'}</span>
           <button className="btn primary" onClick={leave}>
             {game.evening >= EVENINGS.length - 1 ? '离开酒馆，等二月底的消息 →' : '离开酒馆，等下一个夜晚 →'}
           </button>
@@ -309,9 +338,103 @@ function SettleTable({ s, title }: { s: Settlement; title: string }) {
   );
 }
 
-function TulipRuling({ game, onNext }: { game: TulipGame; onNext: () => void }) {
+const RULES: { id: TulipRule; label: string; detail: string }[] = [
+  { id: 'forward', label: '照约履行', detail: '签了就得认：买方付清合约价，收下只值 60 盾的球茎。' },
+  { id: 'option', label: '改作期权：付 3.5% 即可解约', detail: '历史上的选择。买方只赔一点，损失落到卖方头上。' },
+  { id: 'void', label: '一律作废', detail: '当这个冬天什么都没发生过。谁也不赔，谁也不赚。' },
+];
+
+function CouncilBook({ game }: { game: TulipGame }) {
+  const tonight = game.npcBook.filter((d) => d.evening === game.evening);
+  const total = game.npcBook.reduce((a, d) => a + d.price, 0);
+  const name = (id: string) => TULIP_NPCS.find((n) => n.id === id)?.name ?? id;
+  return (
+    <>
+      <h3>今晚桌上签下的约定</h3>
+      {tonight.length === 0 && <p className="ledger-empty">{game.night.kind === 'crash' ? '一份都没有。买家没有来。' : '还没有人谈拢。'}</p>}
+      {tonight.map((d, i) => (
+        <div key={i} className="ledger-row">
+          <span>
+            {name(d.seller)} → {name(d.buyer)}
+          </span>
+          <span className="num">{d.price} 盾</span>
+          <span />
+        </div>
+      ))}
+      <div className="ledger-sum">
+        <div>
+          <span>这个冬天累计签约</span>
+          <b className="num">{game.npcBook.length} 份</b>
+        </div>
+        <div>
+          <span>合约总额</span>
+          <b className="num">{fl(total)}</b>
+        </div>
+        <div>
+          <span>相当于手艺人的工钱</span>
+          <b className="num">{(total / ANNUAL_WAGE).toFixed(0)} 年</b>
+        </div>
+      </div>
+      <p className="ledger-note">这些约定都要等到四月球茎出土才交割。二月底，它们算不算数，由你们行会说了算。</p>
+    </>
+  );
+}
+
+function OutcomeTable({ game, rule }: { game: TulipGame; rule: TulipRule }) {
+  const o = game.npcOutcome(rule);
+  return (
+    <div className="settle">
+      {TULIP_NPCS.map((n) => {
+        const v = o.get(n.id) ?? 0;
+        return (
+          <div key={n.id} className="settle-row">
+            <span>
+              {n.name}
+              <small>{n.title}{v < -ANNUAL_WAGE ? ` · 倾家荡产（欠下 ${(-v / ANNUAL_WAGE).toFixed(1)} 年工钱）` : ''}</small>
+            </span>
+            <span className={cls('num', v > 0 ? 'gain' : v < 0 ? 'loss' : '')}>{sgn(v)}</span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function TulipRuling({ game, onNext }: { game: TulipGame; onNext: (rule?: TulipRule) => void }) {
   const fwd = game.settle('forward');
   const opt = game.settle('option');
+  const [pick, setPick] = useState<TulipRule>('option');
+  if (game.faction === 'council')
+    return (
+      <div className="setup paper tavern-paper">
+        <div className="setup-inner">
+          <div style={{ letterSpacing: '0.3em', fontSize: 12, color: 'var(--seal)', fontWeight: 700 }}>1637 年 2 月 24 日 · 阿姆斯特丹</div>
+          <h2>轮到你表决</h2>
+          <div className="engraved-rule" />
+          <div className="prologue">
+            <p>各地花商的代表挤在一间屋子里。门外，是付不起钱的买家和要不到钱的卖家。所有人都在等这间屋子里的一句话。</p>
+            <p>这个冬天，你看着哈勒姆的酒馆里签下了 {game.npcBook.length + game.contracts.length} 份约定。现在你要决定，它们怎么了结。</p>
+          </div>
+          <div className="section-label">三条规则，桌边每个人的下场</div>
+          <div className="seg" style={{ marginBottom: 12 }}>
+            {RULES.map((r) => (
+              <button key={r.id} className={cls(pick === r.id && 'on')} onClick={() => setPick(r.id)} style={{ color: 'var(--ink)' }}>
+                {r.label}
+              </button>
+            ))}
+          </div>
+          <p style={{ fontSize: 14 }}>{RULES.find((r) => r.id === pick)!.detail}</p>
+          <OutcomeTable game={game} rule={pick} />
+          <p style={{ fontSize: 13, color: 'var(--ink-soft)' }}>按四月球茎实际价值 {APRIL_VALUE} 盾一份结算（重建）。正数是收到的钱，负数是要付出的钱。</p>
+          <div className="setup-footer">
+            <span />
+            <button className="btn primary" onClick={() => onNext(pick)}>
+              就这么定：{RULES.find((r) => r.id === pick)!.label} →
+            </button>
+          </div>
+        </div>
+      </div>
+    );
   return (
     <div className="setup paper tavern-paper">
       <div className="setup-inner">
@@ -334,7 +457,7 @@ function TulipRuling({ game, onNext }: { game: TulipGame; onNext: () => void }) 
         <p style={{ fontSize: 13, color: 'var(--ink-soft)' }}>四月球茎挖出来时，一份“瑞士人”实际只能卖 {APRIL_VALUE} 盾左右（重建）。</p>
         <div className="setup-footer">
           <span />
-          <button className="btn primary" onClick={onNext}>
+          <button className="btn primary" onClick={() => onNext()}>
             看看这个冬天留下了什么 →
           </button>
         </div>
@@ -343,7 +466,64 @@ function TulipRuling({ game, onNext }: { game: TulipGame; onNext: () => void }) 
   );
 }
 
+function CouncilEnding({ game, onExit, onTo327 }: { game: TulipGame; onExit: () => void; onTo327: () => void }) {
+  const o = game.npcOutcome(game.rule);
+  const hist = game.npcOutcome('option');
+  const ruined = TULIP_NPCS.filter((n) => (o.get(n.id) ?? 0) < -ANNUAL_WAGE);
+  const histRuined = TULIP_NPCS.filter((n) => (hist.get(n.id) ?? 0) < -ANNUAL_WAGE);
+  const rule = RULES.find((r) => r.id === game.rule)!;
+  const headline =
+    game.rule === 'option' ? '行会议定：约定改作期权，付 3.5% 即可解约' : game.rule === 'forward' ? '行会议定：签了就得认，照约履行' : '行会议定：这个冬天的约定一律作废';
+  const losers = TULIP_NPCS.filter((n) => (o.get(n.id) ?? 0) < 0).map((n) => n.name);
+  const winners = TULIP_NPCS.filter((n) => (o.get(n.id) ?? 0) > 0).map((n) => n.name);
+  return (
+    <div className="ending" style={{ background: '#1b130d' }}>
+      <div className="ending-inner">
+        <div className="front-page paper tavern-paper">
+          <div className="masthead">
+            <div className="name" style={{ fontSize: 26, letterSpacing: '0.15em' }}>真嘴与贪财的对话</div>
+            <div className="meta">
+              <span>仿 1637 年流行的对话体小册子</span>
+              <span>阿姆斯特丹</span>
+            </div>
+          </div>
+          <div className="headline">{headline}</div>
+          <div className="subhead">{ruined.length ? `哈勒姆的金鹿酒馆里，${ruined.map((n) => n.name).join('、')}倾家荡产` : '金鹿酒馆里，没有人倾家荡产'}</div>
+          <div className="engraved-rule" />
+          <div className="front-grid">
+            <div>
+              <h4>你选择了：{rule.label}</h4>
+              <p>{rule.detail}</p>
+              <p>
+                在这条规则下，{winners.length ? `${winners.join('、')}拿到了钱` : '没有人拿到钱'}；{losers.length ? `${losers.join('、')}要掏钱` : '也没有人要掏钱'}。
+                {game.rule !== 'option' && `如果按历史上的选择（改作期权），倾家荡产的会是 ${histRuined.length} 个人，而不是 ${ruined.length} 个。`}
+              </p>
+              <OutcomeTable game={game} rule={game.rule} />
+              <h4 style={{ marginTop: 14 }}>规则在哪里保护或伤害了人？</h4>
+              <p>同样的约定、同样的价格，换一条规则，钱就从一群人的口袋流到另一群人的口袋。没有一条规则对所有人都公平——这正是监管者的难处。</p>
+            </div>
+            <div className="history-col">
+              <h4>历史上的这一天</h4>
+              <p style={{ fontSize: 14 }}>1637 年 2 月 24 日，花商行会在阿姆斯特丹开会，宣布此前签下的远期约定可按期权处理：买方付合约价的 3.5% 即可解约。</p>
+              <p style={{ fontSize: 14 }}>有经济学家认为，正是这种预期让此前的价格显得疯狂——买方以为自己最多只赔 3.5%。</p>
+            </div>
+          </div>
+        </div>
+        <div style={{ display: 'flex', gap: 10, justifyContent: 'center', marginTop: 28, flexWrap: 'wrap' }}>
+          <button className="btn" onClick={onExit}>
+            回到标题
+          </button>
+          <button className="btn primary" onClick={onTo327}>
+            下一课：327 · 最后八分钟 →
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function TulipEnding({ game, onExit, onTo327 }: { game: TulipGame; onExit: () => void; onTo327: () => void }) {
+  if (game.faction === 'council') return <CouncilEnding game={game} onExit={onExit} onTo327={onTo327} />;
   const fwd = game.settle('forward');
   const opt = game.settle('option');
   const start = game.startWealth;

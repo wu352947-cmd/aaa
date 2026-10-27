@@ -1781,3 +1781,10 @@ textarea {
   border-color: var(--gold-dim);
   align-content: center;
 }
+.tavern-paper .seg {
+  border-color: var(--ink-soft);
+}
+.tavern-paper .seg button.on {
+  background: var(--ink);
+  color: var(--paper) !important;
+}

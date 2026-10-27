@@ -8,7 +8,7 @@ import { EndingScreen } from './ui/EndingScreen';
 import { GameScreen } from './ui/GameScreen';
 import { SettingsModal, type UiSettings } from './ui/Modals';
 import { Setup } from './ui/Setup';
-import { clearSave, loadSave, restore, type SaveData } from './ui/save';
+import { clearSave, loadSave, restore, restoreTulip, type SaveData } from './ui/save';
 import { Title } from './ui/Title';
 import { TulipScreen, TulipSetup } from './ui/TulipScreen';
 import { TulipGame } from './scenarios/tulip/game';
@@ -78,6 +78,11 @@ export default function App() {
           }}
           onContinue={() => {
             if (!save) return;
+            if (save.scenario === 'tulip') {
+              setTulip(restoreTulip(save));
+              setScreen('tulip');
+              return;
+            }
             try {
               setGame(restore(SCENARIOS[save.scenario] ?? S327, save));
               setScreen('game');
@@ -104,7 +109,10 @@ export default function App() {
           key={tulip.seed}
           game={tulip}
           llm={llm}
-          onExit={() => setScreen('title')}
+          onExit={() => {
+            setSave(loadSave());
+            setScreen('title');
+          }}
           onTo327={() => {
             setScenario(S327);
             setScreen('setup');
