@@ -16,6 +16,8 @@ export interface Faction {
   secretGoal: string;
   accountId: string;
   locked?: string;
+  /** 不下单、只监管的座位（交易所官员） */
+  observer?: boolean;
 }
 
 export interface Principle {
@@ -145,7 +147,7 @@ export interface Decision {
 export interface Ending {
   id: string;
   title: string;
-  archetype: '猎手' | '长青者' | '流星' | '蛀虫' | '出局者';
+  archetype: '猎手' | '长青者' | '流星' | '蛀虫' | '出局者' | '守门人' | '旁观者';
   headline: string;
   subhead: string;
   body: string[];
@@ -281,7 +283,8 @@ export class Game {
     this.rng = new Rng(`${scenario.id}:${seed}`);
     this.rngSocial = this.rng.fork('social');
     this.rngScript = this.rng.fork('script');
-    this.market = new Market(scenario.deck, scenario.params, `${scenario.id}:${seed}:market`, scenario.startPrice);
+    // 规则卡组按局复制：监管者盘中调整保证金只影响这一局
+    this.market = new Market({ ...scenario.deck }, scenario.params, `${scenario.id}:${seed}:market`, scenario.startPrice);
     for (const d of scenario.npcs) if (d.factionId !== factionId) this.npcs.set(d.id, { ...d, memory: [] });
     scenario.setup(this);
     this.startDay();
@@ -448,8 +451,10 @@ export class Game {
       this.closeDay();
       return false;
     }
-    const orders = this.pending.splice(0);
-    orders.push(...this.runPlans());
+    // 停市期间委托与计划都原样留着，复市后再报
+    const halted = this.market.t < this.market.haltUntil;
+    const orders = halted ? [] : this.pending.splice(0);
+    if (!halted) orders.push(...this.runPlans());
     const rep = this.market.step(orders);
     this.onRuleHits(rep.hits);
     // 逐笔成交：同一主动方在同一分钟的成交合并为一笔，大单才显示席位号

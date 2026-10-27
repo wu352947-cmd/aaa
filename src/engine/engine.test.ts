@@ -141,3 +141,71 @@ describe('剧本：玩家真的能改变历史', () => {
     expect(g.ending?.id === 'history' || g.ending?.id === 'bust').toBe(true);
   });
 });
+
+describe('新座位：空翻多的盟友', () => {
+  function play(choice: string): Game {
+    const g = new Game(S327, 'ally', 'ally', 'no-betrayal');
+    for (let guard = 0; guard < 5000 && !g.ending; guard++) {
+      if (g.phase === 'night') g.act({ type: 'end-night' });
+      else if (g.decision) g.act({ type: 'decision', id: g.decision.id, choice: g.decision.id === 'ally-flip' ? choice : g.decision.choices[0].id });
+      else g.tick();
+    }
+    return g;
+  }
+
+  it('倒戈时撕毁锁仓、越过底线，并在上午的暴涨里获利', () => {
+    const g = play('flip');
+    expect(g.alliances[0].brokenBy).toBe('player');
+    expect(g.linesCrossed).toBeGreaterThan(0);
+    expect(g.ending?.id).toBe('ally-flip');
+    expect(g.equity()).toBeGreaterThan(g.flags.startEq as number);
+  });
+
+  it('守约时 10:05 的跳涨不会出现，玩家随空方亏损', () => {
+    const loyal = play('hold');
+    const flip = play('flip');
+    const spike = (x: Game) => Math.max(...x.market.bars.slice(minuteIndex('9:58'), minuteIndex('10:03')).map((b) => b.h));
+    expect(spike(loyal)).toBeLessThan(spike(flip) - 80);
+    expect(loyal.ending?.id).toBe('ally-loyal');
+    expect(loyal.equity()).toBeLessThan(loyal.flags.startEq as number);
+  });
+});
+
+describe('新座位：交易所值班官员', () => {
+  function play(choices: Record<string, string>): Game {
+    const g = new Game(S327, 'official', 'official', 'no-violation');
+    for (let guard = 0; guard < 5000 && !g.ending; guard++) {
+      if (g.phase === 'night') g.act({ type: 'end-night' });
+      else if (g.decision) g.act({ type: 'decision', id: g.decision.id, choice: choices[g.decision.id] ?? g.decision.choices[0].id });
+      else g.tick();
+    }
+    return g;
+  }
+
+  it('裁决“全部有效”时不作废，按砸盘后的价格收盘', () => {
+    const g = play({ ruling: 'valid' });
+    expect(g.flags.voided).toBeFalsy();
+    expect(g.market.closePrices[g.market.closePrices.length - 1]).toBeLessThan(14900);
+    expect(g.ending?.archetype).toBe('旁观者');
+  });
+
+  it('裁决“违规后无效”复现历史结局', () => {
+    const g = play({ ruling: 'void' });
+    expect(g.flags.voided).toBe(true);
+    expect(g.ending?.archetype).toBe('守门人');
+  });
+
+  it('尾盘立即停市：之后没有成交，砸盘幅度被截住', () => {
+    const g = play({ 'reg-dump': 'halt', ruling: 'void' });
+    const bars = g.market.bars;
+    expect(bars.slice(minuteIndex('16:24')).every((b) => b.v === 0)).toBe(true);
+    expect(Math.min(...bars.map((b) => b.l))).toBeGreaterThan(14800);
+  });
+
+  it('提高保证金只影响这一局，不污染剧本常量', () => {
+    const g = play({ 'reg-spike': 'margin', ruling: 'void' });
+    expect(g.market.ex.deck.marginRate).toBe(0.05);
+    expect(S327.deck.marginRate).toBe(0.025);
+    expect(new Game(S327, 'x', 'retail', 'no-violation').market.ex.deck.marginRate).toBe(0.025);
+  });
+});

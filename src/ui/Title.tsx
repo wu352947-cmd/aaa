@@ -28,7 +28,7 @@ export function Title({
           <div>
             <div style={{ fontFamily: 'var(--serif)', fontWeight: 700, fontSize: 18 }}>{scenario.title}</div>
             <div style={{ fontSize: 13, color: 'var(--ink-soft)' }}>{scenario.subtitle} · 垂直切片</div>
-            <div style={{ fontSize: 13, marginTop: 4 }}>五个交易日的布局，一个决战日。三个可扮演的座位。</div>
+            <div style={{ fontSize: 13, marginTop: 4 }}>五个交易日的布局，一个决战日。五个可扮演的座位。</div>
           </div>
         </div>
         <div className="title-actions">

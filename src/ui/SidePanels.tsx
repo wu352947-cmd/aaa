@@ -85,6 +85,43 @@ export function PositionCard({ game }: { game: Game }) {
   );
 }
 
+/** 交易所官员的监管台：看得到每家会员的持仓与保证金（这是交易者看不到的） */
+export function MembersCard({ game }: { game: Game }) {
+  const ex = game.market.ex;
+  const members = ['shenjiang', 'zhongcai', 'liaobei'].map((id) => ex.acct(id));
+  return (
+    <div className="card">
+      <h4>
+        <span>监管台 · 会员持仓</span>
+        <span className="faint">保证金 {(ex.deck.marginRate * 100).toFixed(1)}%</span>
+      </h4>
+      {members.map((a) => {
+        const eq = ex.equity(a);
+        const use = eq > 0 ? ex.marginReq(a.pos) / eq : 9;
+        return (
+          <div key={a.id} style={{ marginBottom: 8 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
+              <span>
+                {a.name} <span className="faint">（{a.seat}）</span>
+              </span>
+              <span className={a.pos > 0 ? 'up' : a.pos < 0 ? 'down' : ''}>{a.pos === 0 ? '空仓' : `${a.pos > 0 ? '多' : '空'} ${qty(Math.abs(a.pos))}`}</span>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }} className="muted">
+              <span>权益 {money(eq)}</span>
+              <span className={cls(use > 1 && 'up')}>{eq > 0 ? `占用 ${(use * 100).toFixed(0)}%` : '已穿仓'}</span>
+            </div>
+            <div className={cls('bar-track', use > 0.85 && 'danger')}>
+              <div style={{ width: `${Math.min(100, use * 100)}%` }} />
+            </div>
+            {a.violations > 0 && <div className="danger-box" style={{ marginTop: 4, padding: '2px 8px' }}>违规委托 {a.violations} 笔</div>}
+          </div>
+        );
+      })}
+      {game.market.t < game.market.haltUntil && <div className="warn-box">停市中，{game.market.haltUntil >= 330 ? '至收盘' : `剩 ${game.market.haltUntil - game.market.t} 分钟`}</div>}
+    </div>
+  );
+}
+
 export function TapeCard({ game }: { game: Game }) {
   const seats: Record<string, string> = { '011': 'shenjiang', '102': 'zhongcai', '217': 'liaobei' };
   const rows = game.tape.filter((r) => r.day === game.dayIndex).slice(0, 14);

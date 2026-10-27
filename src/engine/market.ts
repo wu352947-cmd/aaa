@@ -93,6 +93,8 @@ export class Market {
   dailyBars: Bar[] = [];
   sentiment = 0;
   actors: Actor[] = [];
+  /** 临时停市：当日第几分钟之前不撮合（-1 表示正常交易） */
+  haltUntil = -1;
   private rngCrowd: Rng;
   private rngTrend: Rng;
   closePrices: Fen[] = [];
@@ -145,6 +147,7 @@ export class Market {
     this.dayIndex = index;
     this.t = 0;
     this.bars = [];
+    this.haltUntil = -1;
     this.ex.contributions = new Map();
     this.ex.book.clear();
     this.ex.open = true;
@@ -218,6 +221,13 @@ export class Market {
     const ex = this.ex;
     ex.tick++;
     const report: TickReport = { hits: [], trades: [] };
+    if (this.t < this.haltUntil) {
+      // 停市：时间照走，没有成交；做市商的记忆照常衰减
+      this.bars.push({ tick: this.t, o: ex.last, h: ex.last, l: ex.last, c: ex.last, v: 0, hist: this.hist() });
+      this.flow *= Math.pow(0.5, 2 / this.day.halfLife);
+      this.t++;
+      return report;
+    }
     const midBefore = ex.book.mid();
     this.postLiquidity();
     const midAfterRepost = ex.book.mid();

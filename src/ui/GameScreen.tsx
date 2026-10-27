@@ -10,7 +10,7 @@ import { Night } from './Night';
 import { OrderTicket } from './OrderTicket';
 import { PlanBook } from './PlanBook';
 import { saveGame } from './save';
-import { OrderBookCard, PositionCard, TapeCard } from './SidePanels';
+import { MembersCard, OrderBookCard, PositionCard, TapeCard } from './SidePanels';
 import { sound } from './sound';
 
 // 每分钟行情的现实耗时（毫秒）。布局期一天约 40 秒，决战日按分钟慢慢推进。
@@ -41,6 +41,17 @@ export function GameScreen({ game, llm, ui, onSettings, onEnd }: { game: Game; l
   const cursor = useRef(game.log.length ? game.events.length : 0);
   const toastId = useRef(0);
   const dlg = useDialogues(game, llm);
+  const observer = !!game.faction.observer;
+  const canHalt = game.phase === 'trading' && !game.flags[`halt-${game.dayIndex}`] && game.market.t >= game.market.haltUntil;
+  const todayViolations = [...game.market.ex.accounts.values()].reduce((a, x) => a + (x.exempt ? 0 : x.violations), 0);
+  const regulate = useCallback(
+    (what: 'halt' | 'margin') => {
+      if (game.phase !== 'trading') return;
+      game.act({ type: 'decision', id: 'reg', choice: what });
+      bump();
+    },
+    [game],
+  );
 
   const toast = useCallback((text: string, kind: Toast['kind'] = 'info') => {
     const id = ++toastId.current;
@@ -158,15 +169,17 @@ export function GameScreen({ game, llm, ui, onSettings, onEnd }: { game: Game; l
       if (k === ' ') {
         e.preventDefault();
         setPaused((p) => !p);
-      } else if (k === 'b') setDrawer('buy');
-      else if (k === 's') setDrawer('sell');
-      else if (k === 'p') setDrawer('plan');
+      } else if (observer && k === 'h') regulate('halt');
+      else if (observer && k === 'm') regulate('margin');
+      else if (!observer && k === 'b') setDrawer('buy');
+      else if (!observer && k === 's') setDrawer('sell');
+      else if (!observer && k === 'p') setDrawer('plan');
       else if (k === 'r') setDrawer('people');
       else if (k === 'i') setDrawer('intel');
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [game, ruleCard]);
+  }, [game, ruleCard, observer, regulate]);
 
   const ex = game.market.ex;
   const eq = game.equity();
@@ -213,11 +226,19 @@ export function GameScreen({ game, llm, ui, onSettings, onEnd }: { game: Game; l
           ))}
         </div>
         <div className="meters">
+          {!observer && (
           <div className="meter" title="现金 + 浮动盈亏">
             <span className="label">权益</span>
             <span className="value">{money(eq)}</span>
           </div>
-          <div className="meter" title="监管热度：违规行为会累积热度，按真实流程逐级升级——问询、警示、立案、处罚、禁入。只降不清零。">
+          )}
+          {observer && (
+            <div className="meter" title="会员累计的违规委托笔数（超额透支、超出持仓限额）">
+              <span className="label">会员违规委托（累计）</span>
+              <span className="value">{todayViolations}</span>
+            </div>
+          )}
+          <div hidden={observer} className="meter" title="监管热度：违规行为会累积热度，按真实流程逐级升级——问询、警示、立案、处罚、禁入。只降不清零。">
             <span className="label">监管热度 · 第 {game.heatTier()} 级</span>
             <span className="pips heat">
               {[1, 2, 3, 4, 5].map((i) => (
@@ -278,10 +299,14 @@ export function GameScreen({ game, llm, ui, onSettings, onEnd }: { game: Game; l
             game={game}
             rev={rev}
             mode={chartMode}
-            onPickPrice={(p) => {
-              setLimitPick(p);
-              if (drawer !== 'buy' && drawer !== 'sell') setDrawer(p < ex.last ? 'buy' : 'sell');
-            }}
+            onPickPrice={
+              observer
+                ? undefined
+                : (p) => {
+                    setLimitPick(p);
+                    if (drawer !== 'buy' && drawer !== 'sell') setDrawer(p < ex.last ? 'buy' : 'sell');
+                  }
+            }
           />
           <div className="toast-stack">
             {toasts.map((t) => (
@@ -293,7 +318,7 @@ export function GameScreen({ game, llm, ui, onSettings, onEnd }: { game: Game; l
           {paused && game.phase === 'trading' && <div className="pause-veil">已暂停 · 按空格继续</div>}
         </div>
         <div className="side">
-          <PositionCard game={game} />
+          {observer ? <MembersCard game={game} /> : <PositionCard game={game} />}
           <OrderBookCard game={game} />
           <TapeCard game={game} />
         </div>
@@ -304,16 +329,30 @@ export function GameScreen({ game, llm, ui, onSettings, onEnd }: { game: Game; l
       </div>
 
       <div className="actionbar">
-        <button className="core-btn buy" onClick={() => open('buy')}>
-          买入<span className="kbd">B</span>
-        </button>
-        <button className="core-btn sell" onClick={() => open('sell')}>
-          卖出<span className="kbd">S</span>
-        </button>
-        <button className="core-btn" onClick={() => open('plan')}>
-          计划书<span className="kbd">P</span>
-          {game.plans.filter((p) => !p.done).length > 0 && <span className="badge">{game.plans.filter((p) => !p.done).length}</span>}
-        </button>
+        {observer ? (
+          <>
+            <button className="core-btn sell" disabled={!canHalt} onClick={() => regulate('halt')} title="327 合约暂停撮合 15 分钟。每天限一次。">
+              临时停市<span className="kbd">H</span>
+            </button>
+            <button className="core-btn buy" disabled={!!game.flags.marginUp || game.phase !== 'trading'} onClick={() => regulate('margin')} title="保证金比例从 2.5% 提高到 5%，当场生效。">
+              {game.flags.marginUp ? '保证金已提至 5%' : '提高保证金'}
+              <span className="kbd">M</span>
+            </button>
+          </>
+        ) : (
+          <>
+            <button className="core-btn buy" onClick={() => open('buy')}>
+              买入<span className="kbd">B</span>
+            </button>
+            <button className="core-btn sell" onClick={() => open('sell')}>
+              卖出<span className="kbd">S</span>
+            </button>
+            <button className="core-btn" onClick={() => open('plan')}>
+              计划书<span className="kbd">P</span>
+              {game.plans.filter((p) => !p.done).length > 0 && <span className="badge">{game.plans.filter((p) => !p.done).length}</span>}
+            </button>
+          </>
+        )}
         <button className="core-btn" onClick={() => open('people')}>
           人脉<span className="kbd">R</span>
         </button>

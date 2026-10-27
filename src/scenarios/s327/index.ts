@@ -1,6 +1,6 @@
 import { fmtYi, newAccount, type Account } from '../../engine/exchange';
 import type { DialogueIntent, Ending, ExchangeOffer, Game, Intel, Scenario, SocialOutcome } from '../../engine/game';
-import { minuteIndex as mi, type Actor, type Market } from '../../engine/market';
+import { minuteIndex as mi, MINUTES_PER_DAY, type Actor, type Market } from '../../engine/market';
 import type { Fen } from '../../engine/types';
 import { BATTLE, DAYS, DECK_1995, FACTIONS, NPCS, OFFICIAL_CLOSE, PARAMS, PRINCIPLES, PROLOGUE, RULE_CARDS, SOURCES, START_PRICE } from './data';
 
@@ -127,14 +127,16 @@ export const S327: Scenario = {
     const grp = (id: string) => (isPlayer(g, id) ? 'player' : id);
     ex.add(newAccount({ id: SHORT, name: '申江证券', seat: '011', group: grp(SHORT), cash: SHORT_CASH, pos: -SHORT_POS, avg: 14790 }));
     ex.add(newAccount({ id: LONG, name: '中财信托', seat: '102', group: grp(LONG), cash: 1_800_000_000, pos: 1_500_000, avg: 14760 }));
-    ex.add(newAccount({ id: ALLY, name: '辽北发展', seat: '217', group: ALLY, cash: 2_500_000_000, pos: -800_000, avg: 14800 }));
+    ex.add(newAccount({ id: ALLY, name: '辽北发展', seat: '217', group: grp(ALLY), cash: 2_500_000_000, pos: -800_000, avg: 14800 }));
     if (g.factionId === 'retail') ex.add(newAccount({ id: 'retail', name: '你', group: 'player', cash: 80_000 }));
+    if (g.factionId === 'official') ex.add(newAccount({ id: 'exchange', name: '交易所', group: 'player', exempt: true }));
     if (!isPlayer(g, LONG)) g.market.actors.push(zhongcaiActor(g));
-    g.market.actors.push(liaobeiActor(g));
+    if (!isPlayer(g, ALLY)) g.market.actors.push(liaobeiActor(g));
     if (!isPlayer(g, SHORT)) g.market.actors.push(shenjiangActor(g));
-    if (g.factionId === 'short') {
-      g.alliances.push({ id: 'lock', npc: 'gao', terms: '锁仓同盟：327 空单持有至交割，期间任何一方不得平仓', lockUntilDay: BATTLE, penalty: 0 });
-    }
+    const lockTerms = '锁仓同盟：327 空单持有至交割，期间任何一方不得平仓';
+    if (g.factionId === 'short') g.alliances.push({ id: 'lock', npc: 'gao', terms: lockTerms, lockUntilDay: BATTLE, penalty: 0 });
+    if (g.factionId === 'ally') g.alliances.push({ id: 'lock', npc: 'shen', terms: lockTerms, lockUntilDay: BATTLE, penalty: 0 });
+    g.flags.startEq = ex.equity(g.player);
     STATE.set(g, {
       snaps: new Map(),
       dayStartTick: 0,
@@ -202,12 +204,38 @@ export const S327: Scenario = {
       m.sentiment = Math.min(1, m.sentiment + 0.5);
       g.push({ kind: 'pause', text: '消息传开了。' });
     }
-    if (t === mi('10:04') && flag(g, 'gaoFlip')) {
+    if (t === mi('10:04') && flag(g, 'gaoActed')) {
       g.push({ kind: 'pause', text: '席位 217 巨量买入！' });
       mentor(g, '217 在吃货！这不是平仓，是翻多。');
     }
+    if (t === mi('9:58') && g.factionId === 'ally') {
+      g.decision = {
+        id: 'ally-flip',
+        title: '风向变了',
+        body: `消息传开了：327 要贴息。你手里还有 ${wan(-Math.min(0, g.player.pos))} 空单，和申江证券的锁仓协议还没到期。谁先动，谁就拿走最多。`,
+        choices: [
+          { id: 'hold', label: '守约：继续锁仓', detail: '和申江证券站在一起，赌消息不会兑现。' },
+          { id: 'flip', label: '空翻多：两分钟内买入 240 万口', detail: '平掉空单再做多 160 万口。撕毁锁仓协议。', danger: true },
+          { id: 'cover', label: '只平空：买入 80 万口', detail: '抽身离场，不做多。同样算撕毁协议。' },
+        ],
+        countdown: 25,
+      };
+    }
+    if (t === mi('10:06') && g.factionId === 'official') {
+      g.decision = {
+        id: 'reg-spike',
+        title: '价格异动',
+        body: `327 合约几分钟内从 148 元冲到 ${p2(m.last)} 元，席位 217 巨量买入。你可以看到：申江证券空单 ${wan(-m.ex.acct(SHORT).pos)}，保证金占用 ${pct(g, SHORT)}。`,
+        choices: [
+          { id: 'none', label: '不干预', detail: '市场自己会找到价格。' },
+          { id: 'halt', label: '临时停市 15 分钟', detail: '让消息被消化，也让多空双方冷静。' },
+          { id: 'margin', label: '保证金提高到 5%', detail: '所有会员加仓都要多交一倍押金。' },
+        ],
+        countdown: 25,
+      };
+    }
     if (t === mi('10:07') && g.factionId === 'short') {
-      const flipped = !!flag(g, 'gaoFlip');
+      const flipped = !!(flag(g, 'gaoActed') || flag(g, 'allyFlipped'));
       g.decision = {
         id: 'after-flip',
         title: flipped ? '盟友倒戈' : '价格在涨',
@@ -237,7 +265,19 @@ export const S327: Scenario = {
     }
     if (t === mi('16:23') && flag(g, 'npcDump')) {
       g.push({ kind: 'pause', text: '席位 011 巨量抛售！' });
-      if (g.factionId === 'long') {
+      if (g.factionId === 'official') {
+        g.decision = {
+          id: 'reg-dump',
+          title: '尾盘砸盘',
+          body: `席位 011（申江证券）一分钟内抛出 ${wan(-Math.min(0, m.ex.acct(SHORT).pos) - SHORT_POS)} 以上，远超其保证金与持仓限额。价格已到 ${p2(m.last)} 元。`,
+          choices: [
+            { id: 'wait', label: '收盘后再裁决', detail: '让交易继续，当晚再决定这些成交算不算数。' },
+            { id: 'halt', label: '立即停市至收盘', detail: '后面的单子一笔都进不来。' },
+          ],
+          countdown: 20,
+        };
+      }
+      if (g.factionId === 'long' || (g.factionId === 'ally' && g.player.pos > 0)) {
         g.decision = {
           id: 'defend',
           title: '空方砸盘',
@@ -250,6 +290,19 @@ export const S327: Scenario = {
           countdown: 20,
         };
       }
+    }
+    if (t === MINUTES_PER_DAY - 1 && g.factionId === 'official') {
+      const over = overdrawnByOwner(g);
+      const lines = [...over.entries()].map(([id, e]) => `${m.ex.acct(id).name} 违规成交 ${wan(e.vol)}`);
+      g.decision = {
+        id: 'ruling',
+        title: '当晚的裁决',
+        body: `收盘价 ${p2(m.last)} 元。${lines.length ? lines.join('；') + '。' : '今天没有大额违规成交。'}你要决定：这些成交算不算数？`,
+        choices: [
+          { id: 'void', label: '违规开始之后的交易一律无效', detail: '违规者受罚。代价是那段时间里所有正常成交的人也一起被抹掉。' },
+          { id: 'valid', label: '承认全部成交有效', detail: '尊重已经发生的成交。违规者拿走利润，多方承担损失。' },
+        ],
+      };
     }
     if (t === mi('16:25') && g.factionId === 'retail' && flag(g, 'npcDump')) {
       g.decision = {
@@ -270,26 +323,21 @@ export const S327: Scenario = {
     const ex = g.market.ex;
     // 锁仓期内玩家偷偷平空：视同背叛
     const lock = g.alliances.find((a) => a.id === 'lock' && !a.brokenBy);
-    if (lock && g.factionId === 'short' && g.dayIndex < BATTLE && g.player.pos > s.allianceStartPos * 0.85) {
+    if (lock && (g.factionId === 'short' || g.factionId === 'ally') && g.dayIndex < BATTLE && g.player.pos > s.allianceStartPos * 0.85) {
       breakLock(g, '你在锁仓期内平掉了大量空单');
     }
     if (g.dayIndex !== BATTLE) return;
 
-    // 交易所当晚裁决：大额违规透支 → 违规开始之后的交易全部无效
-    const byOwner = new Map<string, { vol: number; first: number }>();
-    for (const t of ex.trades) {
-      if (t.tick <= s.dayStartTick || !t.overdrawn) continue;
-      const owner = t.aggressor === 'buy' ? t.buyer : t.seller;
-      const e = byOwner.get(owner) ?? { vol: 0, first: t.tick };
-      e.vol += t.qty;
-      byOwner.set(owner, e);
-    }
+    // 交易所当晚裁决：大额违规透支 → 违规开始之后的交易全部无效（玩家扮演官员时由玩家裁决）
+    if (g.factionId === 'official' && flag(g, 'ruling') === 'valid') return;
+    const byOwner = overdrawnByOwner(g);
     let cut: { owner: string; tick: number } | null = null;
     for (const [owner, e] of byOwner) if (e.vol >= 300_000 && (!cut || e.first < cut.tick)) cut = { owner, tick: e.first };
     if (!cut) return;
     const snap = s.snaps.get(cut.tick);
     if (!snap) return;
     ex.restore(snap.accounts);
+    g.flags.voidedVol = ex.trades.filter((t) => t.tick >= cut.tick).reduce((x, t) => x + t.qty, 0);
     ex.trades = ex.trades.filter((t) => t.tick < cut.tick);
     const tIdx = cut.tick - s.dayStartTick - 1;
     g.flags.voided = true;
@@ -329,8 +377,11 @@ export const S327: Scenario = {
       rumor(g, 'zc-visit', '某多方机构最近常去财政部门', '有人看到中财信托的人进出财政部门的办公楼。', '大户室传言', 0.8);
     }
     if (d === 3 || d === 4) decideFlip(g);
+    if (d === 3 && g.factionId === 'ally') {
+      rumor(g, 'wei-dinner', '魏国梁请你吃饭：“风向要变了”', '饭桌上魏国梁只说了一句：“高总，锁仓的事，自己的账自己算。”他没提贴息，但也没否认。', '魏国梁', 0.9);
+    }
     if (d === 4) {
-      if (flag(g, 'gaoFlip') && flag(g, 'seatsKnown')) {
+      if (g.npc('gao') && flag(g, 'gaoFlip') && flag(g, 'seatsKnown')) {
         g.addIntel({
           id: 'ev-gao',
           title: '席位 217 在锁仓期内悄悄买入',
@@ -443,6 +494,34 @@ export const S327: Scenario = {
       case 'defend:cut':
         if (p.pos > 0) g.addPlanFromScript({ label: '平仓锁利', cond: 'now', price: 0, side: 'sell', qty: p.pos, spread: 3 });
         break;
+      case 'ally-flip:flip':
+        g.addPlanFromScript({ label: '空翻多', cond: 'now', price: 0, side: 'buy', qty: 2_400_000, spread: 2 });
+        g.flags.allyFlipped = true;
+        breakLock(g, '你在锁仓期内空翻多');
+        break;
+      case 'ally-flip:cover':
+        if (p.pos < 0) g.addPlanFromScript({ label: '平空离场', cond: 'now', price: 0, side: 'buy', qty: -p.pos, spread: 2 });
+        g.flags.allyCovered = true;
+        breakLock(g, '你在锁仓期内平掉了空单');
+        break;
+      case 'reg-spike:halt':
+      case 'reg:halt':
+        if (!flag(g, `halt-${g.dayIndex}`)) {
+          g.flags[`halt-${g.dayIndex}`] = true;
+          regulate(g, 'halt');
+        }
+        break;
+      case 'reg-spike:margin':
+      case 'reg:margin':
+        regulate(g, 'margin');
+        break;
+      case 'reg-dump:halt':
+        regulate(g, 'halt-close');
+        break;
+      case 'ruling:void':
+      case 'ruling:valid':
+        g.flags.ruling = choice;
+        break;
       case 'buy-dip:buy': {
         const ex = g.market.ex;
         const q = Math.floor(ex.equity(p) / (ex.contractValue(ex.last) * DECK_1995.marginRate));
@@ -505,9 +584,9 @@ function breakLock(g: Game, why: string) {
   if (!lock) return;
   lock.brokenBy = 'player';
   lock.brokenDay = g.dayIndex;
-  g.relate('gao', -40, why);
+  g.relate(lock.npc, -40, why);
   g.reputation -= 15;
-  g.flags.gaoFlip = true;
+  if (lock.npc === 'gao') g.flags.gaoFlip = true;
   if (lock.penalty > 0) {
     g.player.cash -= lock.penalty;
     g.push({ kind: 'intel', text: `按协议支付违约金 ${fmtYi(lock.penalty)}` });
@@ -526,6 +605,42 @@ function decideFlip(g: Game) {
   const loyalty = (Math.max(0, rel) / 100) * 0.5 + ((lock?.penalty ?? 0) / 3e8) * 0.35 + (flag(g, 'gaoShared') ? 0.1 : 0);
   const temptation = belief - loyalty + (g.rngSocial.next() - 0.5) * 0.08;
   if (temptation > 0.25) g.flags.gaoFlip = true;
+}
+
+/** 决战日每个账户的违规（超额透支）主动成交量，以及第一笔的时间 */
+function overdrawnByOwner(g: Game): Map<string, { vol: number; first: number }> {
+  const s = st(g);
+  const out = new Map<string, { vol: number; first: number }>();
+  for (const t of g.market.ex.trades) {
+    if (t.tick <= s.dayStartTick || !t.overdrawn) continue;
+    const owner = t.aggressor === 'buy' ? t.buyer : t.seller;
+    const e = out.get(owner) ?? { vol: 0, first: t.tick };
+    e.vol += t.qty;
+    out.set(owner, e);
+  }
+  return out;
+}
+
+function pct(g: Game, id: string): string {
+  const ex = g.market.ex;
+  const a = ex.acct(id);
+  const eq = ex.equity(a);
+  return eq > 0 ? `${Math.round((ex.marginReq(a.pos) / eq) * 100)}%` : '已穿仓';
+}
+
+function regulate(g: Game, what: 'halt' | 'margin' | 'halt-close') {
+  const m = g.market;
+  if (what === 'margin') {
+    if (flag(g, 'marginUp')) return;
+    m.ex.deck.marginRate = 0.05;
+    g.flags.marginUp = true;
+    g.push({ kind: 'intel', text: `交易所通知：${g.time} 起保证金比例提高到 5%` });
+    return;
+  }
+  m.haltUntil = what === 'halt-close' ? MINUTES_PER_DAY : m.t + 15;
+  g.flags.halts = ((g.flags.halts as number) || 0) + 1;
+  if (what === 'halt-close') g.flags.haltDump = true;
+  g.push({ kind: 'intel', text: what === 'halt-close' ? `交易所宣布：${g.time} 起停市至收盘` : `交易所宣布：327 合约临时停市 15 分钟` });
 }
 
 // ───────────── 社交结算 ─────────────
@@ -702,9 +817,11 @@ function report(g: Game, npcId: string, option: string | undefined, out: Out): S
   if (!ev) return out(false, ['你手上没有针对此人的证据'], { playerMove: `想举报${n.name}`, convey: ['（你翻遍笔记本，没有能拿得出手的证据。）'], tone: 'neutral' });
   if (flag(g, `reported-${npcId}`)) return out(false, ['已经举报过了'], { playerMove: '想再举报一次', convey: ['（交易所已经在处理了。）'], tone: 'neutral' });
   g.flags[`reported-${npcId}`] = true;
-  g.reputation -= 5;
-  g.heat = Math.max(g.heatPeak * 0.3, g.heat - 10);
-  g.relate(npcId, -50, '你向交易所举报了他');
+  if (g.factionId !== 'official') {
+    g.reputation -= 5;
+    g.heat = Math.max(g.heatPeak * 0.3, g.heat - 10);
+  }
+  g.relate(npcId, -50, g.factionId === 'official' ? '你约谈了他' : '你向交易所举报了他');
   const effects = ['声望 -5（圈内会知道有人告密）', '监管热度 -10（配合调查）', `${n.name} 关系 -50`];
   if (npcId === 'wei') {
     g.flags.zcCurbed = true;
@@ -714,6 +831,9 @@ function report(g: Game, npcId: string, option: string | undefined, out: Out): S
     g.flags.gaoCurbed = true;
     effects.push('交易所警告辽北发展：其翻多力度减半');
   }
+  if (g.factionId === 'official') {
+    return out(true, effects.slice(2), { playerMove: `拿着「${ev.title}」约谈${n.name}`, convey: ['我们一切都是按规则来的', '该配合的我们配合'], tone: 'evasive' });
+  }
   return out(true, effects, { playerMove: `把证据交给交易所值班官员陈默`, convey: ['材料收下了', '按规则办，会核实的'], tone: 'cold', npcId: 'chen' });
 }
 
@@ -722,10 +842,10 @@ function report(g: Game, npcId: string, option: string | undefined, out: Out): S
 function reckon(g: Game): Ending {
   const ex = g.market.ex;
   const p = g.player;
-  const startEq = g.factionId === 'short' ? SHORT_CASH + ((14790 - START_PRICE) / 100) * 200 * SHORT_POS : g.factionId === 'long' ? 1_800_000_000 : 80_000;
+  const startEq = (flag(g, 'startEq') as number) || 1;
   let eq = ex.equity(p);
   if (flag(g, 'loan')) eq -= 360_000_000;
-  const r = (eq - startEq) / startEq;
+  const r = g.faction.observer ? 0 : (eq - startEq) / startEq;
   const voided = !!flag(g, 'voided');
   const voidedByPlayer = voided && flag(g, 'voidedBy') === p.id;
   const official = g.market.closePrices[g.market.closePrices.length - 1];
@@ -743,7 +863,33 @@ function reckon(g: Game): Ending {
   let subhead = '';
   const body: string[] = [];
 
-  if (g.bankrupt || eq <= 0) {
+  if (g.factionId === 'official') {
+    const early: string[] = [];
+    if (flag(g, 'zcCurbed')) early.push('约谈中财信托');
+    if (flag(g, 'gaoCurbed')) early.push('警告辽北发展');
+    if (flag(g, 'marginUp')) early.push('提高保证金');
+    if (flag(g, `halt-${BATTLE}`)) early.push('上午临时停市');
+    const busts = ['shenjiang', 'zhongcai', 'liaobei'].filter((id) => flag(g, `bust-${id}`)).map((id) => ex.acct(id).name);
+    if (!voided) {
+      id = 'official-valid';
+      archetype = '旁观者';
+      title = '承认成交';
+      headline = `交易所确认全部成交有效 327 收于 ${p2(official)} 元`;
+      subhead = '空方违规砸盘的成交被承认，多方蒙受巨额亏损';
+      body.push('你尊重了已经发生的每一笔成交。可这也意味着：没有足额保证金的卖单，和守规矩的买单一样算数。');
+      body.push('明天开盘，每个会员都会算同一笔账：违规的代价，原来比守规矩的收益还低。');
+    } else {
+      id = 'official-void';
+      archetype = '守门人';
+      title = flag(g, 'haltDump') ? '当场叫停' : early.length ? '防患未然' : '亡羊补牢';
+      headline = flag(g, 'haltDump') ? '交易所紧急停市 空方砸盘未遂' : `违规之后的交易无效 327 收盘价定为 ${p2(official)} 元`;
+      subhead = '违规透支的成交被一笔勾销，申江证券面临立案调查';
+      body.push(`你宣布违规开始之后的交易无效，${wan((flag(g, 'voidedVol') as number) || 0)}成交被一并抹掉。违规者没能改变价格。`);
+      body.push('代价是：那段时间里所有正常成交的人，也一起被退回了原点。');
+    }
+    if (early.length) body.push(`你在白天就出了手：${early.join('、')}。`);
+    if (busts.length) body.push(`这一天有会员穿仓：${busts.join('、')}。`);
+  } else if (g.bankrupt || eq <= 0) {
     id = 'bust';
     archetype = '出局者';
     title = '穿仓';
@@ -796,6 +942,29 @@ function reckon(g: Game): Ending {
     }
     if (flag(g, 'insider')) body.push('但你在消息公开前加仓的记录还在。所有交易都留痕——旧账迟早被翻出。');
     archetype = r >= 0.15 ? (clean ? '猎手' : '流星') : clean ? '长青者' : '蛀虫';
+  } else if (g.factionId === 'ally') {
+    const gain = eq - startEq;
+    if (flag(g, 'allyFlipped')) {
+      id = 'ally-flip';
+      title = '倒戈';
+      headline = gain >= 0 ? `辽北发展空翻多 一日获利 ${fmtYi(gain)}` : `辽北发展空翻多 未能获利`;
+      subhead = '锁仓盟友在消息传开时抢先倒戈';
+      body.push('你做了历史上那个人做过的事：第一个跑，赚得最多。申江证券到收盘才知道，盟友早就不在了。');
+    } else if (flag(g, 'allyCovered')) {
+      id = 'ally-cover';
+      title = '抽身';
+      headline = `辽北发展锁仓期内平空离场`;
+      subhead = '没有做多，也没有陪空方扛到最后';
+      body.push('你撕了协议，但没有反戈一击。损失止住了，名声也打了折扣。');
+    } else {
+      id = 'ally-loyal';
+      title = '守约';
+      headline = gain < 0 ? `辽北发展信守锁仓 随空方亏损 ${fmtYi(-gain)}` : '辽北发展信守锁仓';
+      subhead = '盟友没有倒戈，10:05 的那一分钟没有到来';
+      body.push('你守住了协议。没有你的那一推，上午的暴涨来得没那么猛——你改变了历史，也付出了代价。');
+    }
+    if (voided && g.player.pos > 0) body.push('尾盘的砸盘被宣布无效，你的多单按砸盘前的价格结算。');
+    archetype = r >= 0.15 ? (clean ? '猎手' : '流星') : r <= -0.6 ? '出局者' : clean ? '长青者' : '蛀虫';
   } else {
     id = 'retail';
     title = r >= 0 ? '活下来了' : '交了学费';
@@ -836,13 +1005,21 @@ function reckon(g: Game): Ending {
     history,
     deviation,
     ruled: voided ? `交易所裁决：${timeOf(flag(g, 'voidedT') as number)} 之后的交易无效` : '交易所裁决：当日交易有效',
-    stats: [
+    stats: g.faction.observer
+      ? [
+          ['当晚裁决', voided ? '违规后交易无效' : '全部成交有效'],
+          ['作废成交', wan((flag(g, 'voidedVol') as number) || 0)],
+          ['会员穿仓', `${['shenjiang', 'zhongcai', 'liaobei'].filter((x) => flag(g, `bust-${x}`)).length} 家`],
+          ['停市', `${(flag(g, 'halts') as number) || 0} 次`],
+          ['越过底线', `${g.linesCrossed} 次`],
+        ]
+      : [
       ['最终权益', fmtYi(eq)],
       ['收益率', `${(r * 100).toFixed(1)}%`],
       ['监管热度', `第 ${g.heatTier()} 级`],
       ['声望', String(g.reputation)],
       ['越过底线', `${g.linesCrossed} 次`],
-    ],
+        ],
   };
 }
 
@@ -884,6 +1061,10 @@ function briefing(g: Game): string {
       return '申江证券持有 327 空单 220 万口，均价 147.90 元。你与辽北发展签有锁仓同盟：交割前任何一方不得平仓。交易所持仓限额 300 万口，保证金 2.5%。';
     case 'long':
       return '中财信托持有 327 多单 150 万口，均价 147.60 元。持仓限额 300 万口，保证金 2.5%。你的消息比市场早——但不能让人知道。';
+    case 'ally':
+      return '辽北发展持有 327 空单 80 万口，均价 148.00 元，账上 25 亿元。你和申江证券签有锁仓同盟：交割前任何一方不得平仓。持仓限额 300 万口。';
+    case 'official':
+      return '你是上交所交易部的值班官员。你不下单，但看得到每家会员的持仓与保证金。手里的工具：约谈（拿证据告发）、临时停市、提高保证金，以及当晚的裁决权。';
     default:
       return '你有 8 万元。一口 327 合约要交约 740 元保证金，价格每动 1 元，每口赚赔 200 元。';
   }

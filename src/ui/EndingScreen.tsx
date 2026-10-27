@@ -95,6 +95,11 @@ export function EndingScreen({ game, onAgain, onTitle }: { game: Game; onAgain: 
               ))}
             </div>
             {e.archetype === '出局者' && <p className="muted" style={{ fontSize: 13 }}>你没能走到终点。</p>}
+            {(e.archetype === '守门人' || e.archetype === '旁观者') && (
+              <p className="muted" style={{ fontSize: 13 }}>
+                你没有下单，这张图不属于你。{e.archetype === '守门人' ? '你选择了守门：让违规者付出代价。' : '你选择了旁观：让已经发生的成交成立。'}
+              </p>
+            )}
           </div>
         </div>
 
