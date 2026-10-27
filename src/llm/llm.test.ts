@@ -51,6 +51,13 @@ describe('台词导演', () => {
     expect(templateLine(intent)).toBe(line.text);
   });
 
+  it('模板的开头结尾永远取得到（哈希很大时也不会拼出 undefined）', () => {
+    for (let i = 0; i < 200; i++) {
+      const text = templateLine({ ...intent, npcId: 'jan', convey: [`成交，${800 + i} 盾一份`, '四月花开了，钱货两清'] }, i);
+      expect(text).not.toContain('undefined');
+    }
+  });
+
   it('模型两次都编造数字时，退回模板而不是把错话说出口', async () => {
     const fetchMock = vi.fn(async () => new Response(JSON.stringify({ choices: [{ message: { content: '明天准涨到 160 块！' } }] }), { status: 200 }));
     vi.stubGlobal('fetch', fetchMock);

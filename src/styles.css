@@ -1504,6 +1504,11 @@ textarea {
   font-size: 12px;
   color: rgba(239, 226, 200, 0.6);
 }
+.seat-means {
+  display: block;
+  font-size: 11px;
+  color: rgba(239, 226, 200, 0.5);
+}
 .slate {
   background: var(--slate);
   color: var(--chalk);

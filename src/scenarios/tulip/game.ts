@@ -71,6 +71,8 @@ export interface Settlement {
   /** 种植者剩下的球茎按四月价值计 */
   bulbsValue: number;
   total: number;
+  /** 对方倾家荡产、欠你却没还上的钱 */
+  unpaid: number;
 }
 
 export class TulipGame {
@@ -111,6 +113,8 @@ export class TulipGame {
   gifts: ('grower' | 'speculator')[] = [];
   /** 游说：议员 → 规则 → 加分 */
   lobby: Record<string, Partial<Record<TulipRule, number>>> = {};
+  /** 表决前你在大会上公开力主的规则：说出口的话，投票时要认 */
+  speech: TulipRule | null = null;
   /** 你提交表决的规则；rule 是大会实际通过的 */
   proposal: TulipRule | null = null;
   votes: Record<string, TulipRule> = {};
@@ -341,24 +345,70 @@ export class TulipGame {
    */
   settle(rule: TulipRule): Settlement {
     let bulbs = this.bulbs;
+    const pays = this.recovery(rule);
+    // 对方欠你的部分，他倾家荡产时只还得出一部分
+    const owed = (c: Contract, due: number, note: string) => {
+      const r = pays.get(c.npc) ?? 1;
+      if (due <= 0 || r >= 1) return { amount: due, note };
+      const name = TULIP_NPCS.find((n) => n.id === c.npc)?.name ?? c.npc;
+      return { amount: due * r, note: `${note}——${name}倾家荡产，欠你的只还了 ${Math.round(r * 100)}%`, short: due * (1 - r) };
+    };
     const lines = this.contracts.map((c) => {
       if (rule === 'void') return { contract: c, amount: 0, note: '合约作废，各自走开' };
       const walk = rule === 'option' && APRIL_VALUE < c.price;
       if (c.side === 'buy') {
         if (walk) return { contract: c, amount: -c.price * OPTION_FEE, note: '付 3.5% 解约' };
-        return { contract: c, amount: APRIL_VALUE - c.price, note: '付清合约价，收下球茎' };
+        return { contract: c, ...owed(c, APRIL_VALUE - c.price, '付清合约价，收下球茎') };
       }
-      if (walk) return { contract: c, amount: c.price * OPTION_FEE, note: '买方解约，只收到 3.5%' };
+      if (walk) return { contract: c, ...owed(c, c.price * OPTION_FEE, '买方解约，只收到 3.5%') };
       if (bulbs > 0) {
+        // 买方付不出的那部分，球茎留在自己手里，按四月价算
+        const o = owed(c, c.price - APRIL_VALUE, '收到合约价，交出自家球茎');
         bulbs--;
-        return { contract: c, amount: c.price, note: '收到合约价，交出自家球茎' };
+        return { contract: c, ...o, amount: o.amount + APRIL_VALUE };
       }
-      return { contract: c, amount: c.price - APRIL_VALUE, note: '收到合约价，按四月价买来球茎交货' };
+      return { contract: c, ...owed(c, c.price - APRIL_VALUE, '收到合约价，按四月价买来球茎交货') };
     });
     const bulbsValue = bulbs * APRIL_VALUE;
     // 赊来的钱四月结账时还掉
-    const total = this.cash - this.debt + bulbsValue + lines.reduce((a, l) => a + l.amount, 0);
-    return { rule, lines: lines.map((l) => ({ ...l, amount: Math.round(l.amount * 100) / 100 })), bulbsValue, total: Math.round(total * 100) / 100 };
+    const total: number = this.cash - this.debt + bulbsValue + lines.reduce((a, l) => a + l.amount, 0);
+    const unpaid = lines.reduce((a, l) => a + ('short' in l ? (l.short ?? 0) : 0), 0);
+    return {
+      rule,
+      lines: lines.map((l) => ({ contract: l.contract, note: l.note, amount: Math.round(l.amount * 100) / 100 })),
+      bulbsValue,
+      total: Math.round(total * 100) / 100,
+      unpaid: Math.round(unpaid),
+    };
+  }
+
+  /**
+   * 每个桌边人在某条规则下能还上几成：亏损超过家底（加上救济金）的人，只按比例还。
+   * 这就是击鼓传花——花传到付不起的人手里，前面每个人账上的“利润”都会落空一截。
+   */
+  recovery(rule: TulipRule): Map<string, number> {
+    // 每一笔钱从谁流向谁：to 收、from 付（'you' 是玩家，自己的债自己扛，按全额算）
+    const flows: { to: string; from: string; v: number }[] = [];
+    const deal = (buyer: string, seller: string, k: number) => {
+      if (rule === 'void') return;
+      const walk = rule === 'option' && APRIL_VALUE < k;
+      const t = walk ? -k * OPTION_FEE : APRIL_VALUE - k;
+      if (t > 0) flows.push({ to: buyer, from: seller, v: t });
+      else if (t < 0) flows.push({ to: seller, from: buyer, v: -t });
+    };
+    for (const d of this.npcBook) deal(d.buyer, d.seller, d.price);
+    for (const c of this.contracts) deal(c.side === 'buy' ? 'you' : c.npc, c.side === 'buy' ? c.npc : 'you', c.price);
+    const r = new Map<string, number>(TULIP_NPCS.map((n) => [n.id, 1]));
+    // 一个人收不回别人的欠款，就更还不上自己的：连锁着算几轮
+    for (let i = 0; i < 6; i++) {
+      for (const n of TULIP_NPCS) {
+        const owes = flows.filter((f) => f.from === n.id).reduce((a, f) => a + f.v, 0);
+        const gets = flows.filter((f) => f.to === n.id).reduce((a, f) => a + f.v * (r.get(f.from) ?? 1), 0);
+        const can = MEANS[n.id] + this.reliefFor(rule, n.id) + gets;
+        r.set(n.id, owes > can ? Math.max(0, can / owes) : 1);
+      }
+    }
+    return r;
   }
 
   /**
@@ -500,6 +550,21 @@ export class TulipGame {
         },
       );
     }
+    if (ruling) {
+      for (const r of ['forward', 'option', 'void'] as TulipRule[]) {
+        out.push({
+          id: `speech-${r}`,
+          name: `当众发言：${SPEECH[r].title}`,
+          group: '大会发言',
+          color: 'white',
+          does: `${SPEECH[r].does} 只能说一次。`,
+          cost: '不花影响力；但话说出口就收不回——提交的规则跟你说的不一样，大家都会记得。',
+          when: 'any',
+          status: this.speech === r ? '你说的就是这一条' : undefined,
+          blocked: this.speech ? `你已经当众力主“${RULE_NAME[this.speech]}”` : undefined,
+        });
+      }
+    }
     for (const r of ['forward', 'option', 'void'] as TulipRule[]) {
       out.push({
         id: `lobby-${r}`,
@@ -558,6 +623,7 @@ export class TulipGame {
         this.boost = 0.08;
         return R('风放出去了', ['付 3 盾酒钱', '下一晚大家心里的价 +8%']);
     }
+    if (id.startsWith('speech-')) return this.speak(id.slice(7) as TulipRule);
     this.influence -= id === 'deposit' ? 2 : id.startsWith('gift') ? 0 : 1;
     switch (id) {
       case 'notice':
@@ -605,6 +671,36 @@ export class TulipGame {
     return R('没有效果', []);
   }
 
+
+  /**
+   * 大会发言：本来就倾向这一条的人被你说得更坚定；最反感它的人反而更抱紧自己那一条；
+   * 市政官只看这条规则下倾家荡产的人是不是最少。
+   */
+  private speak(rule: TulipRule): CardResult {
+    this.speech = rule;
+    const fewest = Math.min(...(['forward', 'option', 'void'] as TulipRule[]).map((r) => this.ruined(r).length));
+    const moved: string[] = [];
+    const pushed: string[] = [];
+    for (const c of COUNCIL) {
+      if (c.id === 'witt') {
+        if (this.ruined(rule).length === fewest) {
+          this.lobbyAdd(c.id, rule, 1);
+          moved.push(c.name);
+        }
+        continue;
+      }
+      if (c.pref[rule] >= 2) {
+        this.lobbyAdd(c.id, rule, 1);
+        moved.push(c.name);
+      } else if (c.pref[rule] < 0) {
+        const own = (Object.keys(c.pref) as TulipRule[]).reduce((a, b) => (c.pref[b] > c.pref[a] ? b : a));
+        this.lobbyAdd(c.id, own, 1);
+        pushed.push(c.name);
+      }
+    }
+    const fx = [moved.length ? `${moved.join('、')}更站在你这边` : '没有人被你说动', pushed.length ? `${pushed.join('、')}更抱紧自己那一条` : '', '你提交的规则要跟这番话一致'].filter(Boolean);
+    return { ok: true, title: `你在大会上力主“${RULE_NAME[rule]}”`, effects: fx, reply: { who: '你', text: SPEECH[rule].line } };
+  }
 
   // ───────────── 表决 ─────────────
 
@@ -670,6 +766,13 @@ export class TulipGame {
       standing -= 5;
       lines.push(`你提交的是“${RULE_NAME[this.proposal]}”，大会通过的却是“${RULE_NAME[this.rule]}”。`);
     }
+    if (this.speech && this.proposal && this.speech !== this.proposal) {
+      standing -= 8;
+      lines.push(`你在会上当众力主“${RULE_NAME[this.speech]}”，举手时却提交了“${RULE_NAME[this.proposal]}”。会场里有人笑出了声。`);
+    } else if (this.speech && this.speech === this.rule) {
+      standing += 3;
+      lines.push('你在会上说的话，大会听进去了。');
+    }
     standing -= 5 * ruined;
     if (this.registered) standing += 5;
     const met = this.dirs.filter((x) => x.status === 'met').length;
@@ -697,6 +800,24 @@ export class TulipGame {
 }
 
 export const RULE_NAME: Record<TulipRule, string> = { forward: '照约履行', option: '改作期权', void: '一律作废' };
+
+const SPEECH: Record<TulipRule, { title: string; does: string; line: string }> = {
+  forward: {
+    title: '契约就是契约',
+    does: '站起来替签了字的约定说话。大花农和放贷人会更坚定；酒商和教会长老反而会更抱紧自己那一条。',
+    line: '诸位，签了字的东西今天不算数，明天这座城里还有谁敢跟人立约？卖出去的花，钱就得收回来。',
+  },
+  option: {
+    title: '各退一步',
+    does: '提议让买方付一小笔钱走开。酒商和公证人会更坚定；这是最不得罪人的说法，也最难让谁热血沸腾。',
+    line: '一半的人付不起，另一半的人收不到。与其打一百场官司，不如各退一步：付 3.5%，两清。',
+  },
+  void: {
+    title: '这个冬天不该发生',
+    does: '说这些约定本就是赌债。教会长老会更坚定；花农和放贷人会更抱紧“照约”。',
+    line: '没有人见过自己买的花。这不是买卖，是赌。赌债不是债——让这个冬天就这么过去吧。',
+  },
+};
 
 export function replayTulip(seed: string, faction: TulipFaction, log: TulipAction[]): TulipGame {
   const g = new TulipGame(seed, faction);

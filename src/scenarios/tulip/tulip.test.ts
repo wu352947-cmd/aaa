@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { APRIL_VALUE, EVENINGS, OPTION_FEE } from './data';
+import { APRIL_VALUE, COUNCIL, EVENINGS, OPTION_FEE } from './data';
 import { replayTulip, TulipGame } from './game';
 
 function leaveUntil(g: TulipGame, evening: number) {
@@ -70,7 +70,8 @@ describe('酒馆里的花', () => {
     g.act({ type: 'accept', npc: q.npc });
     const fwd = g.settle('forward');
     const opt = g.settle('option');
-    expect(fwd.total).toBeGreaterThan(opt.total + q.price * 0.8);
+    // 先不算对方付不付得起：只看规则本身的差别
+    expect(fwd.total + fwd.unpaid).toBeGreaterThan(opt.total + opt.unpaid + q.price * 0.8);
     expect(opt.bulbsValue).toBe(6 * APRIL_VALUE);
     expect(fwd.bulbsValue).toBe(5 * APRIL_VALUE);
   });
@@ -213,5 +214,79 @@ describe('酒馆里的手段', () => {
     a.act({ type: 'leave' });
     b.act({ type: 'leave' });
     expect(b.price).toBeGreaterThan(a.price * 1.05);
+  });
+});
+
+describe('击鼓传花', () => {
+  it('高位卖给家底薄的人：他倾家荡产，欠你的只还得出一部分', () => {
+    const g = new TulipGame('chain', 'speculator');
+    // 让亨德里克（家底 80 盾）出高价买一份
+    const q = g.quotes.find((x) => x.npc === 'hendrick')!;
+    q.side = 'buy';
+    q.price = 1100;
+    g.act({ type: 'accept', npc: 'hendrick' });
+    const fwd = g.settle('forward');
+    const due = 1100 - APRIL_VALUE;
+    expect(g.recovery('forward').get('hendrick')).toBeLessThan(0.2);
+    expect(fwd.lines[0].amount).toBeLessThan(due * 0.2);
+    expect(fwd.unpaid).toBeGreaterThan(due * 0.8);
+    expect(fwd.lines[0].note).toContain('倾家荡产');
+  });
+
+  it('连锁：欠你钱的人自己也收不回别人的欠款', () => {
+    const g = new TulipGame('chain', 'speculator');
+    leaveUntil(g, 4);
+    const r = g.recovery('forward');
+    // 有人倾家荡产，就有人跟着还不上
+    expect([...r.values()].some((x) => x < 1)).toBe(true);
+    for (const v of r.values()) expect(v).toBeGreaterThanOrEqual(0);
+    expect(g.recovery('void').get('jan')).toBe(1);
+  });
+
+  it('付得起的人照付，不落空', () => {
+    const g = new TulipGame('chain2', 'speculator');
+    const q = g.quotes.find((x) => x.npc === 'dirck')!;
+    q.side = 'buy';
+    q.price = 130;
+    g.act({ type: 'accept', npc: 'dirck' });
+    expect(g.recovery('forward').get('dirck')).toBe(1);
+    expect(g.settle('forward').unpaid).toBe(0);
+  });
+});
+
+describe('大会发言', () => {
+  function ruling(seed: string) {
+    const g = new TulipGame(seed, 'council');
+    while (g.phase === 'table') g.act({ type: 'leave' });
+    return g;
+  }
+
+  it('力主一条规则：倾向它的人更坚定，只能说一次', () => {
+    const g = ruling('speech');
+    g.act({ type: 'card', id: 'speech-option' });
+    expect(g.speech).toBe('option');
+    expect(g.lobby.bloc?.option).toBe(1);
+    expect(g.lobby.spiegel?.option).toBe(1);
+    expect(g.cards().find((c) => c.id === 'speech-void')?.blocked).toBeTruthy();
+    expect(g.influence).toBe(2);
+  });
+
+  it('最反感它的人反而更抱紧自己那一条', () => {
+    const g = ruling('speech2');
+    g.act({ type: 'card', id: 'speech-void' });
+    expect(g.lobby.goes?.void).toBe(1);
+    expect(g.lobby.meer?.forward).toBe(1);
+    expect(g.lobby.schaep?.forward).toBe(1);
+  });
+
+  it('说一套、投一套：威望受损', () => {
+    const a = ruling('flip');
+    const b = ruling('flip');
+    a.act({ type: 'card', id: 'speech-void' });
+    a.act({ type: 'rule', rule: 'option' });
+    b.act({ type: 'rule', rule: 'option' });
+    expect(a.councilVerdict().standing).toBeLessThan(b.councilVerdict().standing);
+    expect(a.councilVerdict().lines.some((l) => l.includes('当众力主'))).toBe(true);
+    expect(COUNCIL.length).toBe(6);
   });
 });

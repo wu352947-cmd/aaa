@@ -87,7 +87,7 @@ export function templateLine(intent: DialogueIntent, salt = 0): string {
   let h = salt;
   for (const c of intent.convey.join('')) h = (h * 31 + c.charCodeAt(0)) >>> 0;
   const pre = f.pre[h % f.pre.length];
-  const post = f.post[(h >> 3) % f.post.length];
+  const post = f.post[(h >>> 3) % f.post.length];
   return pre + intent.convey.join('，') + post;
 }
 

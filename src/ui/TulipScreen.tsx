@@ -208,6 +208,7 @@ export function TulipScreen({ game, llm, onExit, onTo327 }: { game: TulipGame; l
                     <PixelPortrait id={n.id} era="1637" size={40} talking={!!b?.pending} mood={ev.kind === 'normal' ? (q.side === 'buy' ? 'smile' : 'neutral') : 'frown'} />
                     <span>
                       <b>{n.name}</b> <span className="seat-title">{n.title}</span>
+                      {!council && <span className="seat-means">家底约 {MEANS[n.id]} 盾</span>}
                     </span>
                   </div>
                   <div className={cls('slate', q.side)}>
@@ -258,12 +259,17 @@ export function TulipScreen({ game, llm, onExit, onTo327 }: { game: TulipGame; l
             {game.contracts.map((c) => {
               const n = TULIP_NPCS.find((x) => x.id === c.npc)!;
               const p = game.paper(c);
+              // 他欠你的已经超过他的家底：这份“利润”到春天未必收得回来
+              const shaky = p > MEANS[c.npc];
               return (
                 <div key={c.id} className="ledger-row">
                   <span>
                     {c.side === 'buy' ? '向' : '卖给'}
                     {n.name}
-                    <small>{EVENINGS[c.evening].date.slice(5)}</small>
+                    <small>
+                      {EVENINGS[c.evening].date.slice(5)}
+                      {shaky && <span className="warn-text"> · 他欠你的已超过他的家底（约 {MEANS[c.npc]} 盾）</span>}
+                    </small>
                   </span>
                   <span className="num">{c.price} 盾</span>
                   <span className={cls('num', p > 0 ? 'gain' : p < 0 ? 'loss' : '')}>{sgn(p)}</span>
@@ -297,6 +303,7 @@ export function TulipScreen({ game, llm, onExit, onTo327 }: { game: TulipGame; l
               {game.evening === 0 && <li className="ledger-empty">今晚是第一夜。</li>}
             </ul>
             <p className="ledger-note">每成交一份，买方付给卖方 {WINE_MONEY} 盾酒钱。除此之外，春天之前谁都不用付钱。</p>
+            <p className="ledger-note">纸面上的赚头要等春天对方付钱才算数。卖给家底薄的人，价钱再高，他倾家荡产时也只还得出一部分——花传到最后一个人手里，前面每个人都会落空一截。</p>
               </>
             )}
             {council && game.directives().length > 0 && (
@@ -390,6 +397,14 @@ function SettleTable({ s, title }: { s: Settlement; title: string }) {
           <span className={cls('num', l.amount > 0 ? 'gain' : l.amount < 0 ? 'loss' : '')}>{sgn(l.amount)}</span>
         </div>
       ))}
+      {s.unpaid > 0 && (
+        <div className="settle-row">
+          <span>
+            落空的钱<small>对方倾家荡产，没还上的部分（已从上面扣掉）</small>
+          </span>
+          <span className="num loss">{fl(s.unpaid)}</span>
+        </div>
+      )}
       {s.bulbsValue > 0 && (
         <div className="settle-row">
           <span>
@@ -495,7 +510,7 @@ function OutcomeTable({ game, rule }: { game: TulipGame; rule: TulipRule }) {
 function TulipRuling({ game, onNext }: { game: TulipGame; onNext: (rule?: TulipRule) => void }) {
   const fwd = game.settle('forward');
   const opt = game.settle('option');
-  const [pick, setPick] = useState<TulipRule>('option');
+  const [pick, setPick] = useState<TulipRule>(game.speech ?? 'option');
   if (game.faction === 'council') return <CouncilVote game={game} pick={pick} setPick={setPick} onNext={onNext} />;
   return (
     <div className="setup paper tavern-paper">
@@ -549,6 +564,7 @@ function CouncilVote({ game, pick, setPick, onNext }: { game: TulipGame; pick: T
           ))}
         </div>
         <p style={{ fontSize: 14 }}>{RULES.find((r) => r.id === pick)!.detail}</p>
+        {game.speech && game.speech !== pick && <p className="warn-text" style={{ fontSize: 13 }}>你在会上当众力主的是“{RULE_NAME[game.speech]}”。提交别的，会场里的人都会记得。</p>}
         <OutcomeTable game={game} rule={pick} />
         <div className="section-label">如果现在表决</div>
         <div className="settle">
@@ -583,6 +599,7 @@ function CouncilVote({ game, pick, setPick, onNext }: { game: TulipGame; pick: T
             }}
             onPlay={(id, target) => {
               game.act({ type: 'card', id, target });
+              if (id.startsWith('speech-') && game.speech) setPick(game.speech);
               saveTulip(game);
               bump((x) => x + 1);
             }}
@@ -720,6 +737,11 @@ function TulipEnding({ game, onExit, onTo327 }: { game: TulipGame; onExit: () =>
             : '这条新规则对你没有影响。但对许多人来说，它决定了是倾家荡产还是安然无恙。',
     },
   ];
+  if (fwd.unpaid > 0 || opt.unpaid > 0)
+    lessons.push({
+      q: '花传到最后，落在谁手里？',
+      a: `你账上有一部分“利润”，是别人欠你的钱。可欠你钱的人自己也倾家荡产了：按原来的约定，你有 ${fl(fwd.unpaid)} 收不回来；按行会的新规则，收不回来的是 ${fl(opt.unpaid)}。这就是击鼓传花——每个人都以为自己能在鼓停之前把花传出去，可总有人接在最后，而他付不起，前面所有人的账就都落空一截。`,
+    });
 
   return (
     <div className="ending" style={{ background: '#1b130d' }}>
