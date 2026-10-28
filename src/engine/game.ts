@@ -1,0 +1,941 @@
+import { fmtYi, setUnits, type Account, type RuleDeck } from './exchange';
+import { Market, SSE_1995, type DayDef, type MarketParams, type Session } from './market';
+import { Rng } from './rng';
+import type { Fen, OrderReq, RuleHit, Side } from './types';
+
+// ───────────────────────────── 剧本接口 ─────────────────────────────
+
+export type FactionId = string;
+export type Verb = 'probe' | 'exchange' | 'ally' | 'betray' | 'report';
+
+export interface Faction {
+  id: FactionId;
+  name: string;
+  role: string;
+  blurb: string;
+  secretGoal: string;
+  accountId: string;
+  locked?: string;
+  /** 不下单、只监管的座位（交易所官员） */
+  observer?: boolean;
+}
+
+export interface Principle {
+  id: string;
+  label: string;
+  desc: string;
+}
+
+export interface RuleCardDef {
+  id: string;
+  title: string;
+  plain: string;
+  why: string;
+  source: string;
+}
+
+export interface SourceCard {
+  id: string;
+  title: string;
+  body: string;
+  cite: string;
+  url?: string;
+}
+
+export interface NpcDef {
+  id: string;
+  name: string;
+  title: string;
+  org: string;
+  seat?: string;
+  style: string;
+  /** 给 LLM 的人设卡：说话方式、口头禅、身份背景（不含任何秘密） */
+  persona: string;
+  /** 秘密目标：玩家看不到，LLM 也看不到 */
+  secretGoal: string;
+  /** 底线：会拒绝越过的事 */
+  bottomLine: string;
+  honesty: number;
+  relation: number;
+  avatar: string;
+  /** 该角色由玩家扮演时隐藏 */
+  factionId?: FactionId;
+}
+
+export interface Npc extends NpcDef {
+  memory: string[];
+  /** 今晚已经交谈过的次数 */
+  unreachable?: boolean;
+}
+
+export interface Intel {
+  id: string;
+  day: number;
+  time: string;
+  title: string;
+  body: string;
+  source: string;
+  /** 隐藏可信度 0–1，玩家看不到 */
+  credibility: number;
+  kind: 'news' | 'rumor' | 'evidence' | 'clue' | 'mentor' | 'system';
+  /** 可用于“告发”的证据所指向的 NPC */
+  against?: string;
+  /** 消息树：这条消息从源头到你经过的每一环；altered 表示在这一环被改动或编造 */
+  chain?: { who: string; said: string; altered?: boolean }[];
+  read?: boolean;
+}
+
+export interface Alliance {
+  id: string;
+  npc: string;
+  terms: string;
+  /** 锁仓截止：第几个交易日（含） */
+  lockUntilDay: number;
+  /** 违约金（元） */
+  penalty: number;
+  brokenBy?: 'player' | string;
+  brokenDay?: number;
+}
+
+/** 社交动作的引擎结算结果。dialogue 字段是交给台词层（模板或 LLM）的意图包。 */
+export interface SocialOutcome {
+  npc: string;
+  verb: Verb;
+  ok: boolean;
+  /** 显示给玩家的系统结算行，如“关系 +10”“获得情报” */
+  effects: string[];
+  dialogue: DialogueIntent;
+}
+
+/** 台词意图包：引擎决定“说什么”，台词层只决定“怎么说” */
+export interface DialogueIntent {
+  npcId: string;
+  verb: Verb | 'chat' | 'decision';
+  /** 玩家这一句在做什么（引擎生成的白话描述） */
+  playerMove: string;
+  /** NPC 这次要传达的内容（可能是谎话——但这是引擎决定的） */
+  convey: string[];
+  tone: 'warm' | 'neutral' | 'cold' | 'evasive' | 'hostile' | 'panicked' | 'smug';
+  /** 台词里允许出现的数字（价格、数量等），其他数字一律视为编造 */
+  numbers: number[];
+  /** 当前游戏日期时间，用来防止“说出未来” */
+  date: string;
+  /** 模板兜底台词 */
+  fallback: string[];
+}
+
+export interface ExchangeOffer {
+  id: string;
+  label: string;
+  cost: string;
+}
+
+export interface DecisionChoice {
+  id: string;
+  label: string;
+  detail: string;
+  danger?: boolean;
+}
+
+export interface Decision {
+  id: string;
+  title: string;
+  body: string;
+  choices: DecisionChoice[];
+  /** 倒计时（秒，现实时间），到时自动选择第一个选项 */
+  countdown?: number;
+}
+
+/**
+ * 行动卡：每个座位手里能打出的“手段”。白色合规，灰色游走在边缘，黑色违法。
+ * 卡面只写三件事：它做什么、要付出什么、什么时候能用。
+ */
+export type CardColor = 'white' | 'grey' | 'black';
+
+export interface CardDef {
+  id: string;
+  name: string;
+  /** 分组标题，如“盘中风控”“政策协调” */
+  group: string;
+  color: CardColor;
+  /** 一句话效果 */
+  does: string;
+  /** 代价（显示用；实际扣除由剧本结算） */
+  cost: string;
+  when: 'trading' | 'night' | 'any';
+  /** 需要选择对象时的选项 */
+  targets?: { id: string; label: string }[];
+  /** 现在不能用的原因 */
+  blocked?: string;
+  /** 已生效的状态，如“已提高到 5%” */
+  status?: string;
+  /** 交易屏上的快捷键（同时显示为快捷按钮） */
+  key?: string;
+  /** 手牌：不打出，也可以换算成本钱，如“+1 点政治资本” */
+  convert?: string;
+  /** 对手的牌：自己用不了，换算时触发对手的事件（这里写触发什么） */
+  foe?: string;
+}
+
+/**
+ * 对手的进度钟：人物正在推进的计划。满格时计划落地。
+ * 没摸清之前只看得到“有人在准备什么”；打听、稽查之后才知道是什么、怎么拦。
+ */
+export interface Clock {
+  id: string;
+  /** 谁的计划（人物 id，用来画头像） */
+  who: string;
+  name: string;
+  segs: number;
+  filled: number;
+  known: boolean;
+  /** 满格时会发生什么 */
+  then: string;
+  /** 眼下的盘算（摸清之后才显示） */
+  now?: string;
+  /** 怎么打断、推迟或利用它 */
+  counter?: string;
+  tone: 'threat' | 'friend' | 'neutral';
+  state?: 'running' | 'fired' | 'defused';
+}
+
+/** 上级指示：早上下来，收盘或第二天见分晓 */
+export interface Directive {
+  id: string;
+  day: number;
+  /** 下指示的人物 id */
+  from: string;
+  text: string;
+  /** 办到与办砸的后果 */
+  stakes: string;
+  status: 'open' | 'met' | 'failed';
+  verdict?: string;
+}
+
+/** 案头文书：一张要逐行核对、签字的报表 */
+export interface DocSheet {
+  id: string;
+  title: string;
+  from: string;
+  note: string;
+  cols: string[];
+  /** 每一列从哪里来：申报的（可能有假）还是结算部的（可靠） */
+  colSource?: ('reported' | 'cleared' | 'label')[];
+  rows: { id: string; cells: string[] }[];
+  /** 每一行能下的结论；第一项是默认（无误） */
+  marks: { id: string; label: string }[];
+  /** 签过之后：每行的结论与结算 */
+  filed?: { marks: Record<string, string>; result: CardResult };
+}
+
+/** 每晚选卡：从这个座位的牌堆里发三张，收下一张进手牌 */
+export interface DraftRules {
+  /** 这个座位的整副牌（含当前是否被挡住） */
+  deck(g: Game): CardDef[];
+  /** 今晚能不能发这张 */
+  offerable(g: Game, c: CardDef): boolean;
+  /** 不打出，换算成本钱 */
+  convert(g: Game, id: string): CardResult;
+  /** 每晚发几张（默认 3） */
+  size?: number;
+}
+
+export interface CardResult {
+  ok: boolean;
+  /** 结算标题，如“临时停市 15 分钟” */
+  title: string;
+  /** 结算行，如“政治资本 −1”“申江证券 关系 −25” */
+  effects: string[];
+  /** 一句对方的反应（可选） */
+  reply?: { who: string; text: string };
+}
+
+/** 顶栏指标：剧本可以为不同座位换上自己的指标 */
+export interface Meter {
+  id: string;
+  label: string;
+  /** 文本值；与 pips 二选一 */
+  value?: string;
+  /** 点数条：on / of */
+  pips?: { on: number; of: number; tone?: 'heat' | 'good' };
+  tip: string;
+  tone?: 'good' | 'bad';
+}
+
+export interface Ending {
+  id: string;
+  title: string;
+  archetype: '猎手' | '长青者' | '流星' | '蛀虫' | '出局者' | '守门人' | '旁观者';
+  headline: string;
+  subhead: string;
+  body: string[];
+  history: string[];
+  deviation: string[];
+  stats: [string, string][];
+  ruled: string;
+}
+
+export interface Scenario {
+  id: string;
+  title: string;
+  subtitle: string;
+  era: string;
+  deck: RuleDeck;
+  params: MarketParams;
+  days: DayDef[];
+  startPrice: Fen;
+  factions: Faction[];
+  principles: Principle[];
+  npcs: NpcDef[];
+  ruleCards: RuleCardDef[];
+  sources: SourceCard[];
+  prologue: string[];
+  /** 交易标的的称呼，如“327 合约” */
+  instrument?: string;
+  /** 交易时段（默认 1995 年上交所） */
+  session?: Session;
+  /** 数量与货币单位（默认“口”“元”） */
+  units?: { qty: string; cur: string };
+  /** 台词层的年代风格包 id */
+  eraId?: string;
+  /** 夜间报纸与结局页的报名 */
+  paperName?: string;
+  /** 结局页报纸的日期 */
+  endingDate?: string;
+  /** 选阵营页展示的规则卡 */
+  setupRules?: string[];
+  /** 监管座位能看到的会员账户 */
+  members?: string[];
+  /** 下单面板里的快捷数量（机构座位） */
+  lotPresets?: number[];
+  /** 当前座位手里的行动卡 */
+  cards?(g: Game): CardDef[];
+  /** 打出一张卡。只在 cards() 里出现且未被 blocked 时才会被调用。 */
+  playCard?(g: Game, id: string, target?: string): CardResult;
+  /** 顶栏指标；不提供时显示权益、监管热度与声望 */
+  meters?(g: Game): Meter[] | undefined;
+  /** 对手动向：各人物计划的进度钟 */
+  clocks?(g: Game): Clock[];
+  /** 上级指示（监管座位） */
+  directives?(g: Game): Directive[];
+  /** 今晚案头要核对的文书 */
+  docs?(g: Game): DocSheet[];
+  /** 在文书上签字：marks 是每一行的结论 */
+  fileDoc?(g: Game, id: string, marks: Record<string, string>): CardResult;
+  /** 每晚选卡 */
+  draft?: DraftRules;
+  /** 复盘与逐笔里怎么称呼一个群体或账户 */
+  groupName?(g: Game, who: string): string;
+  setup(g: Game): void;
+  onDayStart(g: Game): void;
+  onTick(g: Game): void;
+  onDayEnd(g: Game): void;
+  onNight(g: Game): void;
+  offers(g: Game, npcId: string): ExchangeOffer[];
+  social(g: Game, verb: Verb, npcId: string, option?: string): SocialOutcome;
+  decide(g: Game, decisionId: string, choiceId: string): void;
+  chatIntent(g: Game, npcId: string): DialogueIntent;
+  reckon(g: Game): Ending;
+}
+
+// ───────────────────────────── 游戏状态 ─────────────────────────────
+
+export interface Plan {
+  id: number;
+  label: string;
+  /** 触发条件：价格 ≥ price（gte）或 ≤ price（lte）；'now' 立即执行；'at' 在当日第 price 分钟执行 */
+  cond: 'gte' | 'lte' | 'now' | 'at';
+  price: Fen;
+  side: Side;
+  qty: number;
+  /** 分几分钟执行完 */
+  spread: number;
+  overdraw?: boolean;
+  /** 执行中：剩余数量与每分钟数量 */
+  remaining?: number;
+  perTick?: number;
+  done?: boolean;
+}
+
+export type PlayerAction =
+  | { type: 'order'; req: Omit<OrderReq, 'owner'> }
+  | { type: 'cancel-all' }
+  | { type: 'plan-add'; plan: Omit<Plan, 'id'> }
+  | { type: 'plan-remove'; id: number }
+  | { type: 'social'; verb: Verb; npc: string; option?: string }
+  | { type: 'decision'; id: string; choice: string }
+  | { type: 'card'; id: string; target?: string }
+  | { type: 'convert'; id: string }
+  | { type: 'draft'; id: string | null }
+  | { type: 'doc'; id: string; marks: Record<string, string> }
+  | { type: 'end-night' };
+
+export interface LoggedAction {
+  /** 全局分钟序号 */
+  at: number;
+  action: PlayerAction;
+}
+
+export interface DayRecap {
+  day: number;
+  date: string;
+  open: Fen;
+  close: Fen;
+  hist: Fen;
+  /** 每个群体对价格的推动（分） */
+  parts: { who: string; move: number; net: number }[];
+  notes: string[];
+}
+
+export type Phase = 'trading' | 'night' | 'reckoning';
+
+export interface GameEvent {
+  kind: 'rule' | 'intel' | 'decision' | 'pause' | 'margin' | 'liquidation' | 'phase' | 'card';
+  text: string;
+  rule?: string;
+  /** 规则事件：委托被挡下（true）还是违规放行（false） */
+  blocked?: boolean;
+}
+
+export class Game {
+  readonly market: Market;
+  readonly rng: Rng;
+  readonly rngSocial: Rng;
+  readonly rngScript: Rng;
+  phase: Phase = 'trading';
+  dayIndex = 0;
+  energy = 3;
+  readonly maxEnergy = 3;
+  npcs = new Map<string, Npc>();
+  intel: Intel[] = [];
+  alliances: Alliance[] = [];
+  plans: Plan[] = [];
+  private planSeq = 1;
+  pending: OrderReq[] = [];
+  log: LoggedAction[] = [];
+  events: GameEvent[] = [];
+  decision: Decision | null = null;
+  recaps: DayRecap[] = [];
+  ending: Ending | null = null;
+  /** 剧本自由使用的状态 */
+  flags: Record<string, number | string | boolean> = {};
+  heat = 0;
+  heatPeak = 0;
+  reputation = 10;
+  linesCrossed = 0;
+  seenRules = new Set<string>();
+  /** 收盘时的权益曲线（元） */
+  equityCurve: number[] = [];
+  marginCall = false;
+  bankrupt = false;
+  tape: { day: number; time: string; seat: string; side: Side; qty: number; price: Fen }[] = [];
+  /** 每晚的报纸头条（引擎给事实，台词层负责措辞） */
+  papers: { day: number; headline: string; sub: string; facts: string[] }[] = [];
+  /** 打过的行动卡与结算结果 */
+  cardLog: { day: number; time: string; id: string; name: string; target?: string; result: CardResult }[] = [];
+  /** 手牌：每晚选来的一次性卡 */
+  hand: string[] = [];
+  /** 今晚发到面前、还没选的牌 */
+  offer: string[] | null = null;
+  /** 收下过的牌（不会再发） */
+  drafted: string[] = [];
+  readonly maxHand = 3;
+  private readonly rngDraft: Rng;
+
+  constructor(
+    readonly scenario: Scenario,
+    readonly seed: string,
+    readonly factionId: FactionId,
+    readonly principleId: string,
+  ) {
+    this.rng = new Rng(`${scenario.id}:${seed}`);
+    this.rngSocial = this.rng.fork('social');
+    this.rngScript = this.rng.fork('script');
+    this.rngDraft = this.rng.fork('draft');
+    // 规则卡组按局复制：监管者盘中调整保证金只影响这一局
+    setUnits(scenario.units ?? { qty: '口', cur: '元' });
+    this.market = new Market({ ...scenario.deck }, scenario.params, `${scenario.id}:${seed}:market`, scenario.startPrice, scenario.session ?? SSE_1995);
+    for (const d of scenario.npcs) if (d.factionId !== factionId) this.npcs.set(d.id, { ...d, memory: [] });
+    scenario.setup(this);
+    this.startDay();
+  }
+
+  get faction(): Faction {
+    return this.scenario.factions.find((f) => f.id === this.factionId)!;
+  }
+  get principle(): Principle {
+    return this.scenario.principles.find((p) => p.id === this.principleId)!;
+  }
+  get player(): Account {
+    return this.market.ex.acct(this.faction.accountId);
+  }
+  get day(): DayDef {
+    return this.scenario.days[this.dayIndex];
+  }
+  get t(): number {
+    return this.market.t;
+  }
+  get time(): string {
+    return this.market.session.label(this.market.t);
+  }
+  get globalTick(): number {
+    return this.dayIndex * (this.market.session.minutes + 1) + this.market.t;
+  }
+  get isBattleDay(): boolean {
+    return this.day.kind === 'battle';
+  }
+  /** 余波：决战之后不再开盘的日子，只有夜晚 */
+  get isAftermath(): boolean {
+    return this.day.kind === 'aftermath';
+  }
+
+  /** 当前能打出的行动卡（含被挡住的，供界面显示原因） */
+  cards(): CardDef[] {
+    return [...this.handCards(), ...(this.scenario.cards?.(this) ?? [])];
+  }
+
+  /** 手牌按收下的顺序排；对手的牌只能换算 */
+  handCards(): CardDef[] {
+    const deck = this.scenario.draft?.deck(this) ?? [];
+    return this.hand
+      .map((id) => deck.find((c) => c.id === id))
+      .filter((c): c is CardDef => !!c)
+      .map((c) => ({ ...c, group: '手牌', blocked: c.foe ? '对手的牌：只能换算' : c.blocked }));
+  }
+
+  /** 今晚发到面前的牌 */
+  offerCards(): CardDef[] {
+    const deck = this.scenario.draft?.deck(this) ?? [];
+    return (this.offer ?? []).map((id) => deck.find((c) => c.id === id)).filter((c): c is CardDef => !!c);
+  }
+
+  private dealOffer(): void {
+    const dr = this.scenario.draft;
+    this.offer = null;
+    if (!dr || this.ending) return;
+    const pool = dr.deck(this).filter((c) => !this.drafted.includes(c.id) && dr.offerable(this, c));
+    const out: string[] = [];
+    while (out.length < (dr.size ?? 3) && pool.length) out.push(pool.splice(Math.floor(this.rngDraft.next() * pool.length), 1)[0].id);
+    if (out.length) this.offer = out;
+  }
+
+  /** 这张卡此刻能不能打：时段、是否被挡住、对象是否合法 */
+  canPlay(id: string, target?: string): string | null {
+    const c = this.cards().find((x) => x.id === id);
+    if (!c) return '没有这张卡';
+    if (c.blocked) return c.blocked;
+    if (this.decision || this.ending) return '现在不能出手';
+    if (c.when === 'trading' && (this.phase !== 'trading' || !this.market.ex.open)) return '只能在盘中使用';
+    if (c.when === 'night' && this.phase !== 'night') return '只能在收盘后使用';
+    if (c.targets && !c.targets.some((t) => t.id === target)) return '先选一个对象';
+    return null;
+  }
+
+  equity(): number {
+    return this.market.ex.equity(this.player);
+  }
+  marginNeed(): number {
+    return this.market.ex.marginReq(this.player.pos);
+  }
+
+  heatTier(): number {
+    return this.heat >= 80 ? 5 : this.heat >= 60 ? 4 : this.heat >= 40 ? 3 : this.heat >= 20 ? 2 : this.heat > 0 ? 1 : 0;
+  }
+
+  addHeat(n: number, why: string): void {
+    const before = this.heatTier();
+    this.heat = Math.min(100, this.heat + n);
+    this.heatPeak = Math.max(this.heatPeak, this.heat);
+    if (this.heatTier() > before) this.push({ kind: 'intel', text: `监管热度升至第 ${this.heatTier()} 级：${why}` });
+  }
+
+  crossLine(why: string): void {
+    this.linesCrossed++;
+    this.push({ kind: 'intel', text: `你越过了自己的底线「${this.principle.label}」：${why}` });
+  }
+
+  push(e: GameEvent): void {
+    this.events.push(e);
+  }
+
+  addIntel(i: Omit<Intel, 'day' | 'time'> & { time?: string }): Intel {
+    const item: Intel = { day: this.dayIndex, time: this.phase === 'night' ? '夜' : this.time, ...i };
+    this.intel.unshift(item);
+    this.push({ kind: 'intel', text: `${item.source}：${item.title}` });
+    return item;
+  }
+
+  npc(id: string): Npc | undefined {
+    return this.npcs.get(id);
+  }
+
+  relate(id: string, d: number, memory?: string): void {
+    const n = this.npcs.get(id);
+    if (!n) return;
+    n.relation = Math.max(-100, Math.min(100, n.relation + d));
+    if (memory) n.memory.push(`第${this.dayIndex + 1}天：${memory}`);
+  }
+
+  // ── 玩家动作：全部先写入动作日志，再执行，保证可以逐条重放 ──
+
+  act(action: PlayerAction): SocialOutcome | null {
+    this.log.push({ at: this.globalTick, action });
+    return this.apply(action);
+  }
+
+  private apply(action: PlayerAction): SocialOutcome | null {
+    switch (action.type) {
+      case 'order': {
+        const req = { ...action.req, owner: this.player.id } as OrderReq;
+        const hits = this.market.ex.open ? [] : this.market.ex.check(req, this.player);
+        if (hits.length) this.onRuleHits(hits);
+        else this.pending.push(req);
+        return null;
+      }
+      case 'cancel-all':
+        this.market.ex.book.cancelWhere((o) => o.owner === this.player.id);
+        return null;
+      case 'plan-add':
+        this.plans.push({ ...action.plan, id: this.planSeq++ });
+        return null;
+      case 'plan-remove':
+        this.plans = this.plans.filter((p) => p.id !== action.id);
+        return null;
+      case 'social': {
+        if (this.energy <= 0) return null;
+        this.energy--;
+        return this.scenario.social(this, action.verb, action.npc, action.option);
+      }
+      case 'decision': {
+        this.decision = null;
+        this.scenario.decide(this, action.id, action.choice);
+        return null;
+      }
+      case 'card': {
+        const why = this.canPlay(action.id, action.target);
+        const card = this.cards().find((x) => x.id === action.id);
+        if (why || !card || !this.scenario.playCard) {
+          if (card) this.push({ kind: 'card', text: `${card.name}：${why}` });
+          return null;
+        }
+        const result = this.scenario.playCard(this, action.id, action.target);
+        this.hand = this.hand.filter((x) => x !== action.id);
+        this.logCard(card, result, action.target);
+        return null;
+      }
+      case 'convert': {
+        const dr = this.scenario.draft;
+        const card = this.handCards().find((x) => x.id === action.id);
+        if (!dr || !card || this.decision || this.ending) return null;
+        const result = dr.convert(this, action.id);
+        this.hand = this.hand.filter((x) => x !== action.id);
+        this.logCard(card, result);
+        return null;
+      }
+      case 'draft': {
+        if (!this.offer || this.phase !== 'night') return null;
+        if (action.id) {
+          if (!this.offer.includes(action.id) || this.hand.length >= this.maxHand) return null;
+          this.hand.push(action.id);
+          this.drafted.push(action.id);
+        }
+        this.offer = null;
+        return null;
+      }
+      case 'doc': {
+        const doc = this.scenario.docs?.(this).find((d) => d.id === action.id);
+        if (!doc || doc.filed || !this.scenario.fileDoc) return null;
+        const result = this.scenario.fileDoc(this, action.id, action.marks);
+        this.logCard({ id: action.id, name: doc.title }, result);
+        return null;
+      }
+      case 'end-night':
+        this.endNight();
+        return null;
+    }
+  }
+
+  private logCard(card: { id: string; name: string }, result: CardResult, target?: string): void {
+    this.cardLog.push({ day: this.dayIndex, time: this.phase === 'night' ? '夜' : this.time, id: card.id, name: card.name, target, result });
+    this.push({ kind: 'card', text: `${result.title}${result.effects.length ? '：' + result.effects.join('，') : ''}` });
+  }
+
+  onRuleHits(hits: RuleHit[]): void {
+    for (const h of hits) {
+      if (h.owner !== this.player.id) continue;
+      this.push({ kind: 'rule', rule: h.blocked ? h.rule : 'overdraw', blocked: h.blocked, text: (h.blocked ? '委托被挡下：' : '违规成交：') + h.detail });
+      if (!h.blocked) {
+        if (h.rule === 'margin') this.addHeat(6, '超额透支下单');
+        if (h.rule === 'position-limit') this.addHeat(5, '超出持仓限额');
+        if (this.principleId === 'no-violation' && !this.flags['line-violation-' + this.dayIndex]) {
+          this.flags['line-violation-' + this.dayIndex] = true;
+          this.crossLine('明知违规仍然下单');
+        }
+      }
+    }
+  }
+
+  // ── 时间推进 ──
+
+  private startDay(): void {
+    this.energy = this.maxEnergy;
+    if (this.isAftermath) {
+      // 余波：市场不再开盘，直接进入夜晚
+      this.phase = 'night';
+      this.scenario.onDayStart(this);
+      this.push({ kind: 'phase', text: `${this.day.date} ${this.day.label}` });
+      this.scenario.onNight(this);
+      this.dealOffer();
+      return;
+    }
+    this.phase = 'trading';
+    this.market.beginDay(this.day, this.dayIndex);
+    this.scenario.onDayStart(this);
+    this.cureOrLiquidate();
+    this.push({ kind: 'phase', text: `${this.day.date} ${this.day.label} 开盘` });
+  }
+
+  /** 前一晚收到追保通知、开盘仍未补足的，交易所按缺口比例强平 */
+  private cureOrLiquidate(): void {
+    if (!this.marginCall) return;
+    const ex = this.market.ex;
+    const a = this.player;
+    const eq = ex.equity(a);
+    const need = ex.marginReq(a.pos);
+    if (eq >= need) {
+      this.marginCall = false;
+      return;
+    }
+    const frac = Math.min(1, eq <= 0 ? 1 : 1 - eq / need);
+    const r = ex.liquidate(a.id, frac);
+    this.marginCall = false;
+    this.push({ kind: 'liquidation', rule: 'forced-liquidation', text: `追保未到位，交易所开盘强制平仓 ${r?.filled.toLocaleString() ?? 0} 口` });
+  }
+
+  /** 推进一分钟。返回 false 表示当天已收盘。 */
+  tick(): boolean {
+    if (this.phase !== 'trading' || this.decision || this.ending) return false;
+    if (this.market.dayOver) {
+      this.closeDay();
+      return false;
+    }
+    // 停市期间委托与计划都原样留着，复市后再报
+    const halted = this.market.t < this.market.haltUntil;
+    const orders = halted ? [] : this.pending.splice(0);
+    if (!halted) orders.push(...this.runPlans());
+    const rep = this.market.step(orders);
+    this.onRuleHits(rep.hits);
+    if (rep.luld) {
+      const l = this.market.deck.luld!;
+      this.push({ kind: 'rule', rule: 'luld', blocked: true, text: `${l.window} 分钟内价格波动超过 ${l.band * 100}%，交易暂停 ${l.pause} 分钟` });
+    }
+    // 逐笔成交：同一主动方在同一分钟的成交合并为一笔，大单才显示席位号
+    const agg = new Map<string, { side: Side; qty: number; notional: number }>();
+    for (const tr of rep.trades) {
+      const owner = tr.aggressor === 'buy' ? tr.buyer : tr.seller;
+      const key = owner + tr.aggressor;
+      const e = agg.get(key) ?? { side: tr.aggressor, qty: 0, notional: 0 };
+      e.qty += tr.qty;
+      e.notional += tr.qty * tr.price;
+      agg.set(key, e);
+    }
+    for (const [key, e] of agg) {
+      if (e.qty < this.tapeThreshold()) continue;
+      const acct = this.market.ex.accounts.get(key.slice(0, -e.side.length));
+      if (!acct?.seat) continue;
+      this.tape.unshift({ day: this.dayIndex, time: this.market.session.label(this.market.t - 1), seat: acct.seat, side: e.side, qty: e.qty, price: Math.round(e.notional / e.qty) });
+    }
+    if (this.tape.length > 200) this.tape.length = 200;
+    this.intradayRisk();
+    this.scenario.onTick(this);
+    if (this.market.dayOver && !this.decision) this.closeDay();
+    return true;
+  }
+
+  tapeThreshold(): number {
+    return Math.round(this.day.vDay * 0.004);
+  }
+
+  private runPlans(): OrderReq[] {
+    const out: OrderReq[] = [];
+    const last = this.market.last;
+    for (const p of this.plans) {
+      if (p.done) continue;
+      if (p.remaining == null) {
+        const hit =
+          p.cond === 'now' ||
+          (p.cond === 'at' ? this.market.t >= p.price : p.cond === 'gte' ? last >= p.price : last <= p.price);
+        if (!hit) continue;
+        p.remaining = p.qty;
+        p.perTick = Math.ceil(p.qty / Math.max(1, p.spread));
+        this.push({ kind: 'intel', text: `计划书「${p.label}」开始执行` });
+      }
+      const q = Math.min(p.remaining, p.perTick!);
+      out.push({ owner: this.player.id, side: p.side, qty: q, type: 'market', overdraw: p.overdraw });
+      p.remaining -= q;
+      if (p.remaining <= 0) p.done = true;
+    }
+    return out;
+  }
+
+  /** 盘中风控：按做市中枢估值（避免被单笔跳价误伤），权益跌穿零即穿仓，交易所立即强平 */
+  private intradayRisk(): void {
+    const ex = this.market.ex;
+    const mark = Math.round(this.market.reference);
+    for (const a of ex.accounts.values()) {
+      if (a.exempt || a.pos === 0) continue;
+      if (ex.equity(a, mark) < 0) {
+        const r = ex.liquidate(a.id);
+        if (a.id === this.player.id) {
+          this.bankrupt = true;
+          this.push({ kind: 'liquidation', rule: 'forced-liquidation', text: `权益跌穿零，交易所强制平仓 ${r?.filled.toLocaleString()} 口` });
+        } else {
+          this.flags[`bust-${a.id}`] = this.time;
+        }
+      }
+    }
+  }
+
+  /** 收盘：剧本可以先改写结算价（例如交易所宣布部分交易无效） */
+  closeDay(settle?: Fen): void {
+    const m = this.market;
+    if (this.phase !== 'trading') return;
+    const open = m.bars[0]?.o ?? m.last;
+    const contributions = new Map(m.ex.contributions);
+    const netByOwner = new Map<string, number>();
+    for (const tr of m.ex.trades) {
+      if (tr.tick <= m.ex.tick - m.bars.length) continue;
+      netByOwner.set(tr.buyer, (netByOwner.get(tr.buyer) ?? 0) + tr.qty);
+      netByOwner.set(tr.seller, (netByOwner.get(tr.seller) ?? 0) - tr.qty);
+    }
+    this.scenario.onDayEnd(this);
+    if (this.ending) return;
+    const price = settle ?? (this.flags['settle'] as number | undefined) ?? m.last;
+    delete this.flags['settle'];
+    m.closeDay(price);
+    this.pending = [];
+    this.plans = this.plans.filter((p) => !p.done && p.remaining == null);
+
+    const groups = new Map<string, { move: number; net: number }>();
+    for (const [g, mv] of contributions) groups.set(g, { move: mv, net: 0 });
+    for (const [owner, net] of netByOwner) {
+      const g = m.ex.accounts.get(owner)?.group ?? owner;
+      const e = groups.get(g) ?? { move: 0, net: 0 };
+      e.net += net;
+      groups.set(g, e);
+    }
+    this.recaps.push({
+      day: this.dayIndex,
+      date: this.day.date,
+      open,
+      close: price,
+      hist: this.day.hist[this.day.hist.length - 1],
+      parts: [...groups.entries()].map(([who, v]) => ({ who, ...v })).sort((a, b) => Math.abs(b.move) - Math.abs(a.move)),
+      notes: [],
+    });
+
+    const ex = m.ex;
+    const eq = ex.equity(this.player);
+    this.equityCurve.push(eq);
+    if (this.player.pos !== 0 && eq < ex.marginReq(this.player.pos)) {
+      this.marginCall = true;
+      this.push({
+        kind: 'margin',
+        rule: 'daily-settlement',
+        text: `逐日盯市后权益 ${fmtYi(eq)}，低于所需保证金 ${fmtYi(ex.marginReq(this.player.pos))}：明早开盘前须补足，否则强制平仓`,
+      });
+    }
+    // 布局期就穿仓：故事到此为止；决战日穿仓的人还要面对余波
+    const aftermathAhead = this.scenario.days.slice(this.dayIndex + 1).some((d) => d.kind === 'aftermath');
+    if (this.dayIndex >= this.scenario.days.length - 1 || (this.bankrupt && !(aftermathAhead && this.isBattleDay))) {
+      this.phase = 'reckoning';
+      this.ending = this.scenario.reckon(this);
+      return;
+    }
+    this.phase = 'night';
+    this.energy = this.maxEnergy;
+    this.heat = Math.max(this.heatPeak * 0.3, this.heat - 1);
+    this.scenario.onNight(this);
+    this.dealOffer();
+  }
+
+  private endNight(): void {
+    if (this.phase !== 'night') return;
+    if (this.dayIndex >= this.scenario.days.length - 1) {
+      this.phase = 'reckoning';
+      this.ending = this.scenario.reckon(this);
+      return;
+    }
+    // 没选的牌不留到明天
+    this.offer = null;
+    this.dayIndex++;
+    this.startDay();
+  }
+
+  // ── 便捷方法 ──
+
+  addPlanFromScript(plan: Omit<Plan, 'id'>): void {
+    this.plans.push({ ...plan, id: this.planSeq++ });
+  }
+
+  /** 状态摘要哈希：同一种子 + 同一串动作必须得到同一个值 */
+  stateHash(): string {
+    const ex = this.market.ex;
+    const parts: (string | number)[] = [this.dayIndex, this.market.t, ex.last, ex.trades.length, this.heat.toFixed(4), this.reputation];
+    for (const a of [...ex.accounts.values()].sort((x, y) => x.id.localeCompare(y.id))) parts.push(a.id, a.pos, a.cash.toFixed(2));
+    for (const n of [...this.npcs.values()].sort((x, y) => x.id.localeCompare(y.id))) parts.push(n.id, n.relation);
+    parts.push(...this.market.closePrices, ...this.hand);
+    let h = 2166136261 >>> 0;
+    const s = parts.join('|');
+    for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 16777619);
+    return (h >>> 0).toString(16);
+  }
+}
+
+/** 按动作日志重放一局：服务端校验排行榜、每日挑战与录像都靠它 */
+export function replay(scenario: Scenario, seed: string, faction: FactionId, principle: string, log: LoggedAction[], untilTick = Infinity): Game {
+  const g = new Game(scenario, seed, faction, principle);
+  let i = 0;
+  const flush = () => {
+    while (i < log.length && log[i].at <= g.globalTick) g.act(log[i++].action);
+  };
+  for (let guard = 0; guard < 100000; guard++) {
+    flush();
+    if (g.ending || g.globalTick >= untilTick) break;
+    if (g.phase === 'trading') {
+      if (g.decision) {
+        // 日志里应当有决策动作；若没有，按默认选项继续，避免死循环
+        if (i < log.length) g.act(log[i++].action);
+        else g.act({ type: 'decision', id: g.decision.id, choice: g.decision.choices[0].id });
+        continue;
+      }
+      g.tick();
+    } else if (g.phase === 'night') {
+      if (i < log.length) g.act(log[i++].action);
+      else g.act({ type: 'end-night' });
+    } else break;
+  }
+  return g;
+}
+
+/**
+ * 开局仓位拿着不动、一笔不交易，按 price 结算的收益率。
+ * 剧本在 setup 里记下 startEq / startPos / startMark。
+ */
+export function holdReturn(g: Game, price: Fen): number {
+  const start = Number(g.flags.startEq) || 1;
+  const pos = Number(g.flags.startPos) || 0;
+  const mark = Number(g.flags.startMark ?? price);
+  return (pos * ((price - mark) / 100) * g.market.ex.deck.multiplier) / Math.abs(start);
+}
+
+/**
+ * 交易座位的人物类型。猎手不只要赚钱，还要比“拿着开局仓位不动”多赚一截——
+ * 否则这一局是历史替你赚的，不是你。
+ */
+export function traderArchetype(r: number, rHold: number, clean: boolean, canBust = true): Ending['archetype'] {
+  if (r >= 0.15 && !clean) return '流星';
+  if (r >= 0.15 && r - rHold >= 0.1) return '猎手';
+  if (canBust && r <= -0.6) return '出局者';
+  return clean ? '长青者' : '蛀虫';
+}

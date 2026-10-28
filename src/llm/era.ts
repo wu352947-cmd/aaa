@@ -1,0 +1,54 @@
+/**
+ * 年代风格包：台词层的“历史真实感”靠它约束。
+ * lexicon 是鼓励使用的当年说法；anachronisms 是当年还没有的事物与说法；
+ * foreknowledge 是此刻还没发生、角色不可能知道的事。
+ */
+export interface EraPack {
+  id: string;
+  place: string;
+  lexicon: string[];
+  anachronisms: string[];
+  foreknowledge: string[];
+  /** 允许出现的“安全数字”（年份、席位号等） */
+  safeNumbers: number[];
+}
+
+export const ERA_1995_SH: EraPack = {
+  id: '1995-shanghai',
+  place: '1995 年 2 月的上海，浦江饭店里的上海证券交易所',
+  lexicon: ['红马甲', '大户室', '传呼机', 'BP 机', '大哥大', '空头', '多头', '平仓', '逼空', '保值贴补', '贴息', '交割', '席位', '头寸', '套期保值', '老板', '侬', '阿拉', '国库券'],
+  anachronisms: [
+    '手机', '微信', '互联网', '网上', 'APP', 'App', 'app', '短信', '量化', '私募', '股吧', '抖音', '直播', '高频',
+    'T+1', '注册制', '科创板', '创业板', '比特币', '融券', '两融', '北上资金', '微博', '邮件', '网友', '朋友圈', '电子邮箱', '智能',
+  ],
+  foreknowledge: ['交易无效', '327事件', '三二七事件', '327 事件', '暂停国债期货', '国债期货暂停', '最后八分钟', '最后8分钟', '1056', '147.40', '147.4', '证监会暂停', '5月17', '五月十七'],
+  safeNumbers: [1995, 1992, 327, 132],
+};
+
+export const ERAS: Record<string, EraPack> = {};
+
+export const ERA_1637_HAARLEM: EraPack = {
+  id: '1637-haarlem',
+  place: '1637 年冬天荷兰哈勒姆的金鹿酒馆，花商们称这里为“学院”',
+  lexicon: ['荷兰盾', '斯蒂弗', '酒钱', '学院', '石板', '花田', '球茎', '瑞士人', '春天交货', '花商', '主保佑', '老天作证'],
+  anachronisms: ['期货', '保证金', '银行卡', '手机', '电话', '火车', '电灯', '美元', '人民币', '经济学', '泡沫', '杠杆', '合同法'],
+  foreknowledge: ['崩盘', '暴跌', '2月3日', '二月三日', '行会裁决', '期权', '3.5', '百分之三点五', '郁金香狂热', '狂热', '二十四日', '24日'],
+  safeNumbers: [1636, 1637],
+};
+
+export const ERA_2021_NY: EraPack = {
+  id: '2021-newyork',
+  place: '2021 年 1 月疫情中的纽约，散户们在手机应用和投资论坛上交易',
+  lexicon: ['钻石手', '纸手', '到月球', '火箭', '论坛', '截图', '看涨期权', '空头', '回补', '借券费', '清算所', '押金', '零佣金', '散户', '对冲基金'],
+  anachronisms: ['ChatGPT', '拆股后', '元宇宙'],
+  foreknowledge: ['听证会', '国会听证', '2月2日', '二月二日', '90 美元', '九十美元', '325', '483', '112', '员工报告'],
+  safeNumbers: [2021, 2020],
+};
+
+ERAS[ERA_1995_SH.id] = ERA_1995_SH;
+ERAS[ERA_2021_NY.id] = ERA_2021_NY;
+ERAS[ERA_1637_HAARLEM.id] = ERA_1637_HAARLEM;
+
+export function eraOf(id: string | undefined): EraPack {
+  return (id && ERAS[id]) || ERA_1995_SH;
+}
