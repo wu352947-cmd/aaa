@@ -11,6 +11,7 @@ export function OptionsTicket({ game, onDone }: { game: Game; onDone: () => void
   const [expiry, setExpiry] = useState(spec?.expiries[0].id ?? '');
   const [pick, setPick] = useState<{ kind: OptKind; strike: number } | null>(null);
   const [n, setN] = useState(1);
+  const [, redraw] = useState(0);
   if (!spec) return null;
   const S = game.market.last;
   const strikes = spec.strikes.filter((k) => k >= S * 0.4 && k <= S * 2.5);
@@ -107,7 +108,7 @@ export function OptionsTicket({ game, onDone }: { game: Game; onDone: () => void
                   {money(val)}（{val >= o.cost ? '+' : '−'}
                   {money(Math.abs(val - o.cost))}）
                 </span>
-                <button className="btn small" disabled={!open} onClick={() => game.act({ type: 'option', side: 'sell', kind: o.kind, strike: o.strike, expiry: o.expiry, qty: o.qty })}>
+                <button className="btn small" disabled={!open} onClick={() => (game.act({ type: 'option', side: 'sell', kind: o.kind, strike: o.strike, expiry: o.expiry, qty: o.qty }), redraw((x) => x + 1))}>
                   按买价 {d2(v.bid)} 卖出
                 </button>
               </div>

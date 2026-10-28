@@ -3,6 +3,7 @@ import type { Game } from '../engine/game';
 import type { Side } from '../engine/types';
 import { cls, money, price, qty as fq } from './format';
 import { OptionsTicket } from './OptionsTicket';
+import { FLOAT, spot, spotPrice } from '../scenarios/s327/delivery';
 import { Term } from './Term';
 
 /** 下单面板：在提交之前就把规则检查、保证金占用与预计冲击算给玩家看 */
@@ -30,7 +31,8 @@ export function OrderTicket({
   const [ttl, setTtl] = useState<number>(0);
   const [washAt, setWashAt] = useState<'ask' | 'bid'>('ask');
   const hasOptions = !!game.scenario.options?.(game);
-  const [tab, setTab] = useState<'stock' | 'options'>('stock');
+  const hasSpot = game.scenario.id === 's327' && !game.faction.observer;
+  const [tab, setTab] = useState<'stock' | 'options' | 'spot'>('stock');
 
   useEffect(() => {
     if (limitPrice != null) {
@@ -92,18 +94,27 @@ export function OrderTicket({
         </button>
       </div>
       <div className="drawer-body">
-        {hasOptions && (
+        {(hasOptions || hasSpot) && (
           <div className="seg" style={{ marginBottom: 10 }}>
             <button className={cls(tab === 'stock' && 'on')} onClick={() => setTab('stock')}>
-              股票
+              {hasSpot ? '327 期货' : '股票'}
             </button>
-            <button className={cls(tab === 'options' && 'on')} onClick={() => setTab('options')}>
-              期权
-            </button>
+            {hasOptions && (
+              <button className={cls(tab === 'options' && 'on')} onClick={() => setTab('options')}>
+                期权
+              </button>
+            )}
+            {hasSpot && (
+              <button className={cls(tab === 'spot' && 'on')} onClick={() => setTab('spot')}>
+                92(3) 现券
+              </button>
+            )}
           </div>
         )}
         {tab === 'options' ? (
           <OptionsTicket game={game} onDone={onClose} />
+        ) : tab === 'spot' ? (
+          <SpotTicket game={game} />
         ) : (
         <>
         <div className="field">
@@ -254,6 +265,51 @@ export function OrderTicket({
         </>
         )}
       </div>
+    </div>
+  );
+}
+
+/** 92(3) 现券：327 交割的就是它。全额付款，市面上流通的不多，囤得越多越缺 */
+function SpotTicket({ game }: { game: Game }) {
+  // 暂停时没有行情推进来刷新界面：自己动了手就自己重画
+  const [, redraw] = useState(0);
+  const act = (a: Parameters<Game['act']>[0]) => (game.act(a), redraw((n) => n + 1));
+  const s = spot(game);
+  const buy = game.cards().find((c) => c.id === 'dlv-buy');
+  const sell = game.cards().find((c) => c.id === 'dlv-sell');
+  const px = spotPrice(game);
+  return (
+    <div>
+      <div className="preview">
+        <dl className="kv" style={{ margin: 0 }}>
+          <dt>现券报价</dt>
+          <dd>{price(px)} 元（期货 {price(game.market.last)}）</dd>
+          <dt title="每口对应面值 2 万元，全额付款">每口</dt>
+          <dd>{money(px * 2)}</dd>
+          <dt>市面上流通</dt>
+          <dd>{fq(FLOAT)}</dd>
+          <dt>你持有</dt>
+          <dd>
+            {fq(s.held)}（占流通 {Math.round((100 * s.held) / FLOAT)}%）
+          </dd>
+        </dl>
+      </div>
+      <p className="faint" style={{ fontSize: 12 }}>
+        {buy?.does} 囤到流通量的三成以上，坚持交割时交易所会认定逼仓。
+      </p>
+      <div className="quick">
+        {buy?.targets?.map((t) => (
+          <button key={t.id} className="btn small" disabled={!!buy.blocked} onClick={() => act({ type: 'card', id: 'dlv-buy', target: t.id })}>
+            {t.label}
+          </button>
+        ))}
+        {sell && (
+          <button className="btn small" disabled={!!sell.blocked} onClick={() => act({ type: 'card', id: 'dlv-sell' })}>
+            全部卖出
+          </button>
+        )}
+      </div>
+      {buy?.blocked && <p className="muted" style={{ fontSize: 12 }}>{buy.blocked}</p>}
     </div>
   );
 }

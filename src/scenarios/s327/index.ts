@@ -33,6 +33,7 @@ import {
 } from './common';
 import { BATTLE, DAYS, DECK_1995, FACTIONS, NPCS, OFFICIAL_CLOSE, PARAMS, PRINCIPLES, PROLOGUE, RULE_CARDS, SOURCES, START_PRICE } from './data';
 import { draftPlay, DRAFT_327 } from './draft';
+import { deliveryCards, deliveryPlay, deliverySettle, spotNight, spotValue } from './delivery';
 import { directivesAt, directivesMorning, fileAudit, makeAudit, s327Clocks, s327Directives, s327Docs } from './plans';
 import { ally, breakLock, exchange, offers, probe, report, stance, type Out } from './social';
 
@@ -169,8 +170,11 @@ export const S327: Scenario = {
   members: [SHORT, LONG, ALLY, HIDE],
   lotPresets: [100_000, 500_000],
   groupName: (g, who) => groupName(g, who),
-  cards: (g) => (isOfficial(g) ? regCards(g) : traderCards(g)),
-  playCard: (g, id, target) => (id.startsWith('x-') ? draftPlay(g, id, target) : isOfficial(g) ? regPlay(g, id, target) : traderPlay(g, id, target)),
+  cards: (g) => (isOfficial(g) ? regCards(g) : [...traderCards(g), ...deliveryCards(g)]),
+  playCard: (g, id, target) =>
+    id.startsWith('x-') ? draftPlay(g, id, target) : id.startsWith('dlv-') ? deliveryPlay(g, id, target) : isOfficial(g) ? regPlay(g, id, target) : traderPlay(g, id, target),
+  // 交易座位手里的 92(3) 现券按市价计入权益
+  extraValue: (g) => (isOfficial(g) ? 0 : spotValue(g)),
   meters: (g) => (isOfficial(g) ? regMeters(g) : undefined),
   clocks: (g) => s327Clocks(g),
   directives: (g) => s327Directives(g),
@@ -435,6 +439,7 @@ export const S327: Scenario = {
   },
 
   onNight(g) {
+    spotNight(g);
     night(g);
   },
 
@@ -819,6 +824,9 @@ function reckon(g: Game): Ending {
   if (flag(g, 'loan')) eq -= 360_000_000;
   // 拆借、透支、营业部垫资借来的钱，结局时连本带息还掉
   eq -= s.debt + (g.credit?.loan ?? 0);
+  // 没平掉的仓位怎么了结：协议平仓，或者实物交割（可能逼仓、可能违约）
+  const dlv = isOfficial(g) ? null : deliverySettle(g, g.market.closePrices[g.market.closePrices.length - 1] ?? ex.last);
+  if (dlv) eq += dlv.pnl;
   const r = g.faction.observer ? 0 : (eq - startEq) / startEq;
   const voided = !!flag(g, 'voided');
   const voidedByPlayer = voided && flag(g, 'voidedBy') === p.id;
@@ -838,6 +846,7 @@ function reckon(g: Game): Ending {
   let headline = '';
   let subhead = '';
   const body: string[] = [];
+  if (dlv) body.push(...dlv.lines);
   let stats: [string, string][];
 
   if (isOfficial(g)) {

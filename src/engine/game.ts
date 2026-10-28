@@ -331,6 +331,8 @@ export interface Scenario {
   options?(g: Game): OptionSpec | null;
   /** 卖期权给玩家、并替这些期权做 delta 对冲的做市商账户 */
   optionsDealer?: string;
+  /** 玩家账户外的其他资产（例如现券）的市值，计入权益 */
+  extraValue?(g: Game): number;
   /** 复盘与逐笔里怎么称呼一个群体或账户 */
   groupName?(g: Game, who: string): string;
   setup(g: Game): void;
@@ -673,6 +675,7 @@ export class Game {
         const result = this.scenario.playCard(this, action.id, action.target);
         this.hand = this.hand.filter((x) => x !== action.id);
         this.logCard(card, result, action.target);
+        this.markOptions();
         return null;
       }
       case 'convert': {
@@ -758,8 +761,10 @@ export class Game {
     return this.opts.reduce((a, o) => a + o.qty * spec.size * this.optQuote(o.kind, o.strike, o.expiry, s).mid, 0);
   }
 
-  private markOptions(): void {
-    if (this.opts.length || this.player.extra) this.player.extra = this.optValue();
+  /** 期权和剧本里的其他资产按市价计入权益 */
+  markOptions(): void {
+    const other = this.scenario.extraValue?.(this) ?? 0;
+    if (this.opts.length || this.player.extra || other) this.player.extra = this.optValue() + other;
   }
 
   private tradeOption(a: Extract<PlayerAction, { type: 'option' }>): void {

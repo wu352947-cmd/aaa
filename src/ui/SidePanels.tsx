@@ -41,6 +41,8 @@ export function OrderBookCard({ game }: { game: Game }) {
 
 /** 杠杆：券商融资、场外配资、止损止盈 */
 function Leverage({ game }: { game: Game }) {
+  const [, redraw] = useState(0);
+  const act = (a: Parameters<Game['act']>[0]) => (game.act(a), redraw((n) => n + 1));
   const ex = game.market.ex;
   const p = game.player;
   const offer = game.scenario.credit?.(game);
@@ -57,8 +59,8 @@ function Leverage({ game }: { game: Game }) {
     const sp = Math.round(parseFloat(stop) * 100);
     const tp = Math.round(parseFloat(take) * 100);
     // 多头：跌到止损价卖、涨到止盈价卖；空头反过来
-    if (sp > 0) game.act({ type: 'plan-add', plan: { label: `止损 ${price(sp)}`, cond: p.pos > 0 ? 'lte' : 'gte', price: sp, side, qty: q, spread: 1, oco: group, closeOnly: true } });
-    if (tp > 0) game.act({ type: 'plan-add', plan: { label: `止盈 ${price(tp)}`, cond: p.pos > 0 ? 'gte' : 'lte', price: tp, side, qty: q, spread: 1, oco: group, closeOnly: true } });
+    if (sp > 0) act({ type: 'plan-add', plan: { label: `止损 ${price(sp)}`, cond: p.pos > 0 ? 'lte' : 'gte', price: sp, side, qty: q, spread: 1, oco: group, closeOnly: true } });
+    if (tp > 0) act({ type: 'plan-add', plan: { label: `止盈 ${price(tp)}`, cond: p.pos > 0 ? 'gte' : 'lte', price: tp, side, qty: q, spread: 1, oco: group, closeOnly: true } });
     setStop('');
     setTake('');
   };
@@ -86,7 +88,7 @@ function Leverage({ game }: { game: Game }) {
               <div className={cls(ex.equity(p) < c.loan * c.line * 1.15 && 'up')}>
                 平仓线：权益 {money(c.loan * c.line)}，现在 {money(ex.equity(p))}
               </div>
-              <button className="btn small" disabled={p.cash <= 0} onClick={() => game.act({ type: 'credit', op: 'repay', amount: c.loan })}>
+              <button className="btn small" disabled={p.cash <= 0} onClick={() => act({ type: 'credit', op: 'repay', amount: c.loan })}>
                 还钱
               </button>
             </>
@@ -95,7 +97,7 @@ function Leverage({ game }: { game: Game }) {
               <div className="faint">{offer.note}</div>
               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 4 }}>
                 {[1, 2, offer.multiple].filter((v, i, a) => a.indexOf(v) === i && v <= offer.multiple).map((k) => (
-                  <button key={k} className={cls('btn small', offer.color !== 'white' && 'grey')} disabled={own <= 0} onClick={() => game.act({ type: 'credit', op: 'take', amount: own * k })}>
+                  <button key={k} className={cls('btn small', offer.color !== 'white' && 'grey')} disabled={own <= 0} onClick={() => act({ type: 'credit', op: 'take', amount: own * k })}>
                     借 {k} 倍（{money(own * k)}）
                   </button>
                 ))}
@@ -110,7 +112,7 @@ function Leverage({ game }: { game: Game }) {
           {stops.map((x) => (
             <div key={x.id} style={{ display: 'flex', justifyContent: 'space-between' }}>
               <span>{x.label}</span>
-              <button className="btn ghost small" onClick={() => game.act({ type: 'plan-remove', id: x.id })}>
+              <button className="btn ghost small" onClick={() => act({ type: 'plan-remove', id: x.id })}>
                 撤
               </button>
             </div>
@@ -132,6 +134,8 @@ function Leverage({ game }: { game: Game }) {
 
 /** 我的挂单：限价单、冰山单、带时限的单子，都可以单独撤 */
 function MyOrders({ game }: { game: Game }) {
+  const [, redraw] = useState(0);
+  const act = (a: Parameters<Game['act']>[0]) => (game.act(a), redraw((n) => n + 1));
   const ex = game.market.ex;
   const mine = ex.book.ordersOf(game.player.id);
   if (!mine.length) return null;
@@ -139,7 +143,7 @@ function MyOrders({ game }: { game: Game }) {
     <div style={{ marginTop: 8 }}>
       <div className="muted" style={{ fontSize: 12, display: 'flex', justifyContent: 'space-between' }}>
         <span>我的挂单</span>
-        <button className="btn ghost small" onClick={() => game.act({ type: 'cancel-all' })}>
+        <button className="btn ghost small" onClick={() => act({ type: 'cancel-all' })}>
           全部撤单
         </button>
       </div>
@@ -151,7 +155,7 @@ function MyOrders({ game }: { game: Game }) {
             {o.display != null && <span className="faint"> （露 {qty(Math.min(o.qty, o.display))}）</span>}
           </span>
           <span className="faint" style={{ fontSize: 11 }}>{o.expires != null ? `${Math.max(0, o.expires - ex.tick)} 分钟后撤` : ''}</span>
-          <button className="btn ghost small" onClick={() => game.act({ type: 'cancel', id: o.id })}>
+          <button className="btn ghost small" onClick={() => act({ type: 'cancel', id: o.id })}>
             撤
           </button>
         </div>
