@@ -4,7 +4,7 @@ import { holdReturn, traderArchetype } from '../../engine/game';
 import { MINUTES_PER_DAY, type Actor, type Market } from '../../engine/market';
 import type { OrderReq } from '../../engine/types';
 import { addCrowdFlow, crowdFlowOrders } from '../../engine/flows';
-import { condition, followOrders, regCards, regMeters, regPlay, resolveInspections, traderCards, traderPlay } from './cards';
+import { agreedClose, condition, followOrders, regCards, regMeters, regPlay, resolveInspections, traderCards, traderPlay } from './cards';
 import {
   addOrder,
   ALLY,
@@ -37,6 +37,7 @@ import { deliveryCards, deliveryPlay, deliverySettle, spotNight, spotValue } fro
 import { victim327 } from './victims';
 import { holidayNight, JAN_NET, januaryDecide, januaryNight, januaryTick } from './january';
 import { seatPuzzle, solveSeats } from './seats';
+import { bribeWeight, closeDeal327, negotiate327 } from './deals';
 import { capitalActor, forced, mofDecide, mofScore, newsLine, newWorld, VERDICTS, verdict, worldClose, worldNight, worldOpen } from './world';
 import { roomDayEnd, roomDecide, roomTick, zhouCall } from './room';
 import { directivesAt, directivesMorning, fileAudit, makeAudit, s327Clocks, s327Directives, s327Docs } from './plans';
@@ -500,6 +501,8 @@ export const S327: Scenario = {
   offers,
   victim: victim327,
   puzzle: (g) => seatPuzzle(g),
+  negotiate: (g, n, offer) => negotiate327(g, n, offer),
+  closeDeal: (g, n, t) => closeDeal327(g, n, t, agreedClose),
   solvePuzzle: (g, _id, answers) => solveSeats(g, answers),
 
   social(g, verb, npcId, option) {
@@ -836,7 +839,7 @@ function decideFlip(g: Game) {
   const lock = g.alliances.find((a) => a.id === 'lock' && !a.brokenBy);
   // 高振宇是机会主义的：报纸看多，他就更信贴息
   // 部里的风向也会传到他耳朵里：贴息的把握越小，他越不敢倒戈
-  const belief = 0.55 + 0.05 * sd(g) + (flag(g, 'gaoBribed') ? 0.3 : 0) + 0.15 * (gao?.view ?? 0) + 0.8 * (mofScore(g) - 0.83);
+  const belief = 0.55 + 0.05 * sd(g) + bribeWeight(g) + 0.15 * (gao?.view ?? 0) + 0.8 * (mofScore(g) - 0.83);
   const loyalty = (Math.max(0, rel) / 100) * 0.5 + ((lock?.penalty ?? 0) / 3e8) * 0.35 + (flag(g, 'gaoShared') ? 0.1 : 0);
   const temptation = belief - loyalty + (g.rngSocial.next() - 0.5) * 0.08;
   if (temptation > 0.25) g.flags.gaoFlip = true;

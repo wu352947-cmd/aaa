@@ -1,5 +1,6 @@
 import type { CardResult, Clock, Directive, DocSheet, Game } from '../../engine/game';
 import { mofScore, verdictOf, VERDICTS } from './world';
+import { bribeWeight } from './deals';
 import {
   addDeter,
   addOrder,
@@ -35,7 +36,7 @@ function gaoTemptation(g: Game): number {
   const rel = gao?.relation ?? 30;
   const lock = g.alliances.find((a) => a.id === 'lock' && !a.brokenBy);
   const d = Math.max(3, sd(g));
-  const belief = 0.55 + 0.05 * d + (flag(g, 'gaoBribed') ? 0.3 : 0) + 0.15 * (gao?.view ?? 0);
+  const belief = 0.55 + 0.05 * d + bribeWeight(g) + 0.15 * (gao?.view ?? 0);
   const loyalty = (Math.max(0, rel) / 100) * 0.5 + ((lock?.penalty ?? 0) / 3e8) * 0.35 + (flag(g, 'gaoShared') ? 0.1 : 0);
   return belief - loyalty;
 }

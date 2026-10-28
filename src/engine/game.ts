@@ -378,7 +378,48 @@ export interface PuzzleResult {
   text: string[];
 }
 
+/** 谈判里的一个条款：数量、价格、好处费……玩家在 min 到 max 之间出价 */
+export interface NegTerm {
+  id: string;
+  label: string;
+  min: number;
+  max: number;
+  step: number;
+  /** 显示：元（分为单位的价格差）、口/股、亿元…… */
+  unit: 'fen' | 'lots' | 'yuan';
+}
+
+/**
+ * 多轮谈判：你出价，对方按自己的底价接受、还价或者走人。
+ * 底价由剧本按这一局的局面算（对方的仓位、判断、和你的关系），每一轮对方的耐心都在减少。
+ */
+export interface Negotiation {
+  id: string;
+  npc: string;
+  title: string;
+  intro: string;
+  terms: NegTerm[];
+  rounds: number;
+  maxRounds: number;
+  history: { who: 'you' | 'them'; offer?: Record<string, number>; say: string }[];
+  status: 'open' | 'deal' | 'walked';
+  deal?: Record<string, number>;
+  /** 对方最近一次还的价：界面拿它当默认值 */
+  ask?: Record<string, number>;
+}
+
+export interface NegReply {
+  accept: boolean;
+  walk?: boolean;
+  counter?: Record<string, number>;
+  say: string;
+}
+
 export interface Scenario {
+  /** 对方怎么回你的出价 */
+  negotiate?(g: Game, n: Negotiation, offer: Record<string, number>): NegReply;
+  /** 成交：剧本兑现条款，返回效果说明 */
+  closeDeal?(g: Game, n: Negotiation, terms: Record<string, number>): string[];
   /** 夜里可以做的推理（没有就是 null） */
   puzzle?(g: Game): Puzzle | null;
   /** 交卷：返回对了几个；解开时由剧本发放奖励 */
@@ -525,6 +566,7 @@ export type PlayerAction =
   | { type: 'option'; side: 'buy' | 'sell'; kind: OptKind; strike: Fen; expiry: string; qty: number }
   | { type: 'doc'; id: string; marks: Record<string, string> }
   | { type: 'puzzle'; id: string; answers: Record<string, string> }
+  | { type: 'negotiate'; id: string; offer?: Record<string, number>; walk?: boolean }
   | { type: 'end-night' };
 
 export interface LoggedAction {
@@ -588,6 +630,8 @@ export class Game {
   /** 收盘时的权益曲线（元） */
   equityCurve: number[] = [];
   marginCall = false;
+  /** 进行中和谈完的谈判 */
+  negotiations: Negotiation[] = [];
   /** 每个推理题交过的卷（界面显示“对了几个”） */
   puzzleTries: Record<string, PuzzleResult[]> = {};
   bankrupt = false;
@@ -797,6 +841,31 @@ export class Game {
       case 'plan-remove':
         this.plans = this.plans.filter((p) => p.id !== action.id);
         return null;
+      case 'negotiate': {
+        const n = this.negotiations.find((x) => x.id === action.id && x.status === 'open');
+        if (!n || !this.scenario.negotiate) return null;
+        if (action.walk || !action.offer) {
+          n.status = 'walked';
+          n.history.push({ who: 'you', say: '你起身告辞。' });
+          return null;
+        }
+        const offer: Record<string, number> = {};
+        for (const t of n.terms) offer[t.id] = Math.max(t.min, Math.min(t.max, Math.round((action.offer[t.id] ?? t.min) / t.step) * t.step));
+        n.rounds++;
+        n.history.push({ who: 'you', offer, say: '' });
+        const r = this.scenario.negotiate(this, n, offer);
+        n.history.push({ who: 'them', offer: r.counter, say: r.say });
+        if (r.accept) {
+          n.status = 'deal';
+          n.deal = offer;
+          const fx = this.scenario.closeDeal?.(this, n, offer) ?? [];
+          this.push({ kind: 'intel', text: `谈成了：${n.title}${fx.length ? `——${fx.join('；')}` : ''}` });
+        } else if (r.walk || n.rounds >= n.maxRounds) {
+          n.status = 'walked';
+          this.push({ kind: 'intel', text: `没谈成：${n.title}` });
+        } else n.ask = r.counter;
+        return null;
+      }
       case 'puzzle': {
         const pz = this.scenario.puzzle?.(this);
         if (this.phase !== 'night' || this.energy <= 0 || !pz || pz.id !== action.id || pz.solved || !this.scenario.solvePuzzle) return null;
@@ -884,6 +953,11 @@ export class Game {
         this.tradeOption(action);
         return null;
       case 'end-night':
+        // 没谈完的，天一亮就不了了之
+        for (const n of this.negotiations) if (n.status === 'open') {
+          n.status = 'walked';
+          n.history.push({ who: 'them', say: '天亮了，这事就搁下了。' });
+        }
         this.endNight();
         return null;
     }

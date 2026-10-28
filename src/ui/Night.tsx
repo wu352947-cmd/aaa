@@ -86,7 +86,7 @@ export function Night({ game, llm, dlg, showMentor, onSleep }: { game: Game; llm
   const dirs = game.scenario.directives?.(game) ?? [];
   const era = eraOfScenario(game.scenario.id);
   const puzzle = game.scenario.puzzle?.(game) ?? null;
-  const [tab, setTab] = useState<'recap' | 'people' | 'intel' | 'cards' | 'plans' | 'docs' | 'puzzle'>((game.isAftermath || game.isHalted) && hasCards ? 'cards' : 'recap');
+  const [tab, setTab] = useState<'recap' | 'people' | 'intel' | 'cards' | 'plans' | 'docs' | 'puzzle' | 'deal'>((game.isAftermath || game.isHalted) && hasCards ? 'cards' : 'recap');
   useEffect(() => {
     setHl(null);
     if (paper) headline(llm, eraOf(game.scenario.eraId), paper, game.day.date).then(setHl);
@@ -153,6 +153,11 @@ export function Night({ game, llm, dlg, showMentor, onSleep }: { game: Game; llm
                 手段
               </button>
             )}
+            {game.negotiations.some((n) => n.status === 'open') && (
+              <button className={cls(tab === 'deal' && 'on')} onClick={() => setTab('deal')}>
+                谈判<span className="badge-dot" />
+              </button>
+            )}
             {puzzle && (
               <button className={cls(tab === 'puzzle' && 'on')} onClick={() => setTab('puzzle')}>
                 推理{!puzzle.solved && <span className="badge-dot" />}
@@ -209,7 +214,30 @@ export function Night({ game, llm, dlg, showMentor, onSleep }: { game: Game; llm
           )}
           {tab === 'cards' && (
             <div className="recap">
-              <CardsBody game={game} onPlayed={() => bump((x) => x + 1)} />
+              <CardsBody
+                game={game}
+                onPlayed={() => {
+                  bump((x) => x + 1);
+                  if (game.negotiations.some((n) => n.status === 'open')) setTab('deal');
+                }}
+              />
+            </div>
+          )}
+          {tab === 'deal' && (
+            <div className="recap">
+              {game.negotiations
+                .filter((n) => n.status === 'open')
+                .map((n) => (
+                  <NegotiationView
+                    key={`${n.id}-${n.rounds}`}
+                    game={game}
+                    id={n.id}
+                    onAct={(offer, walk) => {
+                      game.act({ type: 'negotiate', id: n.id, offer, walk });
+                      bump((x) => x + 1);
+                    }}
+                  />
+                ))}
             </div>
           )}
           {tab === 'puzzle' && puzzle && (
@@ -348,6 +376,47 @@ function PuzzleView({ game, onTry }: { game: Game; onTry: (answers: Record<strin
           第 {tries.length} 次：对了 {last.right} / {last.total}。{tries.length > 1 && `之前：${tries.slice(0, -1).map((t) => t.right).join('、')}。`}
         </p>
       )}
+    </div>
+  );
+}
+
+/** 多轮谈判：对方说了什么、你出了什么价；拖动条款出价，或者起身走人 */
+function NegotiationView({ game, id, onAct }: { game: Game; id: string; onAct: (offer?: Record<string, number>, walk?: boolean) => void }) {
+  const n = game.negotiations.find((x) => x.id === id)!;
+  const init = () => Object.fromEntries(n.terms.map((t) => [t.id, n.ask?.[t.id] ?? Math.round((t.min + (t.max - t.min) * 0.3) / t.step) * t.step]));
+  const [offer, setOffer] = useState<Record<string, number>>(init);
+  const npc = game.npc(n.npc);
+  const show = (unit: string, v: number) => (unit === 'fen' ? `${(v / 100).toFixed(2)} 元` : unit === 'lots' ? qty(v) : `${Math.round(v / 10_000).toLocaleString()} 万元`);
+  return (
+    <div className="nego">
+      <h3>{n.title}</h3>
+      <p style={{ fontSize: 13 }}>{n.intro}</p>
+      <div className="nego-log">
+        {n.history.map((h, i) => (
+          <div key={i} className={cls('nego-line', h.who)}>
+            <b>{h.who === 'you' ? '你' : (npc?.name ?? n.npc)}：</b>
+            {h.who === 'you' && h.offer ? n.terms.map((t) => `${t.label} ${show(t.unit, h.offer![t.id])}`).join('，') : h.say}
+          </div>
+        ))}
+      </div>
+      {n.terms.map((t) => (
+        <label key={t.id} className="nego-term">
+          <span>{t.label}</span>
+          <input type="range" min={t.min} max={t.max} step={t.step} value={offer[t.id]} onChange={(e) => setOffer({ ...offer, [t.id]: Number(e.target.value) })} />
+          <span className="num">{show(t.unit, offer[t.id])}</span>
+        </label>
+      ))}
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 8 }}>
+        <button className="btn primary" onClick={() => onAct(offer)}>
+          出价
+        </button>
+        <button className="btn" onClick={() => onAct(undefined, true)}>
+          起身走人
+        </button>
+        <span className="faint" style={{ fontSize: 12 }}>
+          还能谈 {n.maxRounds - n.rounds} 轮。出价太难看，对方会提前走。
+        </span>
+      </div>
     </div>
   );
 }

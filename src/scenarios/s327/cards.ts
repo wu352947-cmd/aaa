@@ -24,6 +24,7 @@ import {
 import { BATTLE } from './data';
 import { breakDirective } from './plans';
 import { lobbyMof, mofScore, sway, verdictOf } from './world';
+import { openGaoFee, openMediation } from './deals';
 
 const R = (ok: boolean, title: string, effects: string[], reply?: CardResult['reply']): CardResult => ({ ok, title, effects, reply });
 const rel = (g: Game, npc: string, d: number, memory?: string) => {
@@ -726,10 +727,10 @@ export function traderCards(g: Game): CardDef[] {
         name: '请交易所协调协议平仓',
         group: '仓位',
         color: 'white',
-        does: '按收盘价加 0.6 元，从中财手里买回 80 万口空单，不经过订单簿。中财愿不愿意，看关系和日子。',
+        does: '坐下来和魏国梁谈：买回多少空单、比收盘价高多少，几轮出价。他的要价看他对贴息有几分把握——风向对他不利时，他比你还急。',
         cost: '1 点精力；谈不成也认。',
         when: 'night',
-        blocked: !pre ? '已经过了谈的时候' : d < 2 ? '20 日起才有得谈' : used('mediated') ? '已经谈成' : energy,
+        blocked: !pre ? '已经过了谈的时候' : d < 2 ? '20 日起才有得谈' : used('mediated') ? '已经谈成' : used(`medtry-${d}`) ? '今晚已经谈过' : energy,
       },
     );
   }
@@ -740,10 +741,10 @@ export function traderCards(g: Game): CardDef[] {
         name: '给辽北递话：倒戈有好处',
         group: '拉拢',
         color: 'grey',
-        does: '许高振宇一笔“咨询费”，让他更早、更坚决地空翻多。',
-        cost: '3000 万元 + 1 点精力；监管热度 +6。',
+        does: '约高振宇谈一笔“咨询费”，让他更早、更坚决地空翻多。给得越多，他越坚决；他要多少，看违约金、贴息的把握和交情。',
+        cost: '1 点精力；谈成后付钱，监管热度 +6。',
         when: 'night',
-        blocked: !pre ? '来不及了' : used('tip-gao') ? '已经递过话' : energy,
+        blocked: !pre ? '来不及了' : used('tip-gao') ? '已经递过话' : used(`gaotry-${d}`) ? '今晚已经谈过' : energy,
       },
       {
         id: 'press',
@@ -896,7 +897,6 @@ export function traderPlay(g: Game, id: string, target?: string): CardResult {
   const ex = g.market.ex;
   const p = g.player;
   const d = sd(g);
-  const close = ex.last;
   switch (id) {
     case 'lobby': {
       s.used.add(`lobby-${d}`);
@@ -978,26 +978,15 @@ export function traderPlay(g: Game, id: string, target?: string): CardResult {
       return R(true, '采访见报：“兑付价就是 132 元”', ['明早的头条', '散户情绪偏空；跟着报纸走的人会更看空，逆向的人反而看多', '苏晓 关系 +5'], { who: '苏晓', text: '你确定要我原话照登？好。' });
     case 'mediate-req': {
       g.energy--;
-      const wei = g.npc('wei')!;
-      const prob = Math.min(0.85, 0.25 + 0.15 * (d - 2) + wei.relation / 200);
-      if (!g.rngSocial.chance(prob)) {
-        g.relate('wei', -2);
-        return R(false, '中财不肯谈', [`成功率约 ${Math.round(prob * 100)}%`], { who: wei.name, text: '现在谈这个？早了点。要讲政策，看大局。' });
-      }
-      const price = close + 60;
-      const q = agreedClose(g, p.id, LONG, 800_000, price);
-      s.used.add('mediated');
-      g.flags.mediated = true;
-      return R(true, `协议平仓 ${wan(q)}，价格 ${p2(price)} 元`, [`空单降到 ${wan(-p.pos)}`], { who: wei.name, text: '看在交易所的面子上。' });
+      s.used.add(`medtry-${d}`);
+      openMediation(g);
+      return R(true, '坐上了谈判桌', ['去“谈判”页出价：魏国梁的要价看他心里的账'], { who: g.npc('wei')!.name, text: '交易所的面子要给。价钱嘛，慢慢谈。' });
     }
     case 'tip-gao':
-      s.used.add('tip-gao');
       g.energy--;
-      p.cash -= 30_000_000;
-      g.addHeat(6, '利益输送');
-      g.flags.gaoBribed = true;
-      g.relate('gao', 15);
-      return R(true, '话递到了', ['支付 3000 万元', '监管热度 +6', '高振宇 关系 +15'], { who: '高振宇', text: '兄弟够意思。到时候看我的。' });
+      s.used.add(`gaotry-${d}`);
+      openGaoFee(g);
+      return R(true, '约好了茶室', ['去“谈判”页出价：高振宇要多少，看违约金、贴息的把握和交情'], { who: '高振宇', text: '魏总说个数吧。' });
     case 'press':
       s.used.add(`press-${d}`);
       g.energy--;

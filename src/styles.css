@@ -2638,3 +2638,10 @@ textarea {
 .puzzle-table th:first-child, .puzzle-table td:first-child { text-align: left; }
 .puzzle-q { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 6px 0; font-size: 13px; }
 .puzzle-q > span { min-width: 90px; }
+
+/* 多轮谈判 */
+.nego-log { margin: 8px 0; font-size: 13px; display: flex; flex-direction: column; gap: 4px; }
+.nego-line.you { color: var(--ink-soft, #aab); }
+.nego-term { display: grid; grid-template-columns: 110px 1fr 110px; gap: 8px; align-items: center; font-size: 13px; margin: 6px 0; }
+.nego-term input { width: 100%; }
+@media (max-width: 600px) { .nego-term { grid-template-columns: 1fr; } }
