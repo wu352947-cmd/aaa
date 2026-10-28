@@ -2,10 +2,29 @@ import { useState } from 'react';
 import type { Scenario } from '../engine/game';
 import { cls } from './format';
 import { PixelScene } from './Pixel';
+import { DIFFICULTIES, type Difficulty } from './tutorial';
 
-export function Setup({ scenario, onBegin, onBack }: { scenario: Scenario; onBegin: (faction: string, principle: string, seed: string) => void; onBack: () => void }) {
+const PLAYED = 'chouma.played';
+export function markPlayed(): void {
+  try {
+    localStorage.setItem(PLAYED, '1');
+  } catch {
+    /* 忽略 */
+  }
+}
+function playedBefore(): boolean {
+  try {
+    return !!localStorage.getItem(PLAYED);
+  } catch {
+    return false;
+  }
+}
+
+export function Setup({ scenario, onBegin, onBack }: { scenario: Scenario; onBegin: (faction: string, principle: string, seed: string, difficulty: Difficulty) => void; onBack: () => void }) {
   const [faction, setFaction] = useState(() => scenario.factions.find((x) => !x.locked)!.id);
   const [principle, setPrinciple] = useState(scenario.principles[0].id);
+  // 第一次玩默认新手：界面逐层解锁
+  const [difficulty, setDifficulty] = useState<Difficulty>(() => (playedBefore() ? 'standard' : 'novice'));
   const [seed, setSeed] = useState(() => Math.random().toString(36).slice(2, 8));
   const cards = (scenario.setupRules ?? []).map((id) => scenario.ruleCards.find((r) => r.id === id)).filter((c) => !!c);
   const f = scenario.factions.find((x) => x.id === faction)!;
@@ -59,6 +78,17 @@ export function Setup({ scenario, onBegin, onBack }: { scenario: Scenario; onBeg
           ))}
         </div>
 
+        <div className="section-label">难度</div>
+        <p style={{ marginTop: -4, fontSize: 13, color: 'var(--ink-soft)' }}>难度只改界面和节奏，市场本身不变：同一个种子，在哪一档都是同一局。</p>
+        <div className="principles">
+          {DIFFICULTIES.map((d) => (
+            <button key={d.id} className={cls('principle', difficulty === d.id && 'selected')} onClick={() => setDifficulty(d.id)}>
+              <b style={{ fontFamily: 'var(--serif)' }}>{d.name}</b>
+              <div style={{ fontSize: 12 }}>{d.desc}</div>
+            </button>
+          ))}
+        </div>
+
         <div className="setup-footer">
           <button className="btn" onClick={onBack}>
             ← 返回
@@ -68,7 +98,7 @@ export function Setup({ scenario, onBegin, onBack }: { scenario: Scenario; onBeg
             <input value={seed} onChange={(e) => setSeed(e.target.value)} style={{ width: 90, background: 'transparent', border: '1px solid var(--ink-soft)', padding: '2px 6px' }} />
             （同一种子 + 同样的操作 = 同一局）
           </span>
-          <button className="btn primary" onClick={() => onBegin(faction, principle, seed || 'chouma')}>
+          <button className="btn primary" onClick={() => onBegin(faction, principle, seed || 'chouma', difficulty)}>
             以「{f.name}」入场 →
           </button>
         </div>

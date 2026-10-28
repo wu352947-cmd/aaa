@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Decision, RuleCardDef } from '../engine/game';
 import { speak } from '../llm/director';
 import { ERA_1995_SH } from '../llm/era';
@@ -34,7 +34,9 @@ export function RuleCardModal({ card, detail, onClose }: { card: RuleCardDef; de
   );
 }
 
-export function DecisionModal({ d, onChoose }: { d: Decision; onChoose: (id: string) => void }) {
+export function DecisionModal({ d: raw, onChoose, scale = 1 }: { d: Decision; onChoose: (id: string) => void; scale?: number }) {
+  // 难度改倒计时的长短
+  const d = useMemo(() => (raw.countdown ? { ...raw, countdown: Math.max(5, Math.round(raw.countdown * scale)) } : raw), [raw, scale]);
   const [left, setLeft] = useState(d.countdown ?? 0);
   const fired = useRef(false);
   const choose = (id: string) => {

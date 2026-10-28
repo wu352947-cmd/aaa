@@ -1,3 +1,4 @@
+import { difficultyName } from './tutorial';
 import { PixelScene } from './Pixel';
 import type { Game, Intel } from '../engine/game';
 import { Chart } from './Chart';
@@ -53,6 +54,13 @@ export function EndingScreen({ game, onAgain, onTitle }: { game: Game; onAgain: 
                     <b>{v}</b>
                   </div>
                 ))}
+                <div>
+                  难度
+                  <b>
+                    {difficultyName(game.difficulty)}
+                    {game.undos ? `（撤回 ${game.undos} 天）` : ''}
+                  </b>
+                </div>
               </div>
             </div>
             <div className="history-col">

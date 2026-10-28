@@ -7,7 +7,7 @@ import { S327 } from './scenarios/s327';
 import { EndingScreen } from './ui/EndingScreen';
 import { GameScreen } from './ui/GameScreen';
 import { SettingsModal, type UiSettings } from './ui/Modals';
-import { Setup } from './ui/Setup';
+import { markPlayed, Setup } from './ui/Setup';
 import { clearSave, loadSave, restore, restoreTulip, type SaveData } from './ui/save';
 import { Title } from './ui/Title';
 import { TulipScreen, TulipSetup } from './ui/TulipScreen';
@@ -54,6 +54,7 @@ export default function App() {
   }, [ui]);
 
   const onEnd = useCallback(() => {
+    markPlayed();
     clearSave();
     setSave(null);
     setScreen('ending');
@@ -124,13 +125,17 @@ export default function App() {
           key={scenario.id}
           scenario={scenario}
           onBack={() => setScreen('title')}
-          onBegin={(f, p, seed) => {
-            setGame(new Game(scenario, seed, f, p));
+          onBegin={(f, p, seed, difficulty) => {
+            const g = new Game(scenario, seed, f, p);
+            g.difficulty = difficulty;
+            setGame(g);
             setScreen('game');
           }}
         />
       )}
-      {screen === 'game' && game && <GameScreen key={game.scenario.id + game.seed + game.factionId} game={game} llm={llm} ui={ui} onSettings={() => setSettings(true)} onEnd={onEnd} />}
+      {screen === 'game' && game && (
+        <GameScreen key={game.scenario.id + game.seed + game.factionId + game.undos} game={game} llm={llm} ui={ui} onSettings={() => setSettings(true)} onEnd={onEnd} onReplace={setGame} />
+      )}
       {screen === 'ending' && game?.ending && (
         <EndingScreen
           game={game}

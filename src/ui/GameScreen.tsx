@@ -17,6 +17,7 @@ import { eraOfScenario } from '../pixel/palettes';
 import { saveGame } from './save';
 import { MembersCard, OrderBookCard, PositionCard, StakeCard, TapeCard } from './SidePanels';
 import { sound } from './sound';
+import { canUndo, countdownScale, difficultyName, LAYERS, tutorialLayer, undoDay } from './tutorial';
 
 // 每分钟行情的现实耗时（毫秒）。布局期一天约 40 秒，决战日按分钟慢慢推进。
 const SPEEDS = {
@@ -38,7 +39,7 @@ interface Toast {
   kind: 'info' | 'rule' | 'danger';
 }
 
-export function GameScreen({ game, llm, ui, onSettings, onEnd }: { game: Game; llm: LlmSettings; ui: UiSettings; onSettings: () => void; onEnd: () => void }) {
+export function GameScreen({ game, llm, ui, onSettings, onEnd, onReplace }: { game: Game; llm: LlmSettings; ui: UiSettings; onSettings: () => void; onEnd: () => void; onReplace: (g: Game) => void }) {
   const [rev, bump] = useReducer((x: number) => x + 1, 0);
   const [paused, setPaused] = useState(true);
   const [speed, setSpeed] = useState(AUTO);
@@ -55,6 +56,12 @@ export function GameScreen({ game, llm, ui, onSettings, onEnd }: { game: Game; l
   const toastId = useRef(0);
   const dlg = useDialogues(game, llm);
   const observer = !!game.faction.observer;
+  // 专家与铁人档：老周不再提点
+  const showMentor = ui.mentor && game.difficulty !== 'expert' && game.difficulty !== 'iron';
+  // 铁人档：决战日不能暂停
+  const noPause = game.difficulty === 'iron' && game.isBattleDay;
+  // 新手档：界面逐层解锁
+  const layer = tutorialLayer(game);
   const cards = game.cards();
   // 带快捷键的卡在盘中显示为快捷按钮
   const quick = cards.filter((c) => c.key && c.when !== 'night');
@@ -81,7 +88,7 @@ export function GameScreen({ game, llm, ui, onSettings, onEnd }: { game: Game; l
     cursor.current = game.events.length;
     if (evs.length) busyUntil.current = game.market.ex.tick + 10;
     for (const e of evs) {
-      if (e.kind === 'intel' && !ui.mentor && e.text.startsWith('老周')) continue;
+      if (e.kind === 'intel' && !showMentor && e.text.startsWith('老周')) continue;
       if (e.rule) {
         const card = game.scenario.ruleCards.find((c) => c.id === e.rule);
         if (card && !game.seenRules.has(card.id)) {
@@ -96,14 +103,14 @@ export function GameScreen({ game, llm, ui, onSettings, onEnd }: { game: Game; l
       if (e.kind === 'pause') {
         toast(e.text, 'danger');
         if (ui.sound) sound.bell(true);
-        stop = true;
+        stop = !noPause;
         continue;
       }
       if (ui.sound && (e.kind === 'liquidation' || e.kind === 'phase')) sound.bell(e.kind === 'liquidation');
       toast(e.text, e.kind === 'liquidation' || e.kind === 'margin' ? 'danger' : 'info');
     }
     return stop;
-  }, [game, toast, ui.mentor, ui.sound]);
+  }, [game, toast, showMentor, noPause, ui.sound]);
 
   // 自动存档：动作发生、换日或换阶段时写一次；行情推进中每 30 分钟写一次
   const lastSave = useRef('');
@@ -203,25 +210,34 @@ export function GameScreen({ game, llm, ui, onSettings, onEnd }: { game: Game; l
       const k = e.key.toLowerCase();
       if (k === ' ') {
         e.preventDefault();
-        setPaused((p) => !p);
+        setPaused((p) => (noPause && !p ? p : !p));
       } else if (quick.some((c) => c.key === k && !game.canPlay(c.id))) playQuick(quick.find((c) => c.key === k)!.id);
       else if (k === 'a') setDrawer('cards');
       else if (!observer && k === 'b') setDrawer('buy');
       else if (!observer && k === 's') setDrawer('sell');
-      else if (!observer && k === 'p') setDrawer('plan');
+      else if (!observer && k === 'p' && layer >= 3) setDrawer('plan');
       else if (k === 'r') setDrawer('people');
       else if (k === 'i') setDrawer('intel');
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [game, ruleCard, observer, playQuick, quick]);
+  }, [game, ruleCard, observer, playQuick, quick, noPause, layer]);
+
+  // 解锁新的一层时提示一句
+  const shownLayer = useRef(layer);
+  useEffect(() => {
+    if (layer <= shownLayer.current) return;
+    shownLayer.current = layer;
+    const l = LAYERS[layer - 1];
+    toast(`解锁第 ${layer} 层「${l.name}」：${l.opens}`, 'rule');
+  }, [layer, toast]);
 
   const ex = game.market.ex;
   const eq = game.equity();
   const day = game.day;
-  const intelCount = game.intel.filter((i) => ui.mentor || i.kind !== 'mentor').length;
+  const intelCount = game.intel.filter((i) => showMentor || i.kind !== 'mentor').length;
   const unread = Math.max(0, intelCount - intelSeen);
-  const latest = game.intel.find((i) => ui.mentor || i.kind !== 'mentor');
+  const latest = game.intel.find((i) => showMentor || i.kind !== 'mentor');
   const ruleDef = ruleCard && game.scenario.ruleCards.find((c) => c.id === ruleCard.id);
 
   const open = (d: Drawer) => {
@@ -250,7 +266,7 @@ export function GameScreen({ game, llm, ui, onSettings, onEnd }: { game: Game; l
           {game.isBattleDay && <span className="battle-badge">决战日</span>}
           <span className="time">{game.phase === 'trading' ? game.time : '收盘'}</span>
         </div>
-        <button className="btn small" onClick={() => setPaused(!paused)} disabled={game.phase !== 'trading'}>
+        <button className="btn small" onClick={() => setPaused(!paused)} disabled={game.phase !== 'trading' || (noPause && !paused)} title={noPause ? '铁人：决战日不能暂停' : undefined}>
           {paused ? '▶ 继续' : '❚❚ 暂停'} <span className="kbd">空格</span>
         </button>
         <div className="speed" title="时间流速。自动：没动静就快进，有消息、决策或成交放量就放慢">
@@ -300,12 +316,24 @@ export function GameScreen({ game, llm, ui, onSettings, onEnd }: { game: Game; l
             <span className="label">底线</span>
             <span className="value">{game.linesCrossed === 0 ? '守住' : `越过 ${game.linesCrossed} 次`}</span>
           </div>
+          {canUndo(game) && (
+            <button
+              className="btn ghost small"
+              title="新手档每局可以撤回一天：回到今天开盘"
+              onClick={() => {
+                if (window.confirm(`回到 ${day.date} 开盘？今天做过的一切都会撤销。每局只能撤回一次。`)) onReplace(undoDay(game));
+              }}
+            >
+              撤回今天
+            </button>
+          )}
           <button className="btn ghost small" onClick={onSettings} title="设置">
             ⚙
           </button>
         </div>
       </div>
 
+      <div>
       <div className="newsbar">
         {latest ? (
           <>
@@ -318,6 +346,19 @@ export function GameScreen({ game, llm, ui, onSettings, onEnd }: { game: Game; l
         )}
       </div>
 
+      {layer < 5 && (
+        <div className="tutor-strip">
+          <span className="tutor-step">
+            教学 {layer} / 5 · {LAYERS[layer - 1].name}
+          </span>
+          <span>
+            下一步：<b>{LAYERS[layer - 1].goal}</b>
+          </span>
+          <span className="faint">不做也行，第 {layer + 1} 个交易日自动解锁「{LAYERS[layer].name}」</span>
+        </div>
+      )}
+      </div>
+
       {ui.scenes !== false && <SceneStrip game={game} paused={paused} redUp={ui.colors === 'cn'} />}
 
       <div className="main">
@@ -326,9 +367,11 @@ export function GameScreen({ game, llm, ui, onSettings, onEnd }: { game: Game; l
             <button className={cls(chartMode === 'intraday' && 'on')} onClick={() => setChartMode('intraday')}>
               分时
             </button>
-            <button className={cls(chartMode === 'daily' && 'on')} onClick={() => setChartMode('daily')}>
-              日线
-            </button>
+            {layer >= 2 && (
+              <button className={cls(chartMode === 'daily' && 'on')} onClick={() => setChartMode('daily')}>
+                日线
+              </button>
+            )}
             <div className="chart-legend">
               <span>
                 <i className="legend-line" />
@@ -346,9 +389,9 @@ export function GameScreen({ game, llm, ui, onSettings, onEnd }: { game: Game; l
           <Chart
             game={game}
             rev={rev}
-            mode={chartMode}
+            mode={layer >= 2 ? chartMode : 'intraday'}
             onPickPrice={
-              observer
+              observer || layer < 3
                 ? undefined
                 : (p) => {
                     setLimitPick(p);
@@ -366,17 +409,17 @@ export function GameScreen({ game, llm, ui, onSettings, onEnd }: { game: Game; l
           {paused && game.phase === 'trading' && <div className="pause-veil">已暂停 · 按空格继续</div>}
         </div>
         <div className="side">
-          {observer ? <MembersCard game={game} /> : <PositionCard game={game} />}
+          {observer ? <MembersCard game={game} /> : <PositionCard game={game} layer={layer} />}
           <DirectivesCard dirs={(game.scenario.directives?.(game) ?? []).filter((d) => d.status === 'open')} era={eraOfScenario(game.scenario.id)} names={(id) => game.npc(id)?.name ?? id} />
           <ClocksCard clocks={game.scenario.clocks?.(game) ?? []} era={eraOfScenario(game.scenario.id)} />
           {observer && <StakeCard game={game} />}
-          <OrderBookCard game={game} />
-          <TapeCard game={game} />
+          {layer >= 3 && <OrderBookCard game={game} />}
+          {layer >= 2 && <TapeCard game={game} />}
         </div>
-        {(drawer === 'buy' || drawer === 'sell') && <OrderTicket key={drawer} game={game} side={drawer} limitPrice={limitPick} onClose={() => (setDrawer(null), setLimitPick(null), bump())} />}
+        {(drawer === 'buy' || drawer === 'sell') && <OrderTicket key={drawer} game={game} layer={layer} side={drawer} limitPrice={limitPick} onClose={() => (setDrawer(null), setLimitPick(null), bump())} />}
         {drawer === 'plan' && <PlanBook game={game} onClose={() => setDrawer(null)} />}
         {drawer === 'people' && <Contacts game={game} dlg={dlg} llmOn={llm.enabled} onClose={() => setDrawer(null)} />}
-        {drawer === 'intel' && <IntelDrawer game={game} showMentor={ui.mentor} onClose={() => setDrawer(null)} />}
+        {drawer === 'intel' && <IntelDrawer game={game} showMentor={showMentor} onClose={() => setDrawer(null)} />}
         {drawer === 'cards' && <CardsDrawer game={game} onClose={() => setDrawer(null)} onPlayed={() => (processEvents(), bump())} />}
       </div>
 
@@ -389,10 +432,12 @@ export function GameScreen({ game, llm, ui, onSettings, onEnd }: { game: Game; l
             <button className="core-btn sell" onClick={() => open('sell')}>
               卖出<span className="kbd">S</span>
             </button>
-            <button className="core-btn" onClick={() => open('plan')}>
-              计划书<span className="kbd">P</span>
-              {game.plans.filter((p) => !p.done).length > 0 && <span className="badge">{game.plans.filter((p) => !p.done).length}</span>}
-            </button>
+            {layer >= 3 && (
+              <button className="core-btn" onClick={() => open('plan')}>
+                计划书<span className="kbd">P</span>
+                {game.plans.filter((p) => !p.done).length > 0 && <span className="badge">{game.plans.filter((p) => !p.done).length}</span>}
+              </button>
+            )}
           </>
         )}
         {cards.length > 0 && (
@@ -416,15 +461,16 @@ export function GameScreen({ game, llm, ui, onSettings, onEnd }: { game: Game; l
         ))}
         <span className="spacer" />
         <span className="muted" style={{ fontSize: 12 }}>
-          {game.faction.name} · 第 {game.dayIndex + 1} / {game.scenario.days.length} 个交易日
+          {game.faction.name} · {difficultyName(game.difficulty)} · 第 {game.dayIndex + 1} / {game.scenario.days.length} 个交易日
         </span>
       </div>
 
-      {game.phase === 'night' && <Night game={game} llm={llm} dlg={dlg} showMentor={ui.mentor} onSleep={sleep} />}
+      {game.phase === 'night' && <Night game={game} llm={llm} dlg={dlg} showMentor={showMentor} onSleep={sleep} />}
       {game.decision && (
         <DecisionModal
           key={game.decision.id}
           d={game.decision}
+          scale={countdownScale(game)}
           onChoose={(c) => {
             game.act({ type: 'decision', id: game.decision!.id, choice: c });
             processEvents();

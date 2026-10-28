@@ -164,7 +164,7 @@ function MyOrders({ game }: { game: Game }) {
   );
 }
 
-export function PositionCard({ game }: { game: Game }) {
+export function PositionCard({ game, layer = 5 }: { game: Game; layer?: number }) {
   const ex = game.market.ex;
   const p = game.player;
   const eq = ex.equity(p);
@@ -216,8 +216,8 @@ export function PositionCard({ game }: { game: Game }) {
         <div style={{ width: `${Math.min(100, use * 100)}%` }} />
       </div>
       {game.marginCall && <div className="danger-box">追加保证金通知：明早开盘前补足，否则强制平仓。</div>}
-      {!game.faction.observer && <Leverage game={game} />}
-      <MyOrders game={game} />
+      {!game.faction.observer && layer >= 4 && <Leverage game={game} />}
+      {layer >= 3 && <MyOrders game={game} />}
     </div>
   );
 }

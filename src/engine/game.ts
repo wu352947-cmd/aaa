@@ -453,6 +453,10 @@ export class Game {
   private planSeq = 1;
   pending: OrderReq[] = [];
   log: LoggedAction[] = [];
+  /** 难度只改界面与节奏，不进 stateHash：同一种子在任何难度下都是同一个市场 */
+  difficulty = 'standard';
+  /** 新手档撤回过几天 */
+  undos = 0;
   events: GameEvent[] = [];
   decision: Decision | null = null;
   recaps: DayRecap[] = [];

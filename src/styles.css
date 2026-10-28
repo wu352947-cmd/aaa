@@ -2423,3 +2423,39 @@ textarea {
 .opt-pos button {
   grid-column: 1 / -1;
 }
+
+/* ───────── 新手教学 ───────── */
+.tutor-strip {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  flex-wrap: wrap;
+  padding: 4px 14px;
+  font-size: 12px;
+  border-bottom: 1px solid var(--line);
+  background: #161a12;
+  color: #e6dfcc;
+}
+.tutor-strip .tutor-step {
+  color: var(--gold);
+  font-weight: 600;
+  letter-spacing: 0.05em;
+}
+.cred {
+  font-size: 10px;
+  padding: 0 5px;
+  border-radius: 2px;
+  border: 1px solid var(--line);
+}
+.cred.hi {
+  color: #86efac;
+  border-color: #1f4d2c;
+}
+.cred.mid {
+  color: var(--warn);
+  border-color: #5a3d12;
+}
+.cred.lo {
+  color: #ff8a80;
+  border-color: #5a2323;
+}
