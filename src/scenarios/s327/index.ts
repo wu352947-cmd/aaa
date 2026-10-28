@@ -191,10 +191,12 @@ export const S327: Scenario = {
       ? {
           lender: '营业部',
           multiple: 3,
+          // 营业部给熟客的额度有限：最多 30 万元，不管你账上浮盈多少
+          cap: 300_000,
           line: 1.1,
           rate: 0.0006,
           color: 'grey',
-          note: '营业部经理愿意替熟客垫资，最多是你自有资金的三倍。权益跌到借款的 110%，他会不打招呼直接平掉你的仓——他的钱要先拿回来。日息万分之六。',
+          note: '营业部经理愿意替熟客垫资，最多是你开盘前自有资金的三倍，总共不超过 30 万元。权益跌到借款的 110%，他会不打招呼直接平掉你的仓——他的钱要先拿回来。日息万分之六。',
         }
       : null,
 
@@ -288,7 +290,7 @@ export const S327: Scenario = {
       if (!(g.isBattleDay && flag(g, 'mofPublic'))) addCrowdFlow(g, 'sell', 600_000, 20);
     }
     if (g.isBattleDay) {
-      s.snaps.set(ex.tick + 1, { accounts: ex.snapshot(), last: ex.last });
+      s.snaps.set(ex.tick + 1, { accounts: ex.snapshot(), last: ex.last, credit: g.credit && { ...g.credit } });
       if (flag(g, 'mofPublic')) {
         // 财政部在开盘前公告：市场共识在开盘后二十分钟内移到新价位，没有人先知道
         const base = m.day.base ?? m.day.hist;
@@ -306,7 +308,7 @@ export const S327: Scenario = {
     const m = g.market;
     const t = m.t - 1; // 刚刚走完的这一分钟
     const d = g.dayIndex;
-    if (g.isBattleDay) s.snaps.set(m.ex.tick + 1, { accounts: m.ex.snapshot(), last: m.ex.last });
+    if (g.isBattleDay) s.snaps.set(m.ex.tick + 1, { accounts: m.ex.snapshot(), last: m.ex.last, credit: g.credit && { ...g.credit } });
     if (g.bankrupt && flag(g, 'bankruptTick') == null) g.flags.bankruptTick = m.ex.tick;
     if (flag(g, `bust-${LONG}`) && !flag(g, 'zcBust')) {
       g.flags.zcBust = true;
@@ -593,6 +595,8 @@ function dayEnd(g: Game) {
   const after = ex.trades.filter((t) => t.tick >= cut.tick);
   const violatorVol = after.filter((t) => t.overdrawn).reduce((x, t) => x + t.qty, 0);
   ex.restore(snap.accounts);
+  // 账户退回违规之前，营业部的借款也要退回那一刻：不然先还款、再撤销成交，钱就凭空多出来
+  g.credit = snap.credit ? { ...snap.credit } : null;
   if (ruling === 'precise') {
     // 只撤销透支成交：其余成交按原价重新记账
     for (const t of after) if (!t.overdrawn) ex.rebook(t);

@@ -1,5 +1,5 @@
 import type { Account } from '../../engine/exchange';
-import type { Directive, DocSheet, Game, Intel } from '../../engine/game';
+import type { CreditLine, Directive, DocSheet, Game, Intel } from '../../engine/game';
 import { minuteIndex as mi } from '../../engine/market';
 import type { Fen } from '../../engine/types';
 
@@ -8,6 +8,8 @@ import type { Fen } from '../../engine/types';
 export interface Snap {
   accounts: Map<string, Account>;
   last: Fen;
+  /** 那一刻场外配资的借款（撤销成交时一起退回） */
+  credit?: CreditLine | null;
 }
 
 export interface State {

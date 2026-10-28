@@ -452,8 +452,10 @@ export interface CreditLine {
 /** 剧本提供的配资条件 */
 export interface CreditOffer {
   lender: string;
-  /** 最多借自有资金的几倍 */
+  /** 最多借自有资金的几倍：自有资金按当天开盘前的净值算，盘中赚的不算 */
   multiple: number;
+  /** 借款总额的上限（出借方自己的额度） */
+  cap?: number;
   line: number;
   rate: number;
   color: CardColor;
@@ -559,6 +561,8 @@ export class Game {
   private readonly rngDraft: Rng;
   /** 场外配资（没有借就是 null） */
   credit: CreditLine | null = null;
+  /** 今天开盘前的净值：场外配资按它算能借多少 */
+  creditBase = 0;
   /** 买入的期权 */
   opts: OptPosition[] = [];
   /** 做市商为玩家的期权持有的对冲股数 */
@@ -794,8 +798,9 @@ export class Game {
         if (!offer || this.ending) return null;
         const p = this.player;
         if (action.op === 'take') {
-          const own = this.netEquity();
-          const room = Math.max(0, own * offer.multiple - (this.credit?.loan ?? 0));
+          // 出借方按开盘前的账看你的本钱：盘中的浮盈不算，不然越赚越能借、越借越能赚
+          const own = Math.min(this.netEquity(), this.creditBase);
+          const room = Math.max(0, Math.min(own * offer.multiple, offer.cap ?? Infinity) - (this.credit?.loan ?? 0));
           const amt = Math.min(Math.max(0, action.amount), room);
           if (amt <= 0) return null;
           p.cash += amt;
@@ -946,6 +951,8 @@ export class Game {
     this.market.beginDay(this.day, this.dayIndex);
     this.scenario.onDayStart(this);
     this.readPaper();
+    // 出借方按开盘时的账看你的本钱
+    this.creditBase = this.netEquity();
     this.cureOrLiquidate();
     this.push({ kind: 'phase', text: `${this.day.date} ${this.day.label} 开盘` });
   }
