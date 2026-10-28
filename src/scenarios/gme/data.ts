@@ -1,5 +1,6 @@
 import type { RuleDeck } from '../../engine/exchange';
 import type { Faction, NpcDef, Principle, RuleCardDef, SourceCard } from '../../engine/game';
+import type { OptionSpec } from '../../engine/options';
 import { bridgePath, makeSession, type DayDef, type MarketParams } from '../../engine/market';
 
 // ───────────── 散户起义：2021 年 1 月，纽约 ─────────────
@@ -18,6 +19,11 @@ export const DECK_2021: RuleDeck = {
   priceLimit: null, // 没有涨跌停
   marketProtect: 0.3,
   luld: { band: 0.1, window: 5, pause: 5 },
+  // 零佣金券商不收佣金，但交易所规费和监管费按成交额收一点
+  feeRate: 0.00003,
+  // FINRA 规定维持保证金不低于 25%，券商普遍要 30%；融资年利率按当时零佣金券商的水平
+  maintRate: 0.3,
+  loanRate: 0.08,
 };
 
 export const PARAMS_2021: MarketParams = { Y: 1, kappa: 0.5, trendThreshold: 0.8, trendScale: 0.4 };
@@ -70,6 +76,22 @@ export const DAYS_2021: DayDef[] = [
 ];
 
 export const BATTLE_2021 = DAYS_2021.length - 1;
+
+/**
+ * 这只股票的期权链（拆股前价格）。到期日按交易日数：1 月 29 日是第 5 个交易日，2 月 19 日是第 20 个。
+ * 隐含波动率按当时的报道取一个逐日升高的近似值，行权价取交易所挂牌的那一串。
+ */
+export const OPTIONS_2021: OptionSpec = {
+  expiries: [
+    { id: '0129', label: '1 月 29 日（周期权）', day: 5 },
+    { id: '0219', label: '2 月 19 日（月期权）', day: 20 },
+  ],
+  strikes: [10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 80, 90, 100, 115, 130, 150, 175, 200, 250, 300, 350, 400, 450, 500, 600, 800].map((x) => x * 100),
+  iv: (d) => [1.5, 2.0, 2.5, 3.5, 5.0][Math.min(d, 4)],
+  size: 100,
+  spread: 0.08,
+  hedgeCap: 0.3,
+};
 export const START_2021 = 4259;
 
 export const FACTIONS_2021: Faction[] = [
@@ -214,6 +236,34 @@ export const NPCS_2021: NpcDef[] = [
 ];
 
 export const RULES_2021: RuleCardDef[] = [
+  {
+    id: 'buy-in',
+    title: '召回与强制买回',
+    plain: '你卖空的股票是借来的，出借人随时可以要回去。券被召回、你又借不到新的，就得在下一个交易日买回来还掉——不管那时候价格多高。',
+    why: '卖空的人永远欠着别人的股票。逼空最危险的时候，往往也是出借人最想把券收回去的时候。',
+    source: '美国 SHO 条例规则 204：卖空未能按期交收的，经纪商须在下一个交易日开盘前后买入了结（close-out）。',
+  },
+  {
+    id: 'wash-trade',
+    title: '对敲交易（wash trade）',
+    plain: '你在自己控制的两个账户之间买卖：持仓没变，可行情上多出了成交量和一个你定的成交价。别人看到的是“放量”，跟风盘会追进来。',
+    why: '成交量和成交价是所有人判断行情的依据。不转移所有权的成交是在制造假象。',
+    source: '美国《1934 年证券交易法》第 9(a)(1) 条：禁止为制造交易活跃的假象而进行不改变实际所有权的交易。',
+  },
+  {
+    id: 'spoofing',
+    title: '幌骗（spoofing）',
+    plain: '你挂出大单却不打算成交：它摆在盘口上让别人以为有大资金在买（或卖），价格被吓动之后，你撤单、再反向成交。',
+    why: '盘口挂单本该是真实的买卖意愿。算法和散户都在看盘口，虚假的大单会误导所有人。',
+    source: '2010 年《多德-弗兰克法案》第 747 条把“意图在成交前撤销的出价或报价”列为违法（期货市场）；股票市场按 SEC 规则 10b-5 与《证券交易法》第 9(a)(2) 条追究操纵。',
+  },
+  {
+    id: 'marking-close',
+    title: '操纵收盘价（marking the close）',
+    plain: '收盘前几分钟集中下单，把收盘价推高或压低：保证金、期权估值、基金净值都按收盘价算。',
+    why: '收盘价是一整天的结算基准。集中在最后几分钟推动它，是在用规则做武器。',
+    source: 'SEC 与 FINRA 把“操纵收盘价”列为典型的操纵行为，依据《证券交易法》第 9(a)(2) 条与规则 10b-5。',
+  },
   {
     id: 'short-squeeze',
     title: '逼空',

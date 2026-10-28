@@ -1,5 +1,5 @@
 import { OrderBook } from './book';
-import type { Fen, OrderReq, RuleHit, Side, SubmitResult, Trade } from './types';
+import type { DayStats, Fen, OrderReq, RestingOrder, RuleHit, Side, SubmitResult, Trade } from './types';
 
 /**
  * 规则卡组：一个市场在某个年代的交易规则。
@@ -23,6 +23,12 @@ export interface RuleDeck {
   overdraw?: boolean;
   /** 涨跌幅区间暂停：window 分钟内偏离超过 band 即暂停 pause 分钟 */
   luld?: { band: number; window: number; pause: number };
+  /** 佣金与规费（按成交额的比例，双边各收） */
+  feeRate?: number;
+  /** 维持保证金比例：收盘权益低于它才追保（不设则等于 marginRate） */
+  maintRate?: number;
+  /** 融资年利率：股票账户里超出自有资金的那部分持仓按它计息（不设表示不计息） */
+  loanRate?: number;
 }
 
 /** 数量与货币单位（只影响文字） */
@@ -51,6 +57,8 @@ export interface Account {
   borrowLimit?: number;
   /** 本账户的持仓限额（借壳分仓、监管限仓时与卡组不同）；不设表示按卡组 */
   limit?: number;
+  /** 账户里其他资产的市值（例如买入的期权），计入权益 */
+  extra?: number;
 }
 
 export function newAccount(p: Partial<Account> & Pick<Account, 'id' | 'name' | 'group'>): Account {
@@ -68,6 +76,12 @@ export class Exchange {
   /** 涨跌停基准价（前收盘） */
   refClose: Fen;
   tick = 0;
+  /** 当日第几分钟（由市场每分钟写入，用来按分钟记交易痕迹） */
+  minute = 0;
+  /** 多大的挂单算“大单”：由市场按当日成交量设定 */
+  bigOrder = Infinity;
+  /** 每个账户当天的交易痕迹（开盘清零） */
+  dayStats = new Map<string, DayStats>();
 
   constructor(
     public deck: RuleDeck,
@@ -98,11 +112,22 @@ export class Exchange {
   }
 
   equity(a: Account, p: Fen = this.last): number {
-    return a.cash + this.unrealized(a, p);
+    return a.cash + this.unrealized(a, p) + (a.extra ?? 0);
   }
 
   marginReq(pos: number, p: Fen = this.last): number {
     return Math.abs(pos) * this.contractValue(p) * this.deck.marginRate;
+  }
+
+  /** 维持保证金：低于它，收盘就会收到追保通知 */
+  maintReq(pos: number, p: Fen = this.last): number {
+    return Math.abs(pos) * this.contractValue(p) * (this.deck.maintRate ?? this.deck.marginRate);
+  }
+
+  /** 融资额：多头市值超出权益的部分，就是向券商借的钱 */
+  marginLoan(a: Account, p: Fen = this.last): number {
+    if (a.pos <= 0 || this.deck.markToMarket) return 0;
+    return Math.max(0, a.pos * this.contractValue(p) - this.equity(a, p));
   }
 
   limitOf(a: Account): number {
@@ -139,7 +164,7 @@ export class Exchange {
       return hits;
     }
     if (newPos < 0 && a.borrowLimit != null && -newPos > a.borrowLimit) {
-      hits.push({ rule: 'no-borrow', owner: a.id, blocked: true, detail: `借不到更多的券：最多只能卖空 ${a.borrowLimit.toLocaleString()} ${UNITS.qty}` });
+      hits.push({ rule: 'no-borrow', owner: a.id, blocked: true, detail: `借不到更多的券：借到的券一共 ${a.borrowLimit.toLocaleString()} ${UNITS.qty}，已经卖空 ${Math.max(0, -a.pos).toLocaleString()} ${UNITS.qty}，最多还能再卖空 ${Math.max(0, a.borrowLimit - Math.max(0, -a.pos)).toLocaleString()} ${UNITS.qty}` });
       return hits;
     }
     const limit = this.limitOf(a);
@@ -165,8 +190,59 @@ export class Exchange {
     return hits;
   }
 
+  stats(id: string): DayStats {
+    let s = this.dayStats.get(id);
+    if (!s) this.dayStats.set(id, (s = { wash: 0, bigPlaced: 0, bigCancelled: 0, bigCancelledQty: 0, aggrByMin: {} }));
+    return s;
+  }
+
+  /**
+   * 对倒：自己的主账户和关联账户之间按 price 对敲 qty。
+   * 持仓不变，只留下一笔成交和一个成交价——还有双边的佣金。
+   * 价格不能穿过盘口：高过卖一、低过买一的部分会先吃掉别人的挂单，那就不是对倒了。
+   */
+  private wash(req: OrderReq, a: Account): SubmitResult {
+    const res: SubmitResult = { filled: 0, avgPrice: null, rested: 0, rejected: false, hits: [], trades: [] };
+    const bid = this.book.best('buy') ?? this.last;
+    const ask = this.book.best('sell') ?? this.last;
+    const p = Math.max(bid, Math.min(ask, req.price ?? this.last));
+    const before = this.last;
+    const t: Trade = { tick: this.tick, price: p, qty: req.qty, buyer: a.id, seller: a.id, aggressor: req.side, wash: true };
+    this.trades.push(t);
+    res.trades.push(t);
+    res.filled = req.qty;
+    res.avgPrice = p;
+    this.last = p;
+    a.cash -= 2 * this.contractValue(p) * req.qty * (this.deck.feeRate ?? 0.0003);
+    this.stats(a.id).wash += req.qty;
+    this.contribute(a.group, p - before);
+    return res;
+  }
+
+  /** 撤单：大单几乎没成交就撤掉，记一笔 */
+  noteCancelled(orders: RestingOrder[]): void {
+    for (const o of orders) {
+      const placed = o.placed ?? o.qty;
+      if (placed < this.bigOrder || o.qty < placed * 0.8) continue;
+      const s = this.stats(o.owner);
+      s.bigCancelled++;
+      s.bigCancelledQty += o.qty;
+    }
+  }
+
+  /** 挂单时限到了：撤掉没成交的部分 */
+  cancelExpired(): RestingOrder[] {
+    const gone = this.book.cancelWhere((o) => o.expires != null && o.expires <= this.tick);
+    this.noteCancelled(gone);
+    return gone;
+  }
+
   submit(req: OrderReq, tag = ''): SubmitResult {
     const a = this.acct(req.owner);
+    if (req.wash) {
+      if (!this.open) return { filled: 0, avgPrice: null, rested: 0, rejected: true, hits: [{ rule: 'session', owner: a.id, blocked: true, detail: '当前不在交易时段' }], trades: [] };
+      return this.wash(req, a);
+    }
     const hits = this.check(req, a);
     const res: SubmitResult = { filled: 0, avgPrice: null, rested: 0, rejected: false, hits, trades: [] };
     if (hits.some((h) => h.blocked) || req.qty <= 0) {
@@ -207,10 +283,25 @@ export class Exchange {
     });
     res.filled = filled;
     res.avgPrice = filled ? notional / filled : null;
+    if (filled && !a.exempt) {
+      const s = this.stats(a.id);
+      s.aggrByMin[this.minute] = (s.aggrByMin[this.minute] ?? 0) + filled;
+    }
 
     const rest = req.qty - filled;
     if (rest > 0 && req.type === 'limit') {
-      this.book.rest({ owner: a.id, side: req.side, price: limit, qty: rest, tick: this.tick, overdraw: overdrawn || undefined });
+      this.book.rest({
+        owner: a.id,
+        side: req.side,
+        price: limit,
+        qty: rest,
+        tick: this.tick,
+        overdraw: overdrawn || undefined,
+        display: req.display,
+        expires: req.ttl ? this.tick + req.ttl : undefined,
+        placed: rest,
+      });
+      if (rest >= this.bigOrder && !a.exempt) this.stats(a.id).bigPlaced++;
       res.rested = rest;
     }
     const midAfter = this.book.mid() ?? this.last;

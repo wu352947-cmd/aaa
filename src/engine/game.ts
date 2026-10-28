@@ -1,5 +1,6 @@
-import { fmtYi, setUnits, type Account, type RuleDeck } from './exchange';
+import { fmtYi, setUnits, UNITS, type Account, type RuleDeck } from './exchange';
 import { Market, SSE_1995, type DayDef, type MarketParams, type Session } from './market';
+import { optKey, price as optPrice, quote as optQuote, type OptionSpec, type OptKind, type OptPosition } from './options';
 import { Rng } from './rng';
 import type { Fen, OrderReq, RuleHit, Side } from './types';
 
@@ -324,6 +325,14 @@ export interface Scenario {
   fileDoc?(g: Game, id: string, marks: Record<string, string>): CardResult;
   /** 每晚选卡 */
   draft?: DraftRules;
+  /** 场外配资：这个座位能向谁借、借几倍、平仓线在哪 */
+  credit?(g: Game): CreditOffer | null;
+  /** 场内期权：这个座位能不能交易、交易什么 */
+  options?(g: Game): OptionSpec | null;
+  /** 卖期权给玩家、并替这些期权做 delta 对冲的做市商账户 */
+  optionsDealer?: string;
+  /** 玩家账户外的其他资产（例如现券）的市值，计入权益 */
+  extraValue?(g: Game): number;
   /** 复盘与逐笔里怎么称呼一个群体或账户 */
   groupName?(g: Game, who: string): string;
   setup(g: Game): void;
@@ -351,15 +360,44 @@ export interface Plan {
   /** 分几分钟执行完 */
   spread: number;
   overdraw?: boolean;
+  /** 同一组里一张触发，其余的撤掉（止损与止盈） */
+  oco?: number;
+  /** 只平仓：触发时按当时的持仓数量平掉，不会反手开出新仓 */
+  closeOnly?: boolean;
   /** 执行中：剩余数量与每分钟数量 */
   remaining?: number;
   perTick?: number;
   done?: boolean;
 }
 
+/** 场外配资 / 营业部垫资：钱借给你，平仓线由出借方说了算 */
+export interface CreditLine {
+  lender: string;
+  /** 借来的钱 */
+  loan: number;
+  /** 平仓线：权益 ≤ 借款 × line 时，出借方立即替你平仓并收回借款 */
+  line: number;
+  /** 日利率 */
+  rate: number;
+  /** 一共付了多少利息 */
+  paid: number;
+}
+
+/** 剧本提供的配资条件 */
+export interface CreditOffer {
+  lender: string;
+  /** 最多借自有资金的几倍 */
+  multiple: number;
+  line: number;
+  rate: number;
+  color: CardColor;
+  note: string;
+}
+
 export type PlayerAction =
   | { type: 'order'; req: Omit<OrderReq, 'owner'> }
   | { type: 'cancel-all' }
+  | { type: 'cancel'; id: number }
   | { type: 'plan-add'; plan: Omit<Plan, 'id'> }
   | { type: 'plan-remove'; id: number }
   | { type: 'social'; verb: Verb; npc: string; option?: string }
@@ -367,6 +405,8 @@ export type PlayerAction =
   | { type: 'card'; id: string; target?: string }
   | { type: 'convert'; id: string }
   | { type: 'draft'; id: string | null }
+  | { type: 'credit'; op: 'take' | 'repay'; amount: number }
+  | { type: 'option'; side: 'buy' | 'sell'; kind: OptKind; strike: Fen; expiry: string; qty: number }
   | { type: 'doc'; id: string; marks: Record<string, string> }
   | { type: 'end-night' };
 
@@ -441,6 +481,12 @@ export class Game {
   drafted: string[] = [];
   readonly maxHand = 3;
   private readonly rngDraft: Rng;
+  /** 场外配资（没有借就是 null） */
+  credit: CreditLine | null = null;
+  /** 买入的期权 */
+  opts: OptPosition[] = [];
+  /** 做市商为玩家的期权持有的对冲股数 */
+  dealerHedge = 0;
 
   constructor(
     readonly scenario: Scenario,
@@ -531,6 +577,11 @@ export class Game {
     return null;
   }
 
+  /** 自己的钱：账户权益减去场外借来的钱 */
+  netEquity(p = this.market.last): number {
+    return this.market.ex.equity(this.player, p) - (this.credit?.loan ?? 0);
+  }
+
   equity(): number {
     return this.market.ex.equity(this.player);
   }
@@ -593,7 +644,10 @@ export class Game {
         return null;
       }
       case 'cancel-all':
-        this.market.ex.book.cancelWhere((o) => o.owner === this.player.id);
+        this.market.ex.noteCancelled(this.market.ex.book.cancelWhere((o) => o.owner === this.player.id));
+        return null;
+      case 'cancel':
+        this.market.ex.noteCancelled(this.market.ex.book.cancelWhere((o) => o.owner === this.player.id && o.id === action.id));
         return null;
       case 'plan-add':
         this.plans.push({ ...action.plan, id: this.planSeq++ });
@@ -621,6 +675,7 @@ export class Game {
         const result = this.scenario.playCard(this, action.id, action.target);
         this.hand = this.hand.filter((x) => x !== action.id);
         this.logCard(card, result, action.target);
+        this.markOptions();
         return null;
       }
       case 'convert': {
@@ -649,10 +704,123 @@ export class Game {
         this.logCard({ id: action.id, name: doc.title }, result);
         return null;
       }
+      case 'credit': {
+        const offer = this.scenario.credit?.(this);
+        if (!offer || this.ending) return null;
+        const p = this.player;
+        if (action.op === 'take') {
+          const own = this.netEquity();
+          const room = Math.max(0, own * offer.multiple - (this.credit?.loan ?? 0));
+          const amt = Math.min(Math.max(0, action.amount), room);
+          if (amt <= 0) return null;
+          p.cash += amt;
+          this.credit = { lender: offer.lender, loan: (this.credit?.loan ?? 0) + amt, line: offer.line, rate: offer.rate, paid: this.credit?.paid ?? 0 };
+          if (offer.color !== 'white') this.addHeat(offer.color === 'black' ? 8 : 2, `向${offer.lender}借钱加杠杆`);
+          this.push({ kind: 'intel', text: `${offer.lender}借给你 ${fmtYi(amt)}：权益跌到借款的 ${Math.round(offer.line * 100)}% 时，对方立即平仓收回` });
+        } else if (this.credit) {
+          const amt = Math.min(Math.max(0, action.amount), this.credit.loan, Math.max(0, p.cash));
+          if (amt <= 0) return null;
+          p.cash -= amt;
+          this.credit.loan -= amt;
+          this.push({ kind: 'intel', text: `还给${this.credit.lender} ${fmtYi(amt)}` });
+          if (this.credit.loan <= 1) this.credit = { ...this.credit, loan: 0 };
+        }
+        return null;
+      }
+      case 'option':
+        this.tradeOption(action);
+        return null;
       case 'end-night':
         this.endNight();
         return null;
     }
+  }
+
+  // ── 期权 ──
+
+  /** 离到期还有多少年：按交易日算，当天收盘到期 */
+  optYears(expiry: string): number {
+    const e = this.scenario.options?.(this)?.expiries.find((x) => x.id === expiry);
+    if (!e) return 0;
+    const frac = this.phase === 'trading' ? this.market.t / this.market.session.minutes : 1;
+    return Math.max(0, e.day - this.dayIndex + 1 - frac) / 252;
+  }
+
+  /** 一个合约的报价（每股美元）与 delta */
+  optQuote(kind: OptKind, strike: Fen, expiry: string, s: Fen = this.market.last): { mid: number; bid: number; ask: number; delta: number } {
+    const spec = this.scenario.options?.(this);
+    if (!spec) return { mid: 0, bid: 0, ask: 0, delta: 0 };
+    const p = optPrice(kind, s, strike, this.optYears(expiry), spec.iv(this.dayIndex));
+    return { mid: p.value, ...optQuote(p.value, spec.spread), delta: p.delta };
+  }
+
+  /** 持有的期权按中间价的市值 */
+  optValue(s: Fen = this.market.last): number {
+    const spec = this.scenario.options?.(this);
+    if (!spec) return 0;
+    return this.opts.reduce((a, o) => a + o.qty * spec.size * this.optQuote(o.kind, o.strike, o.expiry, s).mid, 0);
+  }
+
+  /** 期权和剧本里的其他资产按市价计入权益 */
+  markOptions(): void {
+    const other = this.scenario.extraValue?.(this) ?? 0;
+    if (this.opts.length || this.player.extra || other) this.player.extra = this.optValue() + other;
+  }
+
+  private tradeOption(a: Extract<PlayerAction, { type: 'option' }>): void {
+    const spec = this.scenario.options?.(this);
+    if (!spec || !this.market.ex.open || this.decision || this.ending || a.qty <= 0) return;
+    if (!spec.expiries.some((e) => e.id === a.expiry) || !spec.strikes.includes(a.strike)) return;
+    const q = this.optQuote(a.kind, a.strike, a.expiry);
+    const key = optKey(a);
+    let pos = this.opts.find((o) => optKey(o) === key);
+    const p = this.player;
+    if (a.side === 'buy') {
+      const cost = q.ask * spec.size * a.qty;
+      if (cost > Math.max(0, p.cash)) {
+        this.push({ kind: 'rule', rule: 'option-cash', blocked: true, text: `买期权要付现金：${fmtYi(cost)}，你只有 ${fmtYi(p.cash)}` });
+        return;
+      }
+      p.cash -= cost;
+      if (!pos) this.opts.push((pos = { kind: a.kind, strike: a.strike, expiry: a.expiry, qty: 0, cost: 0 }));
+      pos.qty += a.qty;
+      pos.cost += cost;
+    } else {
+      if (!pos || pos.qty <= 0) return;
+      const n = Math.min(a.qty, pos.qty);
+      p.cash += q.bid * spec.size * n;
+      pos.cost -= (pos.cost * n) / pos.qty;
+      pos.qty -= n;
+      if (!pos.qty) this.opts = this.opts.filter((o) => o !== pos);
+    }
+    this.markOptions();
+  }
+
+  /** 做市商：玩家买了多少期权，它就替这些期权按 delta 对冲多少股票 */
+  private dealerOrders(): OrderReq[] {
+    const dealer = this.scenario.optionsDealer;
+    const spec = this.scenario.options?.(this);
+    if (!dealer || !spec || this.market.t % 2 !== 0) return [];
+    const target = Math.round(this.opts.reduce((a, o) => a + o.qty * spec.size * this.optQuote(o.kind, o.strike, o.expiry).delta, 0));
+    const diff = target - this.dealerHedge;
+    const cap = Math.round((this.day.vDay / this.market.session.minutes) * spec.hedgeCap);
+    if (Math.abs(diff) < Math.max(100, Math.abs(target) * 0.02)) return [];
+    const q = Math.min(Math.abs(diff), cap);
+    this.dealerHedge += Math.sign(diff) * q;
+    return [{ owner: dealer, side: diff > 0 ? 'buy' : 'sell', qty: q, type: 'market' }];
+  }
+
+  /** 收盘时到期的期权按收盘价行权了结 */
+  private expireOptions(close: Fen): void {
+    const spec = this.scenario.options?.(this);
+    if (!spec || !this.opts.length) return;
+    const due = spec.expiries.filter((e) => e.day === this.dayIndex).map((e) => e.id);
+    for (const o of this.opts.filter((x) => due.includes(x.expiry))) {
+      const v = optPrice(o.kind, close, o.strike, 0, 1).value * spec.size * o.qty;
+      this.player.cash += v;
+      this.push({ kind: 'intel', text: `${o.kind === 'call' ? '看涨' : '看跌'}期权（行权价 ${(o.strike / 100).toFixed(0)}）到期：${v > 0 ? `行权了结 ${fmtYi(v)}` : '一文不值'}` });
+    }
+    this.opts = this.opts.filter((x) => !due.includes(x.expiry));
   }
 
   private logCard(card: { id: string; name: string }, result: CardResult, target?: string): void {
@@ -701,7 +869,7 @@ export class Game {
     const ex = this.market.ex;
     const a = this.player;
     const eq = ex.equity(a);
-    const need = ex.marginReq(a.pos);
+    const need = ex.maintReq(a.pos);
     if (eq >= need) {
       this.marginCall = false;
       return;
@@ -722,7 +890,7 @@ export class Game {
     // 停市期间委托与计划都原样留着，复市后再报
     const halted = this.market.t < this.market.haltUntil;
     const orders = halted ? [] : this.pending.splice(0);
-    if (!halted) orders.push(...this.runPlans());
+    if (!halted) orders.push(...this.runPlans(), ...this.dealerOrders());
     const rep = this.market.step(orders);
     this.onRuleHits(rep.hits);
     if (rep.luld) {
@@ -746,6 +914,7 @@ export class Game {
       this.tape.unshift({ day: this.dayIndex, time: this.market.session.label(this.market.t - 1), seat: acct.seat, side: e.side, qty: e.qty, price: Math.round(e.notional / e.qty) });
     }
     if (this.tape.length > 200) this.tape.length = 200;
+    this.markOptions();
     this.intradayRisk();
     this.scenario.onTick(this);
     if (this.market.dayOver && !this.decision) this.closeDay();
@@ -766,11 +935,31 @@ export class Game {
           p.cond === 'now' ||
           (p.cond === 'at' ? this.market.t >= p.price : p.cond === 'gte' ? last >= p.price : last <= p.price);
         if (!hit) continue;
+        if (p.closeOnly) {
+          const pos = this.player.pos;
+          const closes = pos !== 0 && (p.side === 'sell') === pos > 0;
+          if (!closes) {
+            p.done = true;
+            continue;
+          }
+          p.qty = Math.min(p.qty, Math.abs(pos));
+        }
+        if (p.oco != null) for (const o of this.plans) if (o !== p && o.oco === p.oco && o.remaining == null) o.done = true;
         p.remaining = p.qty;
         p.perTick = Math.ceil(p.qty / Math.max(1, p.spread));
         this.push({ kind: 'intel', text: `计划书「${p.label}」开始执行` });
       }
-      const q = Math.min(p.remaining, p.perTick!);
+      let q = Math.min(p.remaining, p.perTick!);
+      if (p.closeOnly) {
+        // 只平仓的计划每分钟都按剩下的持仓算：别的单子已经平掉的部分不再重复买卖
+        const pos = this.player.pos + out.reduce((a, o) => a + (o.side === 'buy' ? o.qty : -o.qty), 0);
+        const closes = pos !== 0 && (p.side === 'sell') === pos > 0;
+        q = closes ? Math.min(q, Math.abs(pos)) : 0;
+        if (!q) {
+          p.done = true;
+          continue;
+        }
+      }
       out.push({ owner: this.player.id, side: p.side, qty: q, type: 'market', overdraw: p.overdraw });
       p.remaining -= q;
       if (p.remaining <= 0) p.done = true;
@@ -782,6 +971,15 @@ export class Game {
   private intradayRisk(): void {
     const ex = this.market.ex;
     const mark = Math.round(this.market.reference);
+    const c = this.credit;
+    if (c && c.loan > 0 && this.player.pos !== 0 && ex.equity(this.player, mark) <= c.loan * c.line) {
+      // 出借方不等交易所：权益一碰平仓线，立刻替你平掉全部持仓，把借款拿回去
+      const r = ex.liquidate(this.player.id);
+      this.player.cash -= c.loan;
+      this.push({ kind: 'liquidation', rule: 'otc-liquidation', text: `${c.lender}强制平仓：权益碰到平仓线（借款的 ${Math.round(c.line * 100)}%），卖掉 ${r?.filled.toLocaleString() ?? 0} ${UNITS.qty}，收回借款 ${fmtYi(c.loan)}` });
+      this.credit = { ...c, loan: 0 };
+      this.flags.otcLiquidated = ((this.flags.otcLiquidated as number) || 0) + 1;
+    }
     for (const a of ex.accounts.values()) {
       if (a.exempt || a.pos === 0) continue;
       if (ex.equity(a, mark) < 0) {
@@ -808,11 +1006,14 @@ export class Game {
       netByOwner.set(tr.buyer, (netByOwner.get(tr.buyer) ?? 0) + tr.qty);
       netByOwner.set(tr.seller, (netByOwner.get(tr.seller) ?? 0) - tr.qty);
     }
+    this.surveil();
     this.scenario.onDayEnd(this);
     if (this.ending) return;
     const price = settle ?? (this.flags['settle'] as number | undefined) ?? m.last;
     delete this.flags['settle'];
     m.closeDay(price);
+    this.expireOptions(price);
+    this.markOptions();
     this.pending = [];
     this.plans = this.plans.filter((p) => !p.done && p.remaining == null);
 
@@ -835,14 +1036,26 @@ export class Game {
     });
 
     const ex = m.ex;
+    // 借来的钱按天计息：券商的融资、场外的配资
+    const loan = ex.marginLoan(this.player);
+    if (loan > 0 && ex.deck.loanRate) {
+      const fee = (loan * ex.deck.loanRate) / 252;
+      this.player.cash -= fee;
+      this.flags.loanInterest = ((this.flags.loanInterest as number) || 0) + fee;
+    }
+    if (this.credit && this.credit.loan > 0) {
+      const fee = this.credit.loan * this.credit.rate;
+      this.player.cash -= fee;
+      this.credit.paid += fee;
+    }
     const eq = ex.equity(this.player);
     this.equityCurve.push(eq);
-    if (this.player.pos !== 0 && eq < ex.marginReq(this.player.pos)) {
+    if (this.player.pos !== 0 && eq < ex.maintReq(this.player.pos)) {
       this.marginCall = true;
       this.push({
         kind: 'margin',
         rule: 'daily-settlement',
-        text: `逐日盯市后权益 ${fmtYi(eq)}，低于所需保证金 ${fmtYi(ex.marginReq(this.player.pos))}：明早开盘前须补足，否则强制平仓`,
+        text: `收盘后权益 ${fmtYi(eq)}，低于维持保证金 ${fmtYi(ex.maintReq(this.player.pos))}：明早开盘前须补足，否则强制平仓`,
       });
     }
     // 布局期就穿仓：故事到此为止；决战日穿仓的人还要面对余波
@@ -857,6 +1070,43 @@ export class Game {
     this.heat = Math.max(this.heatPeak * 0.3, this.heat - 1);
     this.scenario.onNight(this);
     this.dealOffer();
+  }
+
+  /**
+   * 收盘后的交易监察：从玩家当天的交易痕迹里找对倒、虚假申报和尾市拉抬。
+   * 抓到就记监管热度，第一次弹出规则卡。
+   */
+  private surveil(): void {
+    const ex = this.market.ex;
+    const s = ex.dayStats.get(this.player.id);
+    if (!s || this.faction.observer) return;
+    const v = this.day.vDay;
+    const found: { rule: string; heat: number; text: string; why: string }[] = [];
+    if (s.wash > 0)
+      found.push({ rule: 'wash-trade', heat: Math.min(25, 4 + Math.round((300 * s.wash) / v)), text: `交易所监察：你的账户与关联账户之间对敲 ${s.wash.toLocaleString()} ${UNITS.qty}`, why: '自买自卖制造成交量' });
+    if (s.bigCancelled >= 2)
+      found.push({ rule: 'spoofing', heat: Math.min(15, 4 + 2 * s.bigCancelled), text: `交易所监察：${s.bigCancelled} 笔大额申报几乎没成交就撤掉了`, why: '虚假申报' });
+    const bars = this.market.bars;
+    const win = 10;
+    if (bars.length > win + 1) {
+      const last = bars.slice(-win);
+      const vol = last.reduce((a, b) => a + b.v, 0);
+      let mine = 0;
+      for (let t = bars.length - win; t < bars.length; t++) mine += s.aggrByMin[t] ?? 0;
+      const move = Math.abs(last[last.length - 1].c - bars[bars.length - win - 1].c);
+      const sigmaP = this.day.sigma * last[last.length - 1].c;
+      if (vol > 0 && mine / vol >= 0.25 && move >= 0.15 * sigmaP)
+        found.push({ rule: 'marking-close', heat: 6, text: `交易所监察：收盘前 ${win} 分钟里，你的主动成交占了 ${Math.round((100 * mine) / vol)}%，价格被推动了一截`, why: '尾市拉抬或打压' });
+    }
+    for (const f of found) {
+      this.addHeat(f.heat, f.why);
+      this.flags[`surveil-${f.rule}`] = ((this.flags[`surveil-${f.rule}`] as number) || 0) + 1;
+      this.push({ kind: 'rule', rule: f.rule, blocked: false, text: f.text });
+      if (this.principleId === 'no-violation' && !this.flags[`line-${f.rule}-${this.dayIndex}`]) {
+        this.flags[`line-${f.rule}-${this.dayIndex}`] = true;
+        this.crossLine(f.why);
+      }
+    }
   }
 
   private endNight(): void {
@@ -884,7 +1134,7 @@ export class Game {
     const parts: (string | number)[] = [this.dayIndex, this.market.t, ex.last, ex.trades.length, this.heat.toFixed(4), this.reputation];
     for (const a of [...ex.accounts.values()].sort((x, y) => x.id.localeCompare(y.id))) parts.push(a.id, a.pos, a.cash.toFixed(2));
     for (const n of [...this.npcs.values()].sort((x, y) => x.id.localeCompare(y.id))) parts.push(n.id, n.relation);
-    parts.push(...this.market.closePrices, ...this.hand);
+    parts.push(...this.market.closePrices, ...this.hand, ...this.opts.map((o) => `${optKey(o)}x${o.qty}`), this.dealerHedge);
     let h = 2166136261 >>> 0;
     const s = parts.join('|');
     for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 16777619);

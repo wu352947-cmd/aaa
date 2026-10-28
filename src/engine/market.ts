@@ -1,4 +1,5 @@
 import { Exchange, newAccount, type RuleDeck } from './exchange';
+import { visible } from './book';
 import { Rng } from './rng';
 import type { Bar, Fen, OrderReq, RuleHit, Trade } from './types';
 
@@ -157,6 +158,8 @@ export class Market {
   crowdBuyScale = 1;
   /** 背景做市商挂单的厚度（1 = 正常）：做市商加宽报价或撤单时变薄，同样的单子把价格推得更远 */
   depthScale = 1;
+  /** 盘口倾斜：近处大额挂单（不算做市商和散户）买多卖少为正。做市商和散户都在看它 */
+  lean = 0;
   private rngCrowd: Rng;
   private rngTrend: Rng;
   closePrices: Fen[] = [];
@@ -200,9 +203,25 @@ export class Market {
     return this.params.kappa * this.scale() * Math.sign(this.flow) * Math.sqrt(Math.abs(this.flow) / this.day.vDay);
   }
 
-  /** 做市商当前的估值中枢（分） */
+  /** 做市商当前的估值中枢（分）：历史价格 + 累计流量的永久冲击 + 盘口倾斜 */
   get reference(): number {
-    return this.base() + this.dev;
+    return this.base() + this.dev + 0.12 * this.lean * this.scale();
+  }
+
+  /**
+   * 盘口倾斜：现价上下 3% 以内、露出来的大额挂单（做市商与散户群体的除外）。
+   * 一侧堆着大单，做市商会把报价往那边挪一点，散户也更愿意跟着那一边——这就是虚假申报能起作用的原因。
+   */
+  private readLean(): number {
+    const last = this.ex.last;
+    const band = last * 0.03;
+    let net = 0;
+    this.ex.book.each((o) => {
+      if (o.owner === MM || o.owner === CROWD || Math.abs(o.price - last) > band) return;
+      net += (o.side === 'buy' ? 1 : -1) * visible(o);
+    });
+    const norm = (this.day.vDay / this.session.minutes) * 10;
+    return clamp(net / norm, -1, 1);
   }
 
   beginDay(day: DayDef, index: number): void {
@@ -212,6 +231,9 @@ export class Market {
     this.bars = [];
     this.haltUntil = -1;
     this.ex.contributions = new Map();
+    this.ex.dayStats = new Map();
+    this.ex.bigOrder = Math.round(day.vDay * 0.003);
+    this.lean = 0;
     this.ex.book.clear();
     this.ex.open = true;
     // 开盘：隔夜消化掉一大半前一日的净流量
@@ -261,7 +283,7 @@ export class Market {
     const perTick = (this.day.crowdShare * this.day.vDay) / this.session.minutes;
     const n = 4 + r.int(0, 4);
     const out: OrderReq[] = [];
-    const bias = 0.18 * this.sentiment;
+    const bias = 0.18 * this.sentiment + 0.12 * this.lean;
     for (let i = 0; i < n; i++) {
       const qty = Math.max(1, Math.round((perTick / n) * Math.exp(r.normal() * 0.6 - 0.18)));
       const side = this.crowdSellOnly || !r.chance((0.5 + bias) * this.crowdBuyScale) ? 'sell' : 'buy';
@@ -288,10 +310,31 @@ export class Market {
     return [{ owner: TREND, side: devRatio > 0 ? 'buy' : 'sell', qty, type: 'market' }];
   }
 
+  /**
+   * 跟风盘：成交突然放大、价格又在往一个方向走，就有人追进去。
+   * 对倒做出来的量、尾盘拉抬，靠的都是这批人。
+   */
+  private chaserOrders(): OrderReq[] {
+    const n = 5;
+    if (this.bars.length < n + 10) return [];
+    const recent = this.bars.slice(-n);
+    const before = this.bars.slice(-n - 30, -n).filter((b) => b.v > 0);
+    if (!before.length) return [];
+    const base = before.reduce((a, b) => a + b.v, 0) / before.length;
+    const ratio = recent.reduce((a, b) => a + b.v, 0) / n / Math.max(1, base);
+    const move = recent[n - 1].c - recent[0].o;
+    if (ratio < 1.8 || Math.abs(move) < 0.08 * this.scale()) return [];
+    const perTick = this.day.vDay / this.session.minutes;
+    const qty = Math.round(perTick * 0.2 * Math.min(2, ratio - 1.8));
+    return qty > 0 ? [{ owner: TREND, side: move > 0 ? 'buy' : 'sell', qty, type: 'market' }] : [];
+  }
+
   /** 推进一分钟。playerOrders 先于其他人提交（玩家的委托在本分钟开盘时到达）。 */
   step(playerOrders: OrderReq[]): TickReport {
     const ex = this.ex;
     ex.tick++;
+    ex.minute = this.t;
+    ex.cancelExpired();
     const report: TickReport = { hits: [], trades: [] };
     if (this.t < this.haltUntil) {
       // 停市：时间照走，没有成交；做市商的记忆照常衰减
@@ -301,6 +344,7 @@ export class Market {
       return report;
     }
     const midBefore = ex.book.mid();
+    this.lean = this.readLean();
     this.postLiquidity();
     const midAfterRepost = ex.book.mid();
     if (midBefore != null && midAfterRepost != null) ex.contribute('gravity', midAfterRepost - midBefore);
@@ -315,7 +359,8 @@ export class Market {
       const r = ex.submit(o);
       report.hits.push(...r.hits);
       if (!r.filled) return;
-      net += o.side === 'buy' ? r.filled : -r.filled;
+      // 对倒不转移持仓，做市商的记忆里也没有这笔净买卖
+      if (!o.wash) net += o.side === 'buy' ? r.filled : -r.filled;
       // 大单扫过之后，做市商当分钟就在新价位重新报价（临时冲击在本分钟内持续）
       if (Math.abs(ex.last - center) >= 3) {
         const before = ex.book.mid();
@@ -326,7 +371,7 @@ export class Market {
       }
     };
     for (const o of playerOrders) submit(o);
-    const npc: OrderReq[] = [...this.crowdOrders(), ...this.trendOrders()];
+    const npc: OrderReq[] = [...this.crowdOrders(), ...this.trendOrders(), ...this.chaserOrders()];
     for (const a of this.actors) npc.push(...a.onTick(this));
     // NPC 委托到达顺序由散户随机流决定，保证可复现
     for (let i = npc.length - 1; i > 0; i--) {
