@@ -685,7 +685,7 @@ export function traderCards(g: Game): CardDef[] {
         name: '接受采访：兑付价就是 132 元',
         group: '舆论',
         color: 'grey',
-        does: '公开喊话。明早散户情绪偏空。如果最后贴息兑现，你会被打脸。',
+        does: '公开喊话，明早上头条。散户情绪偏空；读报的人各按各的风格解读。如果最后贴息兑现，你会被打脸。',
         cost: '1 点精力。',
         when: 'night',
         blocked: used(`interview-${d}`) ? '今晚已经接受过采访' : energy,
@@ -720,7 +720,7 @@ export function traderCards(g: Game): CardDef[] {
         name: '媒体吹风：贴息在即',
         group: '舆论',
         color: 'grey',
-        does: '找相熟的记者写一篇“政策面将有变化”。明早散户情绪偏多。',
+        does: '找相熟的记者写一篇“政策面将有变化”，明早上头条。散户情绪偏多；消息驱动的人会跟，逆向的人会更硬。',
         cost: '1 点精力；声望 −1。',
         when: 'night',
         blocked: used(`press-${d}`) ? '今晚已经找过' : energy,
@@ -901,10 +901,10 @@ export function traderPlay(g: Game, id: string, target?: string): CardResult {
     case 'interview':
       s.used.add(`interview-${d}`);
       g.energy--;
-      g.flags.sentNext = ((g.flags.sentNext as number) || 0) - 0.35;
+      g.spin(-0.9, '申江证券总经理：327 兑付价就是 132 元', '申江证券');
       g.flags.interviewed = true;
       g.relate('su', 5);
-      return R(true, '采访见报：“兑付价就是 132 元”', ['明早散户情绪偏空', '苏晓 关系 +5'], { who: '苏晓', text: '你确定要我原话照登？好。' });
+      return R(true, '采访见报：“兑付价就是 132 元”', ['明早的头条', '散户情绪偏空；跟着报纸走的人会更看空，逆向的人反而看多', '苏晓 关系 +5'], { who: '苏晓', text: '你确定要我原话照登？好。' });
     case 'mediate-req': {
       g.energy--;
       const wei = g.npc('wei')!;
@@ -931,8 +931,8 @@ export function traderPlay(g: Game, id: string, target?: string): CardResult {
       s.used.add(`press-${d}`);
       g.energy--;
       g.reputation -= 1;
-      g.flags.sentNext = ((g.flags.sentNext as number) || 0) + 0.4;
-      return R(true, '明早见报：“政策面将有变化”', ['明早散户情绪偏多', '声望 −1']);
+      g.spin(1, '接近多方人士：政策面将有变化，327 贴息呼之欲出', '中财信托');
+      return R(true, '明早见报：“政策面将有变化”', ['明早的头条', '散户情绪偏多；跟着报纸走的人（辽北的高振宇）更看多，逆向的沈立行反而更硬', '声望 −1']);
     case 'wash':
       s.used.add(`wash-${d}`);
       g.addHeat(15, '对倒拉抬');

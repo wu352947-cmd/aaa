@@ -176,7 +176,7 @@ function traderDeck(g: Game): Deal[] {
       name: '相熟的记者',
       group: '手牌',
       color: 'white',
-      does: '明早的报纸由你定调：散户的情绪偏多还是偏空，你选。',
+      does: '明早的头条由你定：偏多还是偏空，你选。散户跟着报纸走；各方按自己的风格解读——消息驱动的跟，逆向的反着来。',
       cost: '1 点精力。',
       when: 'night',
       targets: [
@@ -445,8 +445,8 @@ export function draftPlay(g: Game, id: string, target?: string): CardResult {
       return R(true, '问询被压了下去', ['监管热度 −12']);
     case 'x-reporter':
       g.energy--;
-      g.flags.sentNext = ((g.flags.sentNext as number) || 0) + (target === 'bull' ? 0.4 : -0.4);
-      return R(true, target === 'bull' ? '明早见报：“政策面将有变化”' : '明早见报：“兑付价就是 132 元”', [target === 'bull' ? '明早散户情绪偏多' : '明早散户情绪偏空']);
+      g.spin(target === 'bull' ? 1 : -1, target === 'bull' ? '本报记者：政策面将有变化，327 兑付价或远高于 132 元' : '本报记者：327 兑付价就是 132 元，贴息无从谈起', '相熟的记者');
+      return R(true, target === 'bull' ? '明早见报：“政策面将有变化”' : '明早见报：“兑付价就是 132 元”', ['明早的头条', target === 'bull' ? '散户情绪偏多；跟着报纸走的人更看多，逆向的人反着来' : '散户情绪偏空；跟着报纸走的人更看空，逆向的人反着来']);
     case 'x-loan':
       p.cash += 500_000_000;
       s.debt += 550_000_000;

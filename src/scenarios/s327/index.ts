@@ -50,7 +50,9 @@ function zhongcaiActor(g: Game): Actor {
     onTick(m: Market) {
       const a = m.ex.acct(LONG);
       if (m.day.kind === 'layout') {
-        if (g.rngScript.chance(1.4 / 330)) return [{ owner: LONG, side: 'buy', qty: g.rngScript.int(30, 50) * 1000, type: 'market' }];
+        // 魏国梁是消息驱动的：报纸越看多，他布局期吸筹越勤
+        const keen = 1 + Math.max(0, g.npc('wei')?.view ?? 0);
+        if (g.rngScript.chance((1.4 * keen) / 330)) return [{ owner: LONG, side: 'buy', qty: g.rngScript.int(30, 50) * 1000, type: 'market' }];
         return [];
       }
       if (m.t < (flag(g, 'mofPublic') ? mi('9:35') : mi('10:06')) || flag(g, 'zcBust')) return [];
@@ -761,7 +763,8 @@ function decideFlip(g: Game) {
   const gao = g.npc('gao');
   const rel = gao?.relation ?? 30;
   const lock = g.alliances.find((a) => a.id === 'lock' && !a.brokenBy);
-  const belief = 0.55 + 0.05 * g.dayIndex + (flag(g, 'gaoBribed') ? 0.3 : 0);
+  // 高振宇是机会主义的：报纸看多，他就更信贴息
+  const belief = 0.55 + 0.05 * g.dayIndex + (flag(g, 'gaoBribed') ? 0.3 : 0) + 0.15 * (gao?.view ?? 0);
   const loyalty = (Math.max(0, rel) / 100) * 0.5 + ((lock?.penalty ?? 0) / 3e8) * 0.35 + (flag(g, 'gaoShared') ? 0.1 : 0);
   const temptation = belief - loyalty + (g.rngSocial.next() - 0.5) * 0.08;
   if (temptation > 0.25) g.flags.gaoFlip = true;

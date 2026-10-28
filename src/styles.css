@@ -1087,6 +1087,7 @@ textarea {
   margin: 2px 0;
 }
 .intel .body {
+  white-space: pre-line;
   font-size: 13px;
   color: var(--muted);
 }
@@ -2494,4 +2495,9 @@ textarea {
 .victim-list p {
   font-size: 13px;
   text-indent: 0;
+}
+.spun-note {
+  font-size: 12px;
+  color: var(--seal);
+  margin-top: 4px;
 }

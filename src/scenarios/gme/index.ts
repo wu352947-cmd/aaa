@@ -52,8 +52,10 @@ function greywolfActor(g: Game): Actor {
     onTick(m: Market) {
       const a = m.ex.acct(GW);
       if (a.pos >= 0) return [];
-      if (g.dayIndex === 2 && m.t >= mi('14:00') && a.pos < -7_000_000) return [{ owner: GW, side: 'buy', qty: 100_000, type: 'market' }];
-      if (g.dayIndex === 3 && m.t < mi('10:00')) return [{ owner: GW, side: 'buy', qty: Math.min(-a.pos, 250_000), type: 'market' }];
+      // 罗文做基本面空头，反着读报：报纸越喊逼空（看多），他越觉得是泡沫、回补越慢；报纸看空，他就趁机加快回补
+      const pace = Math.max(0.4, 1 + 0.6 * (g.npc('rowan')?.view ?? 0));
+      if (g.dayIndex === 2 && m.t >= mi('14:00') && a.pos < -7_000_000) return [{ owner: GW, side: 'buy', qty: Math.round(100_000 * pace), type: 'market' }];
+      if (g.dayIndex === 3 && m.t < mi('10:00')) return [{ owner: GW, side: 'buy', qty: Math.min(-a.pos, Math.round(250_000 * pace)), type: 'market' }];
       return [];
     },
   };
@@ -929,10 +931,10 @@ function gmePlay(g: Game, id: string, _target?: string): CardResult {
       return R('公告发出', [flag(g, 'restrict') || flag(g, 'capped') ? '用户信任 +10' : '用户信任 +2：没出事的时候没人在意']);
     case 'tv':
       mark(`tv-${d}`);
-      g.flags.sentNext = ((g.flags.sentNext as number) || 0) - 0.3;
+      g.spin(-0.75, '券商 CEO：限制交易是为了保护散户', '零佣金券商');
       g.reputation -= 5;
       g.relate('susan', 5);
-      return R('上了财经频道', ['明早散户情绪偏空', '声望 −5'], { who: '苏珊', text: '论坛已经把你的截图做成表情包了。' });
+      return R('上了财经频道', ['明早的头条', '散户情绪偏空；做空基金的罗文反着读报，觉得该收手了，回补得更快', '声望 −5'], { who: '苏珊', text: '论坛已经把你的截图做成表情包了。' });
     case 'calls': {
       const premium = g.factionId === 'short' ? 200_000_000 : 1000;
       p.cash -= premium;

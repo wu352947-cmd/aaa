@@ -65,6 +65,8 @@ export interface NpcDef {
 
 export interface Npc extends NpcDef {
   memory: string[];
+  /** 读报读出来的看法：+1 看多、−1 看空。按 style 解读同一张报纸（见 STYLE_READ） */
+  view?: number;
   /** 今晚已经交谈过的次数 */
   unreachable?: boolean;
 }
@@ -85,6 +87,31 @@ export interface Intel {
   chain?: { who: string; said: string; altered?: boolean }[];
   read?: boolean;
 }
+
+/** 一期报纸。tone：这期报纸整体有多看多（+1）或看空（−1）；spun：塞稿的人 */
+export interface Paper {
+  day: number;
+  headline: string;
+  sub: string;
+  facts: string[];
+  tone?: number;
+  spun?: string[];
+}
+
+/**
+ * 不同风格的人怎么读同一张报纸：1 跟着报纸走，−1 反着报纸走，0 不看报纸。
+ * 剧本里没列出的风格一律当作不看报纸。
+ */
+export const STYLE_READ: Record<string, number> = {
+  消息驱动: 1,
+  机会主义: 1,
+  动员: 1,
+  消息贩子: 1,
+  增长: 0.5,
+  经验: 0.3,
+  逆向: -1,
+  基本面做空: -1,
+};
 
 /** 一次黑色操作：黑牌、违规成交、被监察抓到的对倒与虚假申报、剧本里危险的抉择 */
 /** 引擎自己认得的轻一档的黑色操作；剧本自定的原因都算重的 */
@@ -495,7 +522,9 @@ export class Game {
   bankrupt = false;
   tape: { day: number; time: string; seat: string; side: Side; qty: number; price: Fen }[] = [];
   /** 每晚的报纸头条（引擎给事实，台词层负责措辞） */
-  papers: { day: number; headline: string; sub: string; facts: string[] }[] = [];
+  papers: Paper[] = [];
+  /** 今晚有人往明早的报纸里塞的稿子 */
+  private spins: { tone: number; headline: string; by: string }[] = [];
   /** 打过的行动卡与结算结果 */
   /** 所有黑色操作，按发生顺序 */
   darkDeeds: DarkDeed[] = [];
@@ -890,6 +919,7 @@ export class Game {
     this.phase = 'trading';
     this.market.beginDay(this.day, this.dayIndex);
     this.scenario.onDayStart(this);
+    this.readPaper();
     this.cureOrLiquidate();
     this.push({ kind: 'phase', text: `${this.day.date} ${this.day.label} 开盘` });
   }
@@ -1102,6 +1132,7 @@ export class Game {
     this.energy = this.maxEnergy;
     this.heat = Math.max(this.heatPeak * 0.3, this.heat - 1);
     this.scenario.onNight(this);
+    this.finishPaper();
     this.dealOffer();
   }
 
@@ -1173,6 +1204,70 @@ export class Game {
     }
   }
 
+  /**
+   * 往明早的报纸里塞一篇稿子：明早它就是头条，散户和各方都会读到。
+   * tone 是这篇稿子有多看多（+）或看空（−）。
+   */
+  spin(tone: number, headline: string, by: string): void {
+    // 夜里塞稿：今晚这期还没印完，直接改；盘中塞稿：等收盘付印
+    const paper = this.papers[this.papers.length - 1];
+    if (this.phase === 'night' && paper?.day === this.dayIndex) this.plant(paper, [{ tone, headline, by }]);
+    else this.spins.push({ tone, headline, by });
+  }
+
+  private plant(paper: Paper, spins: { tone: number; headline: string; by: string }[]): void {
+    paper.tone = Math.max(-1, Math.min(1, (paper.tone ?? 0) + spins.reduce((a, x) => a + x.tone, 0)));
+    const top = [...spins].sort((a, b) => Math.abs(b.tone) - Math.abs(a.tone))[0];
+    if (!paper.spun) paper.sub = paper.headline;
+    paper.headline = top.headline;
+    paper.spun = [...(paper.spun ?? []), ...spins.map((x) => x.by)];
+  }
+
+  /** 今晚的报纸付印：算出整体基调；有人塞了稿，头条就换成那篇稿子 */
+  private finishPaper(): void {
+    const paper = this.papers[this.papers.length - 1];
+    if (!paper || paper.day !== this.dayIndex) return;
+    const rc = this.recaps[this.recaps.length - 1];
+    const prev = this.recaps.length > 1 ? this.recaps[this.recaps.length - 2].close : rc ? rc.open : this.market.last;
+    // 当天的涨跌本身就是一种基调：涨了一个标准波动，报纸就偏多三成
+    const organic = rc ? 0.3 * Math.tanh((rc.close - prev) / Math.max(1, this.day.sigma * rc.close)) : 0;
+    paper.tone ??= organic;
+    if (this.spins.length) this.plant(paper, this.spins);
+    this.spins = [];
+  }
+
+  /**
+   * 早上开盘：散户和各方读昨晚的报纸。散户情绪跟着基调走；每个人按自己的风格解读，
+   * 看法攒在 npc.view 里，剧本里的对手用它决定怎么出手。
+   */
+  private readPaper(): void {
+    const paper = this.papers.find((x) => x.day === this.dayIndex - 1);
+    if (!paper?.tone || Math.abs(paper.tone) < 0.05) return;
+    const tone = paper.tone;
+    this.market.sentiment = Math.max(-1, Math.min(1, this.market.sentiment + 0.4 * tone));
+    const lines: string[] = [];
+    const word = tone > 0 ? '看多' : '看空';
+    for (const n of [...this.npcs.values()].sort((a, b) => a.id.localeCompare(b.id))) {
+      const k = STYLE_READ[n.style] ?? 0;
+      if (!k) continue;
+      n.view = Math.max(-1, Math.min(1, 0.5 * (n.view ?? 0) + k * tone));
+      if (Math.abs(k * tone) < 0.15) continue;
+      lines.push(
+        k > 0
+          ? `${n.name}（${n.style}）读完更笃定了：报纸${word}，他也${word}。`
+          : `${n.name}（${n.style}）冷笑：报纸越是一边倒地${word}，他越要站到另一边。`,
+      );
+    }
+    this.addIntel({
+      id: `paper-read-${this.dayIndex}`,
+      title: `早报「${paper.headline.slice(0, 16)}${paper.headline.length > 16 ? '…' : ''}」${word}`,
+      body: [`大户室里人手一份。散户情绪跟着${word}。`, ...lines].join('\n'),
+      source: '早报',
+      credibility: 1,
+      kind: 'news',
+    });
+  }
+
   private endNight(): void {
     if (this.phase !== 'night') return;
     if (this.dayIndex >= this.scenario.days.length - 1) {
@@ -1197,7 +1292,7 @@ export class Game {
     const ex = this.market.ex;
     const parts: (string | number)[] = [this.dayIndex, this.market.t, ex.last, ex.trades.length, this.heat.toFixed(4), this.reputation];
     for (const a of [...ex.accounts.values()].sort((x, y) => x.id.localeCompare(y.id))) parts.push(a.id, a.pos, a.cash.toFixed(2));
-    for (const n of [...this.npcs.values()].sort((x, y) => x.id.localeCompare(y.id))) parts.push(n.id, n.relation);
+    for (const n of [...this.npcs.values()].sort((x, y) => x.id.localeCompare(y.id))) parts.push(n.id, n.relation, Math.round((n.view ?? 0) * 1000));
     parts.push(...this.market.closePrices, ...this.hand, ...this.opts.map((o) => `${optKey(o)}x${o.qty}`), this.dealerHedge);
     let h = 2166136261 >>> 0;
     const s = parts.join('|');

@@ -88,7 +88,8 @@ export function Night({ game, llm, dlg, showMentor, onSleep }: { game: Game; llm
   useEffect(() => {
     setHl(null);
     if (paper) headline(llm, eraOf(game.scenario.eraId), paper, game.day.date).then(setHl);
-  }, [paper, llm, game]);
+    // 夜里塞了稿，头条会变：跟着头条重排
+  }, [paper, paper?.headline, llm, game]);
   const next = game.scenario.days[game.dayIndex + 1];
   const todays = game.intel.filter((i) => i.day === game.dayIndex && i.kind !== 'system' && i.kind !== 'victim' && (showMentor || i.kind !== 'mentor'));
   // 受害者视角：今天的黑色操作，对面是谁
@@ -110,6 +111,7 @@ export function Night({ game, llm, dlg, showMentor, onSleep }: { game: Game; llm
             </div>
             <div className="headline">{hl?.headline ?? paper?.headline}</div>
             <div className="subhead">{hl?.sub ?? paper?.sub}</div>
+            {paper?.spun && <div className="spun-note">这篇头条是你塞进去的。明早散户和各方都会读到它，各按各的风格解读。</div>}
             <div className="engraved-rule" />
             {todays.slice(0, 5).map((i, k) => (
               <p key={k} style={{ fontFamily: 'var(--serif)', margin: '0 0 8px', fontSize: 14 }}>

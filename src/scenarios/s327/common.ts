@@ -68,7 +68,8 @@ export function shenPlan(g: Game): 'blocked' | 'hold' | 'cover' | 'small' | 'dum
   const a = ex.acct(SHORT);
   if (a.closeOnly) return 'blocked';
   if (ex.equity(a) >= ex.marginReq(a.pos)) return 'hold';
-  const d = deter(g, SHORT);
+  // 沈立行是逆向的：报纸越一边倒地看多，他越觉得市场疯了、越不肯认输，交易所的警告也听不进去
+  const d = deter(g, SHORT) + 1.5 * Math.min(0, g.npc('shen')?.view ?? 0);
   if (d >= 4) return 'cover';
   if (d >= 2) return 'small';
   return 'dump';
