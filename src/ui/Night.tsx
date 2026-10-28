@@ -90,7 +90,9 @@ export function Night({ game, llm, dlg, showMentor, onSleep }: { game: Game; llm
     if (paper) headline(llm, eraOf(game.scenario.eraId), paper, game.day.date).then(setHl);
   }, [paper, llm, game]);
   const next = game.scenario.days[game.dayIndex + 1];
-  const todays = game.intel.filter((i) => i.day === game.dayIndex && i.kind !== 'system' && (showMentor || i.kind !== 'mentor'));
+  const todays = game.intel.filter((i) => i.day === game.dayIndex && i.kind !== 'system' && i.kind !== 'victim' && (showMentor || i.kind !== 'mentor'));
+  // 受害者视角：今天的黑色操作，对面是谁
+  const letters = game.intel.filter((i) => i.day === game.dayIndex && i.kind === 'victim');
   return (
     <div className="night">
       <div className="night-inner">
@@ -118,6 +120,13 @@ export function Night({ game, llm, dlg, showMentor, onSleep }: { game: Game; llm
             {todays.length === 0 && <p style={{ fontFamily: 'var(--serif)' }}>今日市况平稳，多空双方各执一词。</p>}
             <div style={{ fontSize: 11, color: 'var(--ink-soft)', marginTop: 8 }}>{hl?.source === 'llm' ? '标题由模型按当年腔调改写，数字取自引擎' : '标题由引擎生成'}</div>
           </div>
+          {letters.map((l) => (
+            <div key={l.id} className="victim-letter paper">
+              <div className="victim-from">{l.title}</div>
+              <p>{l.body}</p>
+              <div className="victim-sign">—— {l.source}</div>
+            </div>
+          ))}
         </div>
         <div>
           <div className="seg" style={{ marginBottom: 10 }}>

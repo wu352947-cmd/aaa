@@ -8,6 +8,7 @@ const KIND: Record<Intel['kind'], [string, string]> = {
   clue: ['线索', 'clue'],
   mentor: ['老周', 'mentor'],
   system: ['笔记', ''],
+  victim: ['来信', 'victim'],
 };
 
 export function IntelList({ game, showMentor }: { game: Game; showMentor: boolean }) {

@@ -1,3 +1,4 @@
+import { victimGme } from './victims';
 import { fmtYi, newAccount } from '../../engine/exchange';
 import { addCrowdFlow, crowdFlowOrders } from '../../engine/flows';
 import type { CardDef, CardResult, DialogueIntent, Ending, ExchangeOffer, Game, Meter, Scenario, SocialOutcome } from '../../engine/game';
@@ -102,6 +103,7 @@ export const GME: Scenario = {
   lotPresets: [1_000_000, 5_000_000],
   groupName: (g, who) => groupName(g, who),
   cards: (g) => gmeCards(g),
+  victim: victimGme,
   playCard: (g, id, target) => (id.startsWith('x-') ? gmeDraftPlay(g, id) : id.startsWith('mm-') ? mmPlay(g, id, target)! : gmePlay(g, id, target)),
   meters: (g) => (g.factionId === 'broker' ? brokerMeters(g) : isMm(g) ? mmMeters(g) : undefined),
   clocks: (g) => (isMm(g) ? [mmClock(g), ...gmeClocks(g, requirement)] : gmeClocks(g, requirement)),

@@ -34,6 +34,7 @@ import {
 import { BATTLE, DAYS, DECK_1995, FACTIONS, NPCS, OFFICIAL_CLOSE, PARAMS, PRINCIPLES, PROLOGUE, RULE_CARDS, SOURCES, START_PRICE } from './data';
 import { draftPlay, DRAFT_327 } from './draft';
 import { deliveryCards, deliveryPlay, deliverySettle, spotNight, spotValue } from './delivery';
+import { victim327 } from './victims';
 import { roomDayEnd, roomDecide, roomTick, zhouCall } from './room';
 import { directivesAt, directivesMorning, fileAudit, makeAudit, s327Clocks, s327Directives, s327Docs } from './plans';
 import { ally, breakLock, exchange, offers, probe, report, stance, type Out } from './social';
@@ -448,6 +449,7 @@ export const S327: Scenario = {
   },
 
   offers,
+  victim: victim327,
 
   social(g, verb, npcId, option) {
     const n = g.npc(npcId)!;
@@ -488,6 +490,7 @@ export const S327: Scenario = {
         g.addPlanFromScript({ label: '止损：平掉一半空单', cond: 'now', price: 0, side: 'buy', qty: Math.round(Math.abs(p.pos) / 2), spread: 10 });
         break;
       case 'after-flip:press':
+        g.darkDeed('press', '加空打压');
         g.addPlanFromScript({ label: '加空打压', cond: 'now', price: 0, side: 'sell', qty: 1_500_000, spread: 5, overdraw: true });
         break;
       case 'last-eight:cover':
@@ -497,6 +500,7 @@ export const S327: Scenario = {
       case 'last-eight:dump':
         g.addPlanFromScript({ label: '最后八分钟', cond: 'at', price: mi('16:22'), side: 'sell', qty: 10_400_000, spread: 8, overdraw: true });
         g.flags.playerDump = true;
+        g.darkDeed('dump', '最后八分钟');
         break;
       case 'defend:defend': {
         const room = g.market.ex.limitOf(p) - p.pos;
@@ -526,6 +530,7 @@ export const S327: Scenario = {
       case 'ruling:void':
       case 'ruling:valid':
         g.flags.ruling = choice;
+        if (choice === 'valid') g.darkDeed('valid-ruling', '承认违规成交有效');
         break;
       case 'ruling:precise':
         g.flags.ruling = choice;
@@ -730,6 +735,7 @@ function orderDrift(g: Game) {
 function insider(g: Game) {
   if (flag(g, 'insider')) return;
   g.flags.insider = true;
+  g.darkDeed('insider', '利用未公开消息交易');
   g.addHeat(18, '利用未公开信息交易');
   g.push({ kind: 'rule', rule: 'insider', text: '你在消息公开前加仓：交易记录可被追溯' });
   if (g.principleId === 'no-violation') g.crossLine('利用未公开消息交易');

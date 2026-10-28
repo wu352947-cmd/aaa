@@ -78,12 +78,28 @@ export interface Intel {
   source: string;
   /** 隐藏可信度 0–1，玩家看不到 */
   credibility: number;
-  kind: 'news' | 'rumor' | 'evidence' | 'clue' | 'mentor' | 'system';
+  kind: 'news' | 'rumor' | 'evidence' | 'clue' | 'mentor' | 'system' | 'victim';
   /** 可用于“告发”的证据所指向的 NPC */
   against?: string;
   /** 消息树：这条消息从源头到你经过的每一环；altered 表示在这一环被改动或编造 */
   chain?: { who: string; said: string; altered?: boolean }[];
   read?: boolean;
+}
+
+/** 一次黑色操作：黑牌、违规成交、被监察抓到的对倒与虚假申报、剧本里危险的抉择 */
+export interface DarkDeed {
+  /** 'card' | 'overdraw' | 'wash-trade' | 'spoofing' | 'marking-close' | 剧本自定的 id */
+  cause: string;
+  /** 给玩家看的名字，例如牌名 */
+  label: string;
+  day: number;
+}
+
+/** 受害者视角：一封信、一条爆仓消息 */
+export interface Victim {
+  from: string;
+  title: string;
+  body: string;
 }
 
 export interface Alliance {
@@ -277,6 +293,8 @@ export interface Ending {
 }
 
 export interface Scenario {
+  /** 受害者视角：每次黑色操作之后，那一头是谁、丢了什么（设计文档 6.4） */
+  victim?(g: Game, deed: DarkDeed): Victim | null;
   id: string;
   title: string;
   subtitle: string;
@@ -476,6 +494,8 @@ export class Game {
   /** 每晚的报纸头条（引擎给事实，台词层负责措辞） */
   papers: { day: number; headline: string; sub: string; facts: string[] }[] = [];
   /** 打过的行动卡与结算结果 */
+  /** 所有黑色操作，按发生顺序 */
+  darkDeeds: DarkDeed[] = [];
   cardLog: { day: number; time: string; id: string; name: string; target?: string; result: CardResult }[] = [];
   /** 手牌：每晚选来的一次性卡 */
   hand: string[] = [];
@@ -679,6 +699,7 @@ export class Game {
         const result = this.scenario.playCard(this, action.id, action.target);
         this.hand = this.hand.filter((x) => x !== action.id);
         this.logCard(card, result, action.target);
+        if (card.color === 'black' && result.ok) this.darkDeed('card', card.name);
         this.markOptions();
         return null;
       }
@@ -837,6 +858,7 @@ export class Game {
       if (h.owner !== this.player.id) continue;
       this.push({ kind: 'rule', rule: h.blocked ? h.rule : 'overdraw', blocked: h.blocked, text: (h.blocked ? '委托被挡下：' : '违规成交：') + h.detail });
       if (!h.blocked) {
+        this.darkDeed('overdraw', '超额透支下单');
         if (h.rule === 'margin') this.addHeat(6, '超额透支下单');
         if (h.rule === 'position-limit') this.addHeat(5, '超出持仓限额');
         if (this.principleId === 'no-violation' && !this.flags['line-violation-' + this.dayIndex]) {
@@ -1038,6 +1060,8 @@ export class Game {
       parts: [...groups.entries()].map(([who, v]) => ({ who, ...v })).sort((a, b) => Math.abs(b.move) - Math.abs(a.move)),
       notes: [],
     });
+    // 今天的黑色操作，对面是谁：最后一天也要写，结局页会列出来
+    this.writeLetters();
 
     const ex = m.ex;
     // 借来的钱按天计息：券商的融资、场外的配资
@@ -1106,11 +1130,33 @@ export class Game {
       this.addHeat(f.heat, f.why);
       this.flags[`surveil-${f.rule}`] = ((this.flags[`surveil-${f.rule}`] as number) || 0) + 1;
       this.push({ kind: 'rule', rule: f.rule, blocked: false, text: f.text });
+      this.darkDeed(f.rule, f.why);
       if (this.principleId === 'no-violation' && !this.flags[`line-${f.rule}-${this.dayIndex}`]) {
         this.flags[`line-${f.rule}-${this.dayIndex}`] = true;
         this.crossLine(f.why);
       }
     }
+  }
+
+  /**
+   * 记下一次黑色操作。盘中的攒到收盘一起写信；夜里打出的黑牌当晚就有回音。
+   * 同一天同一种原因只记一次。
+   */
+  darkDeed(cause: string, label: string): void {
+    if (this.faction.observer && cause === 'overdraw') return;
+    if (this.darkDeeds.some((d) => d.day === this.dayIndex && d.cause === cause && d.label === label)) return;
+    this.darkDeeds.push({ cause, label, day: this.dayIndex });
+    if (this.phase === 'night') this.writeLetters();
+  }
+
+  /** 把还没回音的黑色操作写成受害者的信（每天最多两封） */
+  private writeLetters(): void {
+    const today = this.darkDeeds.filter((d) => d.day === this.dayIndex);
+    const sent = this.intel.filter((i) => i.kind === 'victim' && i.day === this.dayIndex).length;
+    today.slice(sent, 2).forEach((d, k) => {
+      const v = this.scenario.victim?.(this, d);
+      if (v) this.addIntel({ id: `victim-${this.dayIndex}-${sent + k}`, title: v.title, body: v.body, source: v.from, credibility: 1, kind: 'victim' });
+    });
   }
 
   private endNight(): void {

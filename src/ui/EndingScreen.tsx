@@ -13,6 +13,7 @@ const QUAD: [string, string][] = [
 ];
 
 export function EndingScreen({ game, onAgain, onTitle }: { game: Game; onAgain: () => void; onTitle: () => void }) {
+  const letters = game.intel.filter((i) => i.kind === 'victim').reverse();
   const e = game.ending!;
   return (
     <div className="ending" style={{ background: '#0b0c10' }}>
@@ -62,6 +63,17 @@ export function EndingScreen({ game, onAgain, onTitle }: { game: Game; onAgain: 
                   </b>
                 </div>
               </div>
+              {letters.length > 0 && (
+                <div className="victim-list">
+                  <h4>这一局，对面的人（{letters.length} 封信）</h4>
+                  {letters.map((l) => (
+                    <p key={l.id}>
+                      <b>{l.title}</b>
+                      <span className="faint">（{game.scenario.days[l.day]?.date.slice(5)}）</span>：{l.body.split('\n\n')[1] ?? l.body}
+                    </p>
+                  ))}
+                </div>
+              )}
             </div>
             <div className="history-col">
               <h4>历史上的这一天</h4>
