@@ -36,6 +36,7 @@ import { draftPlay, DRAFT_327 } from './draft';
 import { deliveryCards, deliveryPlay, deliverySettle, spotNight, spotValue } from './delivery';
 import { victim327 } from './victims';
 import { holidayNight, JAN_NET, januaryDecide, januaryNight, januaryTick } from './january';
+import { seatPuzzle, solveSeats } from './seats';
 import { capitalActor, forced, mofDecide, mofScore, newsLine, newWorld, VERDICTS, verdict, worldClose, worldNight, worldOpen } from './world';
 import { roomDayEnd, roomDecide, roomTick, zhouCall } from './room';
 import { directivesAt, directivesMorning, fileAudit, makeAudit, s327Clocks, s327Directives, s327Docs } from './plans';
@@ -498,6 +499,8 @@ export const S327: Scenario = {
 
   offers,
   victim: victim327,
+  puzzle: (g) => seatPuzzle(g),
+  solvePuzzle: (g, _id, answers) => solveSeats(g, answers),
 
   social(g, verb, npcId, option) {
     const n = g.npc(npcId)!;

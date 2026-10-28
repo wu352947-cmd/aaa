@@ -355,7 +355,34 @@ export interface Ending {
   ruled: string;
 }
 
+/**
+ * 夜里的推理：对着证据（比如各席位逐日的净买卖）回答几个问题。
+ * 每试一次花 1 点精力，只告诉你对了几个，不告诉你哪几个对了。
+ */
+export interface Puzzle {
+  id: string;
+  title: string;
+  intro: string;
+  /** 证据表：表头 + 每行 */
+  evidence: { head: string[]; rows: string[][]; note?: string };
+  questions: { id: string; label: string; options: { id: string; label: string }[] }[];
+  /** 解开之后能拿到什么 */
+  reward: string;
+  solved: boolean;
+}
+
+export interface PuzzleResult {
+  right: number;
+  total: number;
+  solved: boolean;
+  text: string[];
+}
+
 export interface Scenario {
+  /** 夜里可以做的推理（没有就是 null） */
+  puzzle?(g: Game): Puzzle | null;
+  /** 交卷：返回对了几个；解开时由剧本发放奖励 */
+  solvePuzzle?(g: Game, id: string, answers: Record<string, string>): PuzzleResult;
   /** 分章：每章到哪一天（真实下标）为止。章末那一晚有一张小结 */
   chapters?: Chapter[];
   /** 股东名册：控制权之争里谁手里有多少票（持股比例 0–1） */
@@ -497,6 +524,7 @@ export type PlayerAction =
   | { type: 'credit'; op: 'take' | 'repay'; amount: number }
   | { type: 'option'; side: 'buy' | 'sell'; kind: OptKind; strike: Fen; expiry: string; qty: number }
   | { type: 'doc'; id: string; marks: Record<string, string> }
+  | { type: 'puzzle'; id: string; answers: Record<string, string> }
   | { type: 'end-night' };
 
 export interface LoggedAction {
@@ -560,6 +588,8 @@ export class Game {
   /** 收盘时的权益曲线（元） */
   equityCurve: number[] = [];
   marginCall = false;
+  /** 每个推理题交过的卷（界面显示“对了几个”） */
+  puzzleTries: Record<string, PuzzleResult[]> = {};
   bankrupt = false;
   tape: { day: number; time: string; seat: string; side: Side; qty: number; price: Fen }[] = [];
   /** 每晚的报纸头条（引擎给事实，台词层负责措辞） */
@@ -767,6 +797,15 @@ export class Game {
       case 'plan-remove':
         this.plans = this.plans.filter((p) => p.id !== action.id);
         return null;
+      case 'puzzle': {
+        const pz = this.scenario.puzzle?.(this);
+        if (this.phase !== 'night' || this.energy <= 0 || !pz || pz.id !== action.id || pz.solved || !this.scenario.solvePuzzle) return null;
+        this.energy--;
+        const r = this.scenario.solvePuzzle(this, action.id, action.answers);
+        this.puzzleTries[action.id] = [...(this.puzzleTries[action.id] ?? []), r];
+        this.push({ kind: 'intel', text: r.solved ? `推理：${pz.title}——全对` : `推理：${pz.title}——对了 ${r.right} / ${r.total}` });
+        return null;
+      }
       case 'social': {
         if (this.energy <= 0) return null;
         this.energy--;

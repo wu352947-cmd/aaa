@@ -85,7 +85,8 @@ export function Night({ game, llm, dlg, showMentor, onSleep }: { game: Game; llm
   const clocks = game.scenario.clocks?.(game) ?? [];
   const dirs = game.scenario.directives?.(game) ?? [];
   const era = eraOfScenario(game.scenario.id);
-  const [tab, setTab] = useState<'recap' | 'people' | 'intel' | 'cards' | 'plans' | 'docs'>((game.isAftermath || game.isHalted) && hasCards ? 'cards' : 'recap');
+  const puzzle = game.scenario.puzzle?.(game) ?? null;
+  const [tab, setTab] = useState<'recap' | 'people' | 'intel' | 'cards' | 'plans' | 'docs' | 'puzzle'>((game.isAftermath || game.isHalted) && hasCards ? 'cards' : 'recap');
   useEffect(() => {
     setHl(null);
     if (paper) headline(llm, eraOf(game.scenario.eraId), paper, game.day.date).then(setHl);
@@ -152,6 +153,11 @@ export function Night({ game, llm, dlg, showMentor, onSleep }: { game: Game; llm
                 手段
               </button>
             )}
+            {puzzle && (
+              <button className={cls(tab === 'puzzle' && 'on')} onClick={() => setTab('puzzle')}>
+                推理{!puzzle.solved && <span className="badge-dot" />}
+              </button>
+            )}
             <button className={cls(tab === 'people' && 'on')} onClick={() => setTab('people')}>
               人脉（{game.energy} 点精力）
             </button>
@@ -204,6 +210,17 @@ export function Night({ game, llm, dlg, showMentor, onSleep }: { game: Game; llm
           {tab === 'cards' && (
             <div className="recap">
               <CardsBody game={game} onPlayed={() => bump((x) => x + 1)} />
+            </div>
+          )}
+          {tab === 'puzzle' && puzzle && (
+            <div className="recap">
+              <PuzzleView
+                game={game}
+                onTry={(answers) => {
+                  game.act({ type: 'puzzle', id: puzzle.id, answers });
+                  bump((x) => x + 1);
+                }}
+              />
             </div>
           )}
           {tab === 'people' && (
@@ -261,6 +278,74 @@ function ChapterEnd({ game }: { game: Game }) {
       {next && (
         <p className="chapter-next">
           下一章：<b>{next.title}</b>——{next.sub}
+        </p>
+      )}
+    </div>
+  );
+}
+
+/** 夜里的推理：证据表 + 几道选择题。交一次卷花 1 点精力，只告诉你对了几个 */
+function PuzzleView({ game, onTry }: { game: Game; onTry: (answers: Record<string, string>) => void }) {
+  const pz = game.scenario.puzzle?.(game);
+  const [ans, setAns] = useState<Record<string, string>>({});
+  if (!pz) return null;
+  const tries = game.puzzleTries[pz.id] ?? [];
+  const last = tries[tries.length - 1];
+  const ready = pz.questions.every((q) => ans[q.id]);
+  return (
+    <div className="puzzle">
+      <h3>{pz.title}</h3>
+      <p style={{ fontSize: 13 }}>{pz.intro}</p>
+      <div className="puzzle-table-wrap">
+        <table className="puzzle-table">
+          <thead>
+            <tr>
+              {pz.evidence.head.map((h) => (
+                <th key={h}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {pz.evidence.rows.map((r, i) => (
+              <tr key={i}>
+                {r.map((c, j) => (
+                  <td key={j} className={cls(j > 0 && 'num', c.startsWith('+') && 'up', c.startsWith('−') && 'down')}>
+                    {c}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {pz.evidence.note && <p className="faint" style={{ fontSize: 12 }}>{pz.evidence.note}</p>}
+      {pz.solved ? (
+        <p className="up" style={{ fontSize: 13 }}>
+          已经推出来了。{pz.reward}
+        </p>
+      ) : (
+        <>
+          {pz.questions.map((q) => (
+            <div key={q.id} className="puzzle-q">
+              <span>{q.label}</span>
+              <div className="seg">
+                {q.options.map((o) => (
+                  <button key={o.id} className={cls(ans[q.id] === o.id && 'on')} onClick={() => setAns({ ...ans, [q.id]: o.id })}>
+                    {o.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ))}
+          <p className="faint" style={{ fontSize: 12 }}>推对了：{pz.reward}</p>
+          <button className="btn primary" disabled={!ready || game.energy <= 0} onClick={() => onTry(ans)}>
+            {game.energy <= 0 ? '精力用完了' : '就是这样（1 点精力）'}
+          </button>
+        </>
+      )}
+      {last && !last.solved && (
+        <p style={{ fontSize: 13, marginTop: 8 }}>
+          第 {tries.length} 次：对了 {last.right} / {last.total}。{tries.length > 1 && `之前：${tries.slice(0, -1).map((t) => t.right).join('、')}。`}
         </p>
       )}
     </div>
