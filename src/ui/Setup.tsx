@@ -32,7 +32,13 @@ export function Setup({ scenario, onBegin, onBack }: { scenario: Scenario; onBeg
     <div className="setup paper">
       <div className="setup-inner">
         <div className="scene-frame">
-          {scenario.id === 'gme2021' ? <PixelScene scene="room" state={{ heat: 0.5 }} label="2021 年，纽约" /> : <PixelScene scene="floor" state={{ heat: 0.5 }} label="1995 年，上海" />}
+          {scenario.id === 'gme2021' ? (
+            <PixelScene scene="room" state={{ heat: 0.5 }} label="2021 年，纽约" />
+          ) : scenario.id === 'takeover2015' ? (
+            <PixelScene scene="board" state={{ heat: 0.4, who: ['ye', 'fu', 'wang', 'yu'] }} label="2015 年，深圳" />
+          ) : (
+            <PixelScene scene="floor" state={{ heat: 0.5 }} label="1995 年，上海" />
+          )}
         </div>
         <div className="muted" style={{ color: 'var(--ink-soft)', letterSpacing: '0.3em', fontSize: 12 }}>
           序 幕

@@ -7,8 +7,8 @@ import type { Bar, Fen, OrderReq, RuleHit, Trade } from './types';
 export interface DayDef {
   date: string;
   label: string;
-  /** layout 布局期；battle 决战日；aftermath 余波（不开盘，只有夜晚） */
-  kind: 'layout' | 'battle' | 'aftermath';
+  /** layout 布局期；battle 决战日；aftermath 余波（不开盘，只有夜晚）；halt 停牌（剧本中途不开盘的日子，只有夜晚） */
+  kind: 'layout' | 'battle' | 'aftermath' | 'halt';
   /** 每分钟真实历史价（分），长度 = 交易分钟数 */
   hist: Fen[];
   /** 做市商的估值中枢（“历史引力”指向的位置）；为空时等于 hist */

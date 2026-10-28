@@ -15,7 +15,7 @@ import { PlanBook } from './PlanBook';
 import { ClocksCard, DirectivesCard } from './Plans';
 import { eraOfScenario } from '../pixel/palettes';
 import { saveGame } from './save';
-import { MembersCard, OrderBookCard, PositionCard, StakeCard, TapeCard } from './SidePanels';
+import { HoldersCard, MembersCard, OrderBookCard, PositionCard, StakeCard, TapeCard } from './SidePanels';
 import { sound } from './sound';
 import { canUndo, countdownScale, difficultyName, LAYERS, tutorialLayer, undoDay } from './tutorial';
 
@@ -409,7 +409,8 @@ export function GameScreen({ game, llm, ui, onSettings, onEnd, onReplace }: { ga
           {paused && game.phase === 'trading' && <div className="pause-veil">已暂停 · 按空格继续</div>}
         </div>
         <div className="side">
-          {observer ? <MembersCard game={game} /> : <PositionCard game={game} layer={layer} />}
+          {observer ? game.scenario.holders ? <HoldersCard game={game} /> : <MembersCard game={game} /> : <PositionCard game={game} layer={layer} />}
+          {!observer && game.scenario.holders && <HoldersCard game={game} />}
           <DirectivesCard dirs={(game.scenario.directives?.(game) ?? []).filter((d) => d.status === 'open')} era={eraOfScenario(game.scenario.id)} names={(id) => game.npc(id)?.name ?? id} />
           <ClocksCard clocks={game.scenario.clocks?.(game) ?? []} era={eraOfScenario(game.scenario.id)} />
           {observer && <StakeCard game={game} />}
@@ -496,9 +497,10 @@ function SceneStrip({ game, paused, redUp }: { game: Game; paused: boolean; redU
   const move = recent.length > 1 ? recent[recent.length - 1].c - recent[0].o : 0;
   const dir: SceneState['dir'] = Math.abs(move) < m.last * 0.0005 ? 0 : move > 0 ? 1 : -1;
   const gme = game.scenario.id === 'gme2021';
-  // 做市商和做空基金坐在交易台前，散户和券商 CEO 在自己的房间里
+  const board = game.scenario.id === 'takeover2015';
+  // 做市商和做空基金坐在交易台前，散户和券商 CEO 在自己的房间里；举牌之争在会议室里
   const desk = gme && (game.factionId === 'mm' || game.factionId === 'short');
-  const scene: SceneId = desk ? 'desk' : gme ? 'room' : 'floor';
+  const scene: SceneId = board ? 'board' : desk ? 'desk' : gme ? 'room' : 'floor';
   // 走势的形状：只取 24 个点，不带数字
   const step = Math.max(1, Math.floor(bars.length / 24));
   const shape = bars.filter((_, i) => i % step === 0).map((b) => b.c);
@@ -509,10 +511,11 @@ function SceneStrip({ game, paused, redUp }: { game: Game; paused: boolean; redU
     climax: game.isBattleDay,
     restricted: !!game.flags.restrictActive,
     redUp,
-    shape: gme ? shape.slice(-24) : undefined,
+    shape: gme || board ? shape.slice(-24) : undefined,
+    who: board ? ['ye', 'fu', 'wang', 'yu'] : undefined,
     faded: Math.min(0.7, game.linesCrossed * 0.2),
   };
-  const cap = desk ? `纽约 · ${game.factionId === 'mm' ? '堡垒集团交易台' : '灰狼资本交易室'}${state.halted ? ' · 暂停' : ''}` : gme ? '纽约 · 一间卧室' : `上海 · 交易大厅${state.halted ? ' · 停市' : game.isBattleDay ? ' · 决战日' : ''}`;
+  const cap = board ? `深圳 · 万川总部会议室${game.isBattleDay ? ' · 复牌' : ''}` : desk ? `纽约 · ${game.factionId === 'mm' ? '堡垒集团交易台' : '灰狼资本交易室'}${state.halted ? ' · 暂停' : ''}` : gme ? '纽约 · 一间卧室' : `上海 · 交易大厅${state.halted ? ' · 停市' : game.isBattleDay ? ' · 决战日' : ''}`;
   return (
     <div className="scene-strip">
       <PixelScene scene={scene} state={state} label={cap} fit />

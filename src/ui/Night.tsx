@@ -84,7 +84,7 @@ export function Night({ game, llm, dlg, showMentor, onSleep }: { game: Game; llm
   const clocks = game.scenario.clocks?.(game) ?? [];
   const dirs = game.scenario.directives?.(game) ?? [];
   const era = eraOfScenario(game.scenario.id);
-  const [tab, setTab] = useState<'recap' | 'people' | 'intel' | 'cards' | 'plans' | 'docs'>(game.isAftermath && hasCards ? 'cards' : 'recap');
+  const [tab, setTab] = useState<'recap' | 'people' | 'intel' | 'cards' | 'plans' | 'docs'>((game.isAftermath || game.isHalted) && hasCards ? 'cards' : 'recap');
   useEffect(() => {
     setHl(null);
     if (paper) headline(llm, eraOf(game.scenario.eraId), paper, game.day.date).then(setHl);
@@ -220,7 +220,7 @@ export function Night({ game, llm, dlg, showMentor, onSleep }: { game: Game; llm
             {next ? `明天：${next.date} ${next.label}` : '这是最后一夜。'}
           </span>
           <button className="btn primary" onClick={onSleep}>
-            {!next ? '收场 →' : next.kind === 'aftermath' ? '熄灯，等明天 →' : '熄灯，等明天开盘 →'}
+            {!next ? '收场 →' : next.kind === 'aftermath' || next.kind === 'halt' ? '熄灯，等明天 →' : '熄灯，等明天开盘 →'}
           </button>
         </div>
       </div>

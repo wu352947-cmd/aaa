@@ -53,6 +53,8 @@ export interface Account {
   violations: number;
   /** 券商限制：只允许平仓 */
   closeOnly?: boolean;
+  /** 剧本规定的暂停加仓（例如举牌后的冷静期）：只许减仓，挡下时用这里的规则与说明 */
+  freeze?: { rule: string; detail: string };
   /** 可借券上限（股）：卖空超过它会被挡下；不设表示不限 */
   borrowLimit?: number;
   /** 本账户的持仓限额（借壳分仓、监管限仓时与卡组不同）；不设表示按卡组 */
@@ -161,6 +163,10 @@ export class Exchange {
     if (!increases) return hits;
     if (a.closeOnly) {
       hits.push({ rule: 'close-only', owner: a.id, blocked: true, detail: '券商暂停了这只股票的买入，只允许卖出已有持仓' });
+      return hits;
+    }
+    if (a.freeze) {
+      hits.push({ rule: a.freeze.rule, owner: a.id, blocked: true, detail: a.freeze.detail });
       return hits;
     }
     if (newPos < 0 && a.borrowLimit != null && -newPos > a.borrowLimit) {

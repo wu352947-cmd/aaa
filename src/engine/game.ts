@@ -337,6 +337,10 @@ export interface Ending {
 }
 
 export interface Scenario {
+  /** 股东名册：控制权之争里谁手里有多少票（持股比例 0–1） */
+  holders?(g: Game): { id: string; name: string; pct: number; note?: string; you?: boolean }[];
+  /** 今晚过后是第几天（默认明天）；只能往后跳 */
+  nextDay?(g: Game): number | undefined;
   /** 受害者视角：每次黑色操作之后，那一头是谁、丢了什么（设计文档 6.4） */
   victim?(g: Game, deed: DarkDeed): Victim | null;
   id: string;
@@ -609,6 +613,10 @@ export class Game {
   /** 余波：决战之后不再开盘的日子，只有夜晚 */
   get isAftermath(): boolean {
     return this.day.kind === 'aftermath';
+  }
+  /** 停牌：剧本中途不开盘的日子，只有夜晚（谈判、董事会、股东大会） */
+  get isHalted(): boolean {
+    return this.day.kind === 'halt';
   }
 
   /** 当前能打出的行动卡（含被挡住的，供界面显示原因） */
@@ -925,7 +933,7 @@ export class Game {
 
   private startDay(): void {
     this.energy = this.maxEnergy;
-    if (this.isAftermath) {
+    if (this.isAftermath || this.isHalted) {
       // 余波：市场不再开盘，直接进入夜晚
       this.phase = 'night';
       this.scenario.onDayStart(this);
@@ -1295,7 +1303,8 @@ export class Game {
     }
     // 没选的牌不留到明天
     this.offer = null;
-    this.dayIndex++;
+    // 剧本可以跳过一些日子（例如公司停牌，后面几个交易日就不开盘了）
+    this.dayIndex = Math.max(this.dayIndex + 1, Math.min(this.scenario.days.length - 1, this.scenario.nextDay?.(this) ?? this.dayIndex + 1));
     this.startDay();
   }
 

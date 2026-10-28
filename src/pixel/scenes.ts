@@ -31,7 +31,7 @@ export interface SceneState {
   redUp?: boolean;
 }
 
-export type SceneId = 'tavern' | 'floor' | 'room' | 'desk' | 'study' | 'chamber';
+export type SceneId = 'tavern' | 'floor' | 'room' | 'desk' | 'study' | 'chamber' | 'board';
 export const SCENE_SIZE = { w: 320, h: 96 };
 
 const WHITE = hex('#f2ece0');
@@ -674,6 +674,91 @@ function chamber(p: Pix, t: number, s: SceneState) {
   p.engrave(pal.ink, 0.3);
 }
 
+// ───────────── 2015：深圳的会议室 ─────────────
+
+/**
+ * 落地窗外是深圳的天际线，墙上的屏幕只画股价的形状（停牌时是一片灰），
+ * 胡桃木长桌后坐着这一局里在场的人：左边是收购方，右边是管理层，中间是大股东。
+ */
+function board2015(p: Pix, t: number, s: SceneState) {
+  const pal = PALETTES['2015'];
+  const { w, h } = p;
+  const frame = Math.floor(t / 2);
+  const heat = Math.max(0, Math.min(1, s.heat ?? 0.3));
+  const up = s.redUp ? pal.accent2 : hex('#3fb27f');
+  const down = s.redUp ? hex('#3fb27f') : pal.accent2;
+  p.vgrad(0, 0, w, 64, mix(pal.deep, pal.dark, 0.4), pal.deep);
+  // 落地窗：天际线（夜里亮着灯，白天是灰蓝的天）
+  const wx = 8;
+  const ww = 150;
+  p.rect(wx - 2, 4, ww + 4, 52, mix(pal.mid, pal.ink, 0.5));
+  if (s.night) p.vgrad(wx, 6, ww, 48, hex('#060a10'), hex('#1a2a3a'));
+  else p.vgrad(wx, 6, ww, 48, hex('#8fb0c0'), hex('#d8e2e0'));
+  for (let i = 0; i < 18; i++) {
+    const bx = wx + i * 8 + Math.floor(noise(i, 21) * 3);
+    const tall = i === 9;
+    const bh = tall ? 46 : 10 + Math.floor(noise(i, 22) * 28);
+    const c = s.night ? hex('#0a1016') : mix(pal.mid, hex('#c8d4d8'), 0.35 + noise(i, 23) * 0.2);
+    p.rect(bx, 54 - bh, tall ? 6 : 7, bh, c);
+    if (tall) p.vline(bx + 3, 54 - bh - 6, 54 - bh, c);
+    if (s.night) for (let y = 54 - bh + 2; y < 52; y += 3) for (let x = bx + 1; x < bx + 6; x += 2) if (noise(x, y, Math.floor(t / 40)) < 0.3) p.set(x, y, mix(pal.glow, pal.accent, noise(x, y, 3)));
+  }
+  for (const x of [wx + 50, wx + 100]) p.vline(x, 6, 53, mix(pal.mid, pal.ink, 0.4));
+  // 墙上的屏幕：股价的形状
+  const sx = 176;
+  const sy = 8;
+  const sw = 132;
+  const sh = 36;
+  p.rect(sx - 2, sy - 2, sw + 4, sh + 4, hex('#0a0e10'));
+  p.rect(sx, sy, sw, sh, hex('#05090b'));
+  if (s.halted) {
+    // 停牌：屏幕上只有一片灰色的横纹
+    for (let y = sy + 4; y < sy + sh - 2; y += 4) p.hline(sx + 4, sx + sw - 5, y, mix(pal.mid, hex('#05090b'), 0.55));
+  } else {
+    const shape = s.shape && s.shape.length > 1 ? s.shape : Array.from({ length: 24 }, (_, i) => 0.5 + 0.3 * Math.sin(i / 3 + t / 12));
+    const lo = Math.min(...shape);
+    const hi = Math.max(...shape);
+    const c = s.dir === -1 ? down : up;
+    let x0 = -1;
+    let y0 = -1;
+    for (let i = 0; i < shape.length; i++) {
+      const x = sx + 4 + Math.round((i / (shape.length - 1)) * (sw - 8));
+      const y = sy + sh - 5 - Math.round(((shape[i] - lo) / Math.max(1e-9, hi - lo)) * (sh - 10));
+      if (x0 >= 0) p.line(x0, y0, x, y, c);
+      x0 = x;
+      y0 = y;
+    }
+    p.glow(sx + sw / 2, sy + sh / 2, 50, c, 0.12 + heat * 0.12);
+  }
+  // 墙角的绿植和烫金的公司标志（只是几道金线）
+  p.rect(166, 46, 6, 10, hex('#2a4a2a'));
+  p.sprite(164, 38, ['..g.g..', '.ggggg.', 'ggggggg', '.ggggg.'], { g: hex('#3a6a3a') });
+  p.hline(sx + 50, sx + 82, 50, pal.accent);
+  p.hline(sx + 56, sx + 76, 52, pal.accent);
+  // 坐在桌后的人
+  const who = s.who ?? [];
+  const n = who.length;
+  who.forEach((id, i) => {
+    const x = Math.round(30 + (i + 0.5) * ((w - 60) / Math.max(1, n)) - 6);
+    bust(p, x, 42, lookFor(id, '2015'), t + i * 5, s.climax && noise(i, frame) < 0.2 ? 1 : 0);
+  });
+  // 胡桃木长桌：文件、水杯、桌牌
+  p.rect(10, 60, w - 20, 6, hex('#4a2e1c'));
+  p.hline(10, w - 11, 60, hex('#6a4428'));
+  p.rect(10, 66, w - 20, 3, hex('#2e1c10'));
+  for (let i = 0; i < n; i++) {
+    const x = Math.round(30 + (i + 0.5) * ((w - 60) / Math.max(1, n)));
+    p.rect(x - 6, 57, 9, 3, pal.paper);
+    if (noise(i, frame + 3) < heat * 0.6) p.rect(x - 5, 56, 7, 1, pal.paper);
+    p.rect(x + 5, 56, 2, 4, mix(pal.light, hex('#ffffff'), 0.4));
+  }
+  // 地毯
+  p.vgrad(0, 69, w, h - 69, mix(pal.deep, pal.ink, 0.4), pal.ink);
+  for (let x = 0; x < w; x += 16) p.vline(x, 70, h - 1, mix(pal.deep, pal.ink, 0.6));
+  if (s.night) p.darken(0.2, pal.ink);
+  p.engrave(pal.ink, 0.2);
+}
+
 /** 把 320 宽的构图放在中间，两侧按最边上一列的颜色延展（墙与地板本来就是横向均匀的） */
 function widen(p: Pix, draw: (q: Pix) => void) {
   if (p.w === SCENE_SIZE.w) return draw(p);
@@ -720,6 +805,9 @@ export function drawScene(p: Pix, id: SceneId, t: number, s: SceneState & { era?
       break;
     case 'chamber':
       chamber(p, t, s);
+      break;
+    case 'board':
+      board2015(p, t, s);
       break;
   }
   if (s.faded) p.desaturate(s.faded);

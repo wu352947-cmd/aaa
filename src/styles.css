@@ -2596,3 +2596,7 @@ textarea {
   fill: var(--ink);
   font-weight: 700;
 }
+/* 股东名册：每 5% 一条刻度（满格是 30%） */
+.bar-track.holders {
+  background-image: repeating-linear-gradient(90deg, transparent 0, transparent calc(16.666% - 1px), rgba(255, 255, 255, 0.18) calc(16.666% - 1px), rgba(255, 255, 255, 0.18) 16.666%);
+}

@@ -15,7 +15,7 @@ export function Title({
 }: {
   scenario: Scenario;
   save: SaveData | null;
-  onStart: (which: 's327' | 'tulip' | 'gme2021') => void;
+  onStart: (which: 's327' | 'tulip' | 'gme2021' | 'takeover2015') => void;
   onContinue: () => void;
   onSettings: () => void;
   onCareer: () => void;
@@ -23,7 +23,7 @@ export function Title({
   careerLabel?: string;
 }) {
   const [archive, setArchive] = useState(false);
-  const [which, setWhich] = useState<'s327' | 'tulip' | 'gme2021'>(save ? (save.scenario as 's327' | 'tulip' | 'gme2021') : 'tulip');
+  const [which, setWhich] = useState<'s327' | 'tulip' | 'gme2021' | 'takeover2015'>(save ? (save.scenario as 's327' | 'tulip' | 'gme2021' | 'takeover2015') : 'tulip');
   return (
     <div className="title-screen paper">
       <div className="title-card">
@@ -32,6 +32,8 @@ export function Title({
             <PixelScene scene="tavern" state={{ who: ['jan', 'pieter', 'cornelis', 'maritje', 'dirck', 'hendrick'] }} label="1637 年，哈勒姆的金鹿酒馆" />
           ) : which === 's327' ? (
             <PixelScene scene="floor" state={{ heat: 0.7, dir: 1 }} label="1995 年，上海的交易大厅" />
+          ) : which === 'takeover2015' ? (
+            <PixelScene scene="board" state={{ heat: 0.5, dir: 1, who: ['ye', 'fu', 'wang', 'yu'] }} label="2015 年，深圳的一间会议室" />
           ) : (
             <PixelScene scene="room" state={{ heat: 0.8, dir: 1 }} label="2021 年，纽约的一间卧室" />
           )}
@@ -54,6 +56,14 @@ export function Title({
               <div style={{ fontFamily: 'var(--serif)', fontWeight: 700, fontSize: 18 }}>{scenario.title}</div>
               <div style={{ fontSize: 13, color: 'var(--ink-soft)' }}>{scenario.subtitle}</div>
               <div style={{ fontSize: 13, marginTop: 4 }}>五个交易日的布局，一个决战日。五个可扮演的座位。</div>
+            </div>
+          </button>
+          <button className={cls('scenario-ticket', which === 'takeover2015' && 'on')} role="radio" aria-checked={which === 'takeover2015'} onClick={() => setWhich('takeover2015')}>
+            <div className="seal" style={{ fontSize: 16 }}>2015</div>
+            <div>
+              <div style={{ fontFamily: 'var(--serif)', fontWeight: 700, fontSize: 18 }}>门口的野蛮人</div>
+              <div style={{ fontSize: 13, color: 'var(--ink-soft)' }}>2015—2016 · 深圳 · 险资举牌</div>
+              <div style={{ fontSize: 13, marginTop: 4 }}>不比谁赚得多，比谁拿到公司：举牌、停牌、白衣骑士、股东大会的每一票。两个座位。</div>
             </div>
           </button>
           <button className={cls('scenario-ticket', which === 'gme2021' && 'on')} role="radio" aria-checked={which === 'gme2021'} onClick={() => setWhich('gme2021')}>

@@ -22,6 +22,8 @@ export function EndingScreen({ game, onAgain, onTitle, againLabel }: { game: Gam
           <div className="scene-frame">
             {game.scenario.id === 'gme2021' ? (
               <PixelScene scene="room" state={{ heat: 0.2, faded: 0.5, restricted: !!game.flags.restrictActive }} label="散场之后" />
+            ) : game.scenario.id === 'takeover2015' ? (
+              <PixelScene scene="board" state={{ heat: 0.1, faded: 0.5, night: true, who: ['fu', 'yu'] }} label="散会之后的会议室" />
             ) : (
               <PixelScene scene="floor" state={{ heat: 0.05, halted: true, faded: 0.5 }} label="散场之后的交易大厅" />
             )}

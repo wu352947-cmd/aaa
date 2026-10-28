@@ -3,6 +3,7 @@ import { Game } from './engine/game';
 import { loadLlm, type LlmSettings } from './llm/settings';
 import type { Scenario } from './engine/game';
 import { GME } from './scenarios/gme';
+import { TAKEOVER } from './scenarios/takeover';
 import { S327 } from './scenarios/s327';
 import { EndingScreen } from './ui/EndingScreen';
 import { GameScreen } from './ui/GameScreen';
@@ -15,7 +16,7 @@ import { Title } from './ui/Title';
 import { TulipScreen, TulipSetup } from './ui/TulipScreen';
 import { TulipGame } from './scenarios/tulip/game';
 
-const SCENARIOS: Record<string, Scenario> = { s327: S327, gme2021: GME };
+const SCENARIOS: Record<string, Scenario> = { s327: S327, gme2021: GME, takeover2015: TAKEOVER };
 
 type Screen = 'title' | 'setup' | 'game' | 'ending' | 'tulip-setup' | 'tulip' | 'career';
 const UI_KEY = 'chouma.ui';
