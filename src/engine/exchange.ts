@@ -164,7 +164,7 @@ export class Exchange {
       return hits;
     }
     if (newPos < 0 && a.borrowLimit != null && -newPos > a.borrowLimit) {
-      hits.push({ rule: 'no-borrow', owner: a.id, blocked: true, detail: `借不到更多的券：最多只能卖空 ${a.borrowLimit.toLocaleString()} ${UNITS.qty}` });
+      hits.push({ rule: 'no-borrow', owner: a.id, blocked: true, detail: `借不到更多的券：借到的券一共 ${a.borrowLimit.toLocaleString()} ${UNITS.qty}，已经卖空 ${Math.max(0, -a.pos).toLocaleString()} ${UNITS.qty}，最多还能再卖空 ${Math.max(0, a.borrowLimit - Math.max(0, -a.pos)).toLocaleString()} ${UNITS.qty}` });
       return hits;
     }
     const limit = this.limitOf(a);

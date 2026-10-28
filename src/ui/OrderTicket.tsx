@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { Game } from '../engine/game';
 import type { Side } from '../engine/types';
+import { UNITS } from '../engine/exchange';
 import { cls, money, price, qty as fq } from './format';
 import { OptionsTicket } from './OptionsTicket';
 import { FLOAT, spot, spotPrice } from '../scenarios/s327/delivery';
@@ -48,7 +49,11 @@ export function OrderTicket({
   const dirn = side === 'buy' ? 1 : -1;
   const closing = p.pos !== 0 && Math.sign(p.pos) !== dirn ? Math.abs(p.pos) : 0;
   const free = Math.max(0, ex.equity(p, ref) - ex.marginReq(p.pos, ref));
-  const maxOpen = Math.floor(free / perLot);
+  // 能新开多少：保证金够不够，卖空时还要看借到的券还剩多少
+  const shortRoom = side === 'sell' && p.borrowLimit != null ? Math.max(0, p.borrowLimit - Math.max(0, -p.pos)) : Infinity;
+  const maxOpen = Math.min(Math.floor(free / perLot), shortRoom);
+  const u = UNITS.qty;
+  const cur = UNITS.cur;
   const newPos = p.pos + dirn * q;
   const needAfter = ex.marginReq(newPos, ref);
   const impact = q > 0 && game.market.day ? game.market.impactOf(q) : 0;
@@ -159,7 +164,7 @@ export function OrderTicket({
         )}
         {!wash && type === 'limit' && (
           <div className="field">
-            <label>限价（元）· 也可以点击图表选价</label>
+            <label>限价（{cur}）· 也可以点击图表选价</label>
             <input className="num" value={px} onChange={(e) => setPx(e.target.value)} inputMode="decimal" />
           </div>
         )}
@@ -183,7 +188,7 @@ export function OrderTicket({
         )}
         <div className="field">
           <label>
-            数量（<Term k="口" />）
+            数量（{u === '口' ? <Term k="口" /> : u}）
           </label>
           <input className="num" type="number" min={0} step={unit} value={q || ''} onChange={(e) => setQ(Math.max(0, Math.round(+e.target.value)))} placeholder="0" autoFocus />
           <div className="quick">
@@ -212,7 +217,15 @@ export function OrderTicket({
         ) : (
         <div className="preview">
           <dl className="kv" style={{ margin: 0 }}>
-            <dt title="每口合约价值 × 保证金比例">每口保证金</dt>
+            {p.borrowLimit != null && side === 'sell' && (
+              <>
+                <dt title="卖空要先借券。借到的券是卖空的上限，包括你已经卖空的部分">借到的券</dt>
+                <dd>
+                  {fq(p.borrowLimit)}，已卖空 {fq(Math.max(0, -p.pos))}，还能再卖空 {fq(shortRoom)}
+                </dd>
+              </>
+            )}
+            <dt title={`每${u}价值 × 保证金比例`}>每{u}保证金</dt>
             <dd>{money(perLot)}</dd>
             <dt>成交后持仓</dt>
             <dd>{newPos === 0 ? '空仓' : `${newPos > 0 ? '多' : '空'} ${fq(Math.abs(newPos))}`}</dd>
@@ -222,7 +235,7 @@ export function OrderTicket({
               <Term k="冲击成本">预计冲击</Term>
             </dt>
             <dd className={side === 'buy' ? 'up' : 'down'}>
-              {q > 0 ? `${side === 'buy' ? '+' : '−'}${(impact / 100).toFixed(2)} 元` : '—'}
+              {q > 0 ? `${side === 'buy' ? '+' : '−'}${(impact / 100).toFixed(2)} ${cur}` : '—'}
             </dd>
           </dl>
           {type === 'limit' && big && mode === 'normal' && (

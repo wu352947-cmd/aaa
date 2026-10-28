@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { Game } from '../engine/game';
 import type { Side } from '../engine/types';
 import { cls, price, qty } from './format';
+import { UNITS } from '../engine/exchange';
 
 /** 计划书：把条件单排成序列，开盘后由引擎逐分钟执行（垂直切片只开放条件单这一类行动卡） */
 export function PlanBook({ game, onClose }: { game: Game; onClose: () => void }) {
@@ -58,7 +59,7 @@ export function PlanBook({ game, onClose }: { game: Game; onClose: () => void })
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 120px', gap: 8 }}>
           <div className="field">
-            <label>数量（口）</label>
+            <label>数量（{UNITS.qty}）</label>
             <input className="num" type="number" value={q || ''} onChange={(e) => setQ(Math.max(0, Math.round(+e.target.value)))} />
           </div>
           <div className="field">
