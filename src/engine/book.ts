@@ -131,12 +131,17 @@ export class OrderBook {
     return out;
   }
 
-  /** 盘口快照：每侧前 n 档的价格与总量 */
+  /** 逐一看所有挂单（只读） */
+  each(fn: (o: RestingOrder) => void): void {
+    for (const map of [this.bids, this.asks]) for (const level of map.values()) for (const o of level) fn(o);
+  }
+
+  /** 盘口快照：每侧前 n 档的价格与露出来的量（冰山单只算露出的那部分） */
   depth(n: number): { bids: [Fen, number][]; asks: [Fen, number][] } {
     const take = (s: Side) =>
       this.sortedPrices(s)
         .slice(0, n)
-        .map((p) => [p, this.side(s).get(p)!.reduce((a, o) => a + o.qty, 0)] as [Fen, number]);
+        .map((p) => [p, this.side(s).get(p)!.reduce((a, o) => a + visible(o), 0)] as [Fen, number]);
     return { bids: take('buy'), asks: take('sell') };
   }
 
@@ -146,4 +151,9 @@ export class OrderBook {
     this.bidPrices = [];
     this.askPrices = [];
   }
+}
+
+/** 一张挂单在盘口上露出来的量 */
+export function visible(o: RestingOrder): number {
+  return o.display != null ? Math.min(o.qty, o.display) : o.qty;
 }

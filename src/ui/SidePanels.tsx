@@ -30,6 +30,41 @@ export function OrderBookCard({ game }: { game: Game }) {
         </div>
       ))}
       {!game.market.ex.open && <div className="faint" style={{ fontSize: 12 }}>休市</div>}
+      {game.market.ex.open && Math.abs(game.market.lean) >= 0.15 && (
+        <div className="faint" style={{ fontSize: 12, marginTop: 4 }} title="现价附近的大额挂单（不算做市商和散户）偏向一边时，做市商会把报价往那边挪，散户也更愿意跟着那一边。">
+          盘口倾斜：{game.market.lean > 0 ? '买盘' : '卖盘'}明显更厚
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** 我的挂单：限价单、冰山单、带时限的单子，都可以单独撤 */
+function MyOrders({ game }: { game: Game }) {
+  const ex = game.market.ex;
+  const mine = ex.book.ordersOf(game.player.id);
+  if (!mine.length) return null;
+  return (
+    <div style={{ marginTop: 8 }}>
+      <div className="muted" style={{ fontSize: 12, display: 'flex', justifyContent: 'space-between' }}>
+        <span>我的挂单</span>
+        <button className="btn ghost small" onClick={() => game.act({ type: 'cancel-all' })}>
+          全部撤单
+        </button>
+      </div>
+      {mine.map((o) => (
+        <div key={o.id} className="book-row" style={{ gridTemplateColumns: 'auto 1fr auto auto' }}>
+          <span className={o.side === 'buy' ? 'up' : 'down'}>{o.side === 'buy' ? '买' : '卖'}</span>
+          <span className="num">
+            {price(o.price)} × {qty(o.qty)}
+            {o.display != null && <span className="faint"> （露 {qty(Math.min(o.qty, o.display))}）</span>}
+          </span>
+          <span className="faint" style={{ fontSize: 11 }}>{o.expires != null ? `${Math.max(0, o.expires - ex.tick)} 分钟后撤` : ''}</span>
+          <button className="btn ghost small" onClick={() => game.act({ type: 'cancel', id: o.id })}>
+            撤
+          </button>
+        </div>
+      ))}
     </div>
   );
 }
@@ -80,6 +115,7 @@ export function PositionCard({ game }: { game: Game }) {
         <div style={{ width: `${Math.min(100, use * 100)}%` }} />
       </div>
       {game.marginCall && <div className="danger-box">追加保证金通知：明早开盘前补足，否则强制平仓。</div>}
+      <MyOrders game={game} />
     </div>
   );
 }

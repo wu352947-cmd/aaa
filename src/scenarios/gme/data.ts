@@ -18,6 +18,8 @@ export const DECK_2021: RuleDeck = {
   priceLimit: null, // 没有涨跌停
   marketProtect: 0.3,
   luld: { band: 0.1, window: 5, pause: 5 },
+  // 零佣金券商不收佣金，但交易所规费和监管费按成交额收一点
+  feeRate: 0.00003,
 };
 
 export const PARAMS_2021: MarketParams = { Y: 1, kappa: 0.5, trendThreshold: 0.8, trendScale: 0.4 };
@@ -214,6 +216,27 @@ export const NPCS_2021: NpcDef[] = [
 ];
 
 export const RULES_2021: RuleCardDef[] = [
+  {
+    id: 'wash-trade',
+    title: '对敲交易（wash trade）',
+    plain: '你在自己控制的两个账户之间买卖：持仓没变，可行情上多出了成交量和一个你定的成交价。别人看到的是“放量”，跟风盘会追进来。',
+    why: '成交量和成交价是所有人判断行情的依据。不转移所有权的成交是在制造假象。',
+    source: '美国《1934 年证券交易法》第 9(a)(1) 条：禁止为制造交易活跃的假象而进行不改变实际所有权的交易。',
+  },
+  {
+    id: 'spoofing',
+    title: '幌骗（spoofing）',
+    plain: '你挂出大单却不打算成交：它摆在盘口上让别人以为有大资金在买（或卖），价格被吓动之后，你撤单、再反向成交。',
+    why: '盘口挂单本该是真实的买卖意愿。算法和散户都在看盘口，虚假的大单会误导所有人。',
+    source: '2010 年《多德-弗兰克法案》第 747 条把“意图在成交前撤销的出价或报价”列为违法（期货市场）；股票市场按 SEC 规则 10b-5 与《证券交易法》第 9(a)(2) 条追究操纵。',
+  },
+  {
+    id: 'marking-close',
+    title: '操纵收盘价（marking the close）',
+    plain: '收盘前几分钟集中下单，把收盘价推高或压低：保证金、期权估值、基金净值都按收盘价算。',
+    why: '收盘价是一整天的结算基准。集中在最后几分钟推动它，是在用规则做武器。',
+    source: 'SEC 与 FINRA 把“操纵收盘价”列为典型的操纵行为，依据《证券交易法》第 9(a)(2) 条与规则 10b-5。',
+  },
   {
     id: 'short-squeeze',
     title: '逼空',

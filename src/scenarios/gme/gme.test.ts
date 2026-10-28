@@ -109,13 +109,14 @@ describe('散户起义：手段', { timeout: 60000 }, () => {
     expect(g.decision.choices.some((c) => c.id === 'open')).toBe(false);
   });
 
-  it('暂停期权开仓：做市商的对冲买盘弱了，周三冲得没那么高', () => {
+  it('暂停期权开仓：做市商被迫买进的对冲股票少了两成多', () => {
     const run = (off: boolean) =>
       play('broker', {}, 'opt', (x) => {
-        if (off && x.dayIndex === 1) x.act({ type: 'card', id: 'options-off' });
+        if (off && x.dayIndex === 1 && !x.flags.optionsOff) x.act({ type: 'card', id: 'options-off' });
       });
-    const high = (x: Game) => x.market.dailyBars[3].h;
-    expect(high(run(true))).toBeLessThan(high(run(false)));
+    // 价格的高点还受其他几股资金影响，单看一局不稳；对冲买盘本身是这张卡直接改变的东西
+    const hedged = (x: Game) => x.market.ex.trades.filter((t) => t.buyer === 'fortress').reduce((a, t) => a + t.qty, 0);
+    expect(hedged(run(true))).toBeLessThan(hedged(run(false)) * 0.85);
   });
 
   it('被限制买入的散户转户：一小时后又能买', () => {

@@ -1,4 +1,4 @@
-import { fmtYi, setUnits, type Account, type RuleDeck } from './exchange';
+import { fmtYi, setUnits, UNITS, type Account, type RuleDeck } from './exchange';
 import { Market, SSE_1995, type DayDef, type MarketParams, type Session } from './market';
 import { Rng } from './rng';
 import type { Fen, OrderReq, RuleHit, Side } from './types';
@@ -360,6 +360,7 @@ export interface Plan {
 export type PlayerAction =
   | { type: 'order'; req: Omit<OrderReq, 'owner'> }
   | { type: 'cancel-all' }
+  | { type: 'cancel'; id: number }
   | { type: 'plan-add'; plan: Omit<Plan, 'id'> }
   | { type: 'plan-remove'; id: number }
   | { type: 'social'; verb: Verb; npc: string; option?: string }
@@ -593,7 +594,10 @@ export class Game {
         return null;
       }
       case 'cancel-all':
-        this.market.ex.book.cancelWhere((o) => o.owner === this.player.id);
+        this.market.ex.noteCancelled(this.market.ex.book.cancelWhere((o) => o.owner === this.player.id));
+        return null;
+      case 'cancel':
+        this.market.ex.noteCancelled(this.market.ex.book.cancelWhere((o) => o.owner === this.player.id && o.id === action.id));
         return null;
       case 'plan-add':
         this.plans.push({ ...action.plan, id: this.planSeq++ });
@@ -808,6 +812,7 @@ export class Game {
       netByOwner.set(tr.buyer, (netByOwner.get(tr.buyer) ?? 0) + tr.qty);
       netByOwner.set(tr.seller, (netByOwner.get(tr.seller) ?? 0) - tr.qty);
     }
+    this.surveil();
     this.scenario.onDayEnd(this);
     if (this.ending) return;
     const price = settle ?? (this.flags['settle'] as number | undefined) ?? m.last;
@@ -857,6 +862,43 @@ export class Game {
     this.heat = Math.max(this.heatPeak * 0.3, this.heat - 1);
     this.scenario.onNight(this);
     this.dealOffer();
+  }
+
+  /**
+   * 收盘后的交易监察：从玩家当天的交易痕迹里找对倒、虚假申报和尾市拉抬。
+   * 抓到就记监管热度，第一次弹出规则卡。
+   */
+  private surveil(): void {
+    const ex = this.market.ex;
+    const s = ex.dayStats.get(this.player.id);
+    if (!s || this.faction.observer) return;
+    const v = this.day.vDay;
+    const found: { rule: string; heat: number; text: string; why: string }[] = [];
+    if (s.wash > 0)
+      found.push({ rule: 'wash-trade', heat: Math.min(25, 4 + Math.round((300 * s.wash) / v)), text: `交易所监察：你的账户与关联账户之间对敲 ${s.wash.toLocaleString()} ${UNITS.qty}`, why: '自买自卖制造成交量' });
+    if (s.bigCancelled >= 2)
+      found.push({ rule: 'spoofing', heat: Math.min(15, 4 + 2 * s.bigCancelled), text: `交易所监察：${s.bigCancelled} 笔大额申报几乎没成交就撤掉了`, why: '虚假申报' });
+    const bars = this.market.bars;
+    const win = 10;
+    if (bars.length > win + 1) {
+      const last = bars.slice(-win);
+      const vol = last.reduce((a, b) => a + b.v, 0);
+      let mine = 0;
+      for (let t = bars.length - win; t < bars.length; t++) mine += s.aggrByMin[t] ?? 0;
+      const move = Math.abs(last[last.length - 1].c - bars[bars.length - win - 1].c);
+      const sigmaP = this.day.sigma * last[last.length - 1].c;
+      if (vol > 0 && mine / vol >= 0.25 && move >= 0.15 * sigmaP)
+        found.push({ rule: 'marking-close', heat: 6, text: `交易所监察：收盘前 ${win} 分钟里，你的主动成交占了 ${Math.round((100 * mine) / vol)}%，价格被推动了一截`, why: '尾市拉抬或打压' });
+    }
+    for (const f of found) {
+      this.addHeat(f.heat, f.why);
+      this.flags[`surveil-${f.rule}`] = ((this.flags[`surveil-${f.rule}`] as number) || 0) + 1;
+      this.push({ kind: 'rule', rule: f.rule, blocked: false, text: f.text });
+      if (this.principleId === 'no-violation' && !this.flags[`line-${f.rule}-${this.dayIndex}`]) {
+        this.flags[`line-${f.rule}-${this.dayIndex}`] = true;
+        this.crossLine(f.why);
+      }
+    }
   }
 
   private endNight(): void {
