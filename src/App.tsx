@@ -8,6 +8,8 @@ import { EndingScreen } from './ui/EndingScreen';
 import { GameScreen } from './ui/GameScreen';
 import { SettingsModal, type UiSettings } from './ui/Modals';
 import { markPlayed, Setup } from './ui/Setup';
+import { CareerScreen } from './ui/CareerScreen';
+import { chapter1, chapter2, loadCareer, recordChapter, saveCareer, type Career } from './career/career';
 import { clearSave, loadSave, restore, restoreTulip, type SaveData } from './ui/save';
 import { Title } from './ui/Title';
 import { TulipScreen, TulipSetup } from './ui/TulipScreen';
@@ -15,7 +17,7 @@ import { TulipGame } from './scenarios/tulip/game';
 
 const SCENARIOS: Record<string, Scenario> = { s327: S327, gme2021: GME };
 
-type Screen = 'title' | 'setup' | 'game' | 'ending' | 'tulip-setup' | 'tulip';
+type Screen = 'title' | 'setup' | 'game' | 'ending' | 'tulip-setup' | 'tulip' | 'career';
 const UI_KEY = 'chouma.ui';
 const UI_DEFAULT: UiSettings = { colors: 'cn', motion: 'full', mentor: true, sound: true };
 
@@ -38,6 +40,21 @@ export default function App() {
   const [save, setSave] = useState<SaveData | null>(loadSave);
   const [tulip, setTulip] = useState<TulipGame | null>(null);
   const [scenario, setScenario] = useState<Scenario>(S327);
+  const [career, setCareerState] = useState<Career | null>(loadCareer);
+  const setCareer = (c: Career | null) => {
+    setCareerState(c);
+    saveCareer(c);
+  };
+  /** 开始生涯里的下一章 */
+  const playChapter = () => {
+    if (!career) return;
+    const ch = career.step === 'ch1' ? chapter1() : career.step === 'ch2' ? chapter2(career) : null;
+    if (!ch) return;
+    const g = new Game(SCENARIOS[ch.scenario], career.seed, ch.seat, career.principle, ch.opts);
+    g.difficulty = career.difficulty;
+    setGame(g);
+    setScreen('game');
+  };
 
   const setUi = (u: UiSettings) => {
     setUiState(u);
@@ -57,8 +74,15 @@ export default function App() {
     markPlayed();
     clearSave();
     setSave(null);
+    // 生涯里的一章打完：结果记进履历（按步骤核对，只记一次）
+    const c = loadCareer();
+    if (game?.ending && game.setupOpts.career && c && ((c.step === 'ch1' && game.scenario.id === 's327') || (c.step === 'ch2' && game.scenario.id === 'gme2021'))) {
+      const n = recordChapter(c, game);
+      saveCareer(n);
+      setCareerState(n);
+    }
     setScreen('ending');
-  }, []);
+  }, [game]);
 
   // 底线：每越过一次，画面就褪去一点颜色
   const lines = game?.linesCrossed ?? 0;
@@ -93,6 +117,16 @@ export default function App() {
             }
           }}
           onSettings={() => setSettings(true)}
+          onCareer={() => setScreen('career')}
+          careerLabel={career ? { ch1: '1995 年', interlude: `${career.events[career.events.length - 1]?.year ?? '1995'} 年`, ch2: '2021 年', done: '传记' }[career.step] : undefined}
+        />
+      )}
+      {screen === 'career' && (
+        <CareerScreen
+          career={career}
+          onChange={setCareer}
+          onPlay={playChapter}
+          onTitle={() => setScreen('title')}
         />
       )}
       {screen === 'tulip-setup' && (
@@ -139,7 +173,8 @@ export default function App() {
       {screen === 'ending' && game?.ending && (
         <EndingScreen
           game={game}
-          onAgain={() => setScreen('setup')}
+          againLabel={game.setupOpts.career ? '继续生涯 →' : undefined}
+          onAgain={() => setScreen(game.setupOpts.career ? 'career' : 'setup')}
           onTitle={() => {
             setSave(loadSave());
             setScreen('title');

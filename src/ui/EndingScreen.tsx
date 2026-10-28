@@ -12,7 +12,7 @@ const QUAD: [string, string][] = [
   ['流星', '快 · 越线'],
 ];
 
-export function EndingScreen({ game, onAgain, onTitle }: { game: Game; onAgain: () => void; onTitle: () => void }) {
+export function EndingScreen({ game, onAgain, onTitle, againLabel }: { game: Game; onAgain: () => void; onTitle: () => void; againLabel?: string }) {
   const letters = game.intel.filter((i) => i.kind === 'victim').reverse();
   const e = game.ending!;
   return (
@@ -163,7 +163,7 @@ export function EndingScreen({ game, onAgain, onTitle }: { game: Game; onAgain: 
             回到标题
           </button>
           <button className="btn primary" onClick={onAgain}>
-            换个座位再来一局
+            {againLabel ?? '换个座位再来一局'}
           </button>
         </div>
         <p className="faint" style={{ textAlign: 'center', fontSize: 12, marginTop: 18 }}>

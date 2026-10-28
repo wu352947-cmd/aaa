@@ -2501,3 +2501,98 @@ textarea {
   color: var(--seal);
   margin-top: 4px;
 }
+
+/* ───────── 生涯 ───────── */
+.career-steps {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+  font-size: 12px;
+}
+.career-steps span {
+  padding: 3px 10px;
+  border: 1px solid var(--ink-soft);
+  color: var(--ink-soft);
+}
+.career-steps span.past {
+  opacity: 0.55;
+}
+.career-steps span.now {
+  border-color: var(--seal);
+  color: var(--seal);
+  font-weight: 700;
+}
+.career-sheet {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+  gap: 8px;
+  padding: 10px 0;
+  border-top: 1px solid var(--ink-soft);
+  border-bottom: 1px solid var(--ink-soft);
+  font-size: 12px;
+  color: var(--ink-soft);
+}
+.career-sheet b {
+  display: block;
+  font-family: var(--mono);
+  font-size: 16px;
+  color: var(--ink);
+}
+.career-panel {
+  margin: 18px 0;
+}
+.career-panel h2 {
+  margin: 8px 0;
+}
+.career-year {
+  font-family: var(--serif);
+  font-size: 44px;
+  font-weight: 900;
+  color: var(--seal);
+  line-height: 1;
+}
+.career-choices {
+  display: grid;
+  gap: 8px;
+  margin: 12px 0;
+}
+.career .choice {
+  background: rgba(255, 255, 255, 0.35);
+  color: var(--ink);
+  border-color: var(--ink-soft);
+}
+.career .choice small {
+  color: var(--ink-soft);
+}
+.choice.grey {
+  border-left: 3px solid #8a8f98;
+}
+.career-log p {
+  font-size: 13px;
+  margin: 4px 0;
+}
+.wealth-curve {
+  width: 100%;
+  height: auto;
+}
+.wealth-curve .line {
+  stroke: var(--seal);
+  stroke-width: 2;
+}
+.wealth-curve .dot {
+  fill: var(--seal);
+}
+.wealth-curve .base {
+  stroke: var(--ink-soft);
+  stroke-dasharray: 3 3;
+}
+.wealth-curve .lbl {
+  font-size: 9px;
+  fill: var(--ink-soft);
+}
+.wealth-curve .val {
+  font-size: 11px;
+  fill: var(--ink);
+  font-weight: 700;
+}

@@ -71,6 +71,7 @@ export function undoDay(g: Game): Game {
     g.principleId,
     g.log.filter((l) => l.at < start),
     start,
+    g.setupOpts,
   );
   next.difficulty = g.difficulty;
   next.undos = g.undos + 1;

@@ -120,7 +120,8 @@ export const GME: Scenario = {
     ex.add(newAccount({ id: GW, name: '灰狼资本', seat: 'GW', group: grp(GW), cash: 4_000_000_000, pos: -GW_POS, avg: 4000, borrowLimit: 11_000_000 }));
     ex.add(newAccount({ id: FT, name: '堡垒集团', seat: 'FT', group: grp(FT), cash: 50_000_000_000 }));
     ex.add(newAccount({ id: PANIC, name: '被限制的散户', group: 'crowd', exempt: true }));
-    if (g.factionId === 'retail') ex.add(newAccount({ id: YOU, name: '你', group: 'player', cash: 5000, pos: 50, avg: 1800, borrowLimit: 0 }));
+    // 生涯模式带进来的钱：开局那 50 股照旧，其余是现金
+    if (g.factionId === 'retail') ex.add(newAccount({ id: YOU, name: '你', group: 'player', cash: Math.max(5000, (g.setupOpts.cash ?? 5900) - 900), pos: 50, avg: 1800, borrowLimit: 0 }));
     if (g.factionId === 'broker') ex.add(newAccount({ id: FEATHER, name: '羽毛证券', group: 'player', exempt: true }));
     g.market.actors.push(hedgerActor(g));
     if (isMm(g)) {

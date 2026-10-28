@@ -88,6 +88,20 @@ export interface Intel {
   read?: boolean;
 }
 
+/**
+ * 开局条件。生涯模式里，上一章的钱、声望和监管档案带进下一章。
+ * 和种子一起进存档与重放：同样的 opts + 同样的种子 + 同样的操作 = 同一局。
+ */
+export interface GameOpts {
+  /** 玩家的起始现金（剧本货币）；只有剧本支持的座位生效 */
+  cash?: number;
+  reputation?: number;
+  /** 监管档案：开局热度，也是热度降不下去的底 */
+  heat?: number;
+  /** 这一局是生涯里的一章 */
+  career?: boolean;
+}
+
 /** 一期报纸。tone：这期报纸整体有多看多（+1）或看空（−1）；spun：塞稿的人 */
 export interface Paper {
   day: number;
@@ -551,6 +565,7 @@ export class Game {
     readonly seed: string,
     readonly factionId: FactionId,
     readonly principleId: string,
+    readonly setupOpts: GameOpts = {},
   ) {
     this.rng = new Rng(`${scenario.id}:${seed}`);
     this.rngSocial = this.rng.fork('social');
@@ -561,6 +576,9 @@ export class Game {
     this.market = new Market({ ...scenario.deck }, scenario.params, `${scenario.id}:${seed}:market`, scenario.startPrice, scenario.session ?? SSE_1995);
     for (const d of scenario.npcs) if (d.factionId !== factionId) this.npcs.set(d.id, { ...d, memory: [] });
     scenario.setup(this);
+    if (setupOpts.reputation != null) this.reputation = setupOpts.reputation;
+    // 旧账带进来：热度只降不清零
+    if (setupOpts.heat) this.heat = this.heatPeak = setupOpts.heat;
     this.startDay();
   }
 
@@ -1302,8 +1320,8 @@ export class Game {
 }
 
 /** 按动作日志重放一局：服务端校验排行榜、每日挑战与录像都靠它 */
-export function replay(scenario: Scenario, seed: string, faction: FactionId, principle: string, log: LoggedAction[], untilTick = Infinity): Game {
-  const g = new Game(scenario, seed, faction, principle);
+export function replay(scenario: Scenario, seed: string, faction: FactionId, principle: string, log: LoggedAction[], untilTick = Infinity, opts: GameOpts = {}): Game {
+  const g = new Game(scenario, seed, faction, principle, opts);
   let i = 0;
   const flush = () => {
     while (i < log.length && log[i].at <= g.globalTick) g.act(log[i++].action);

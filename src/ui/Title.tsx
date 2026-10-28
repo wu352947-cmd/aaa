@@ -10,12 +10,17 @@ export function Title({
   onStart,
   onContinue,
   onSettings,
+  onCareer,
+  careerLabel,
 }: {
   scenario: Scenario;
   save: SaveData | null;
   onStart: (which: 's327' | 'tulip' | 'gme2021') => void;
   onContinue: () => void;
   onSettings: () => void;
+  onCareer: () => void;
+  /** 有一段进行中的生涯时显示它走到了哪 */
+  careerLabel?: string;
 }) {
   const [archive, setArchive] = useState(false);
   const [which, setWhich] = useState<'s327' | 'tulip' | 'gme2021'>(save ? (save.scenario as 's327' | 'tulip' | 'gme2021') : 'tulip');
@@ -68,6 +73,9 @@ export function Title({
           )}
           <button className={cls('btn', !save && 'primary')} onClick={() => onStart(which)}>
             {save ? '新的一局' : '开始'}
+          </button>
+          <button className="btn" onClick={onCareer} title="从 1995 年的大户室走到 2021 年：两章剧本加那些年的转折点，最后一页生涯传记">
+            {careerLabel ? `继续生涯：${careerLabel}` : '生涯'}
           </button>
           <button className="btn" onClick={() => setArchive(!archive)}>
             史料馆
