@@ -2365,3 +2365,61 @@ textarea {
 .btn.grey {
   border-color: #8a8a8a;
 }
+
+.opt-chain-wrap {
+  max-height: 300px;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+}
+.opt-chain {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+.opt-chain th {
+  position: sticky;
+  top: 0;
+  background: var(--panel, #15181d);
+  color: var(--muted);
+  font-weight: 500;
+  padding: 4px;
+}
+.opt-chain td {
+  padding: 3px 6px;
+  text-align: right;
+  cursor: pointer;
+  border-top: 1px solid var(--line);
+}
+.opt-chain td.strike {
+  text-align: center;
+  cursor: default;
+  font-weight: 600;
+  background: rgba(255, 255, 255, 0.03);
+}
+.opt-chain tr.itm-call td:nth-child(-n + 2),
+.opt-chain tr.itm-put td:nth-child(n + 4) {
+  background: rgba(255, 255, 255, 0.04);
+}
+.opt-chain tr.atm td.strike {
+  color: var(--gold, #d9b341);
+}
+.opt-chain td.sel {
+  outline: 1px solid var(--gold, #d9b341);
+  outline-offset: -1px;
+}
+.opt-chain td:not(.strike):hover {
+  background: rgba(217, 179, 65, 0.12);
+}
+.opt-pos {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 4px 8px;
+  align-items: center;
+  font-size: 12px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--line);
+}
+.opt-pos button {
+  grid-column: 1 / -1;
+}

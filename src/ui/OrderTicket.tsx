@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import type { Game } from '../engine/game';
 import type { Side } from '../engine/types';
 import { cls, money, price, qty as fq } from './format';
+import { OptionsTicket } from './OptionsTicket';
 import { Term } from './Term';
 
 /** 下单面板：在提交之前就把规则检查、保证金占用与预计冲击算给玩家看 */
@@ -28,6 +29,8 @@ export function OrderTicket({
   const [show, setShow] = useState<number>(0);
   const [ttl, setTtl] = useState<number>(0);
   const [washAt, setWashAt] = useState<'ask' | 'bid'>('ask');
+  const hasOptions = !!game.scenario.options?.(game);
+  const [tab, setTab] = useState<'stock' | 'options'>('stock');
 
   useEffect(() => {
     if (limitPrice != null) {
@@ -89,6 +92,20 @@ export function OrderTicket({
         </button>
       </div>
       <div className="drawer-body">
+        {hasOptions && (
+          <div className="seg" style={{ marginBottom: 10 }}>
+            <button className={cls(tab === 'stock' && 'on')} onClick={() => setTab('stock')}>
+              股票
+            </button>
+            <button className={cls(tab === 'options' && 'on')} onClick={() => setTab('options')}>
+              期权
+            </button>
+          </div>
+        )}
+        {tab === 'options' ? (
+          <OptionsTicket game={game} onDone={onClose} />
+        ) : (
+        <>
         <div className="field">
           <div className="seg">
             <button className={cls(side === 'buy' && 'on buy')} onClick={() => setSide('buy')}>
@@ -234,6 +251,8 @@ export function OrderTicket({
           </button>
         </div>
         {!game.market.ex.open && <p className="muted" style={{ fontSize: 12 }}>休市中，可以在计划书里写好明天开盘执行的条件单。</p>}
+        </>
+        )}
       </div>
     </div>
   );

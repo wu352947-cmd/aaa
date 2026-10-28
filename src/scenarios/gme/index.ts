@@ -5,7 +5,7 @@ import { holdReturn, traderArchetype } from '../../engine/game';
 import type { Actor, Market } from '../../engine/market';
 import { isMm, mmBriefing, mmCards, mmClock, mmDayStart, mmDecide, mmEnding, mmHedgeActor, mmMeters, mmPlay, mmSetup, mmTick } from './mm';
 import { DRAFT_GME, gmeClocks, gmeDraftPlay } from './plans';
-import { BATTLE_2021, DAYS_2021, DECK_2021, FACTIONS_2021, NPCS_2021, NYSE, PARAMS_2021, PRINCIPLES_2021, PROLOGUE_2021, RULES_2021, SOURCES_2021, START_2021 } from './data';
+import { BATTLE_2021, DAYS_2021, OPTIONS_2021, DECK_2021, FACTIONS_2021, NPCS_2021, NYSE, PARAMS_2021, PRINCIPLES_2021, PROLOGUE_2021, RULES_2021, SOURCES_2021, START_2021 } from './data';
 
 const YOU = 'you';
 const GW = 'greywolf';
@@ -106,6 +106,9 @@ export const GME: Scenario = {
   meters: (g) => (g.factionId === 'broker' ? brokerMeters(g) : isMm(g) ? mmMeters(g) : undefined),
   clocks: (g) => (isMm(g) ? [mmClock(g), ...gmeClocks(g, requirement)] : gmeClocks(g, requirement)),
   draft: DRAFT_GME,
+  // 散户和空头都能在期权链上交易；卖给他们、替他们对冲的是堡垒集团
+  options: (g) => (g.factionId === 'retail' || g.factionId === 'short' ? OPTIONS_2021 : null),
+  optionsDealer: FT,
 
   setup(g) {
     const ex = g.market.ex;
@@ -826,17 +829,6 @@ function gmeCards(g: Game): CardDef[] {
         blocked: used(`tv-${d}`) ? '今晚已经上过' : undefined,
       },
       {
-        id: 'calls',
-        name: '买看涨期权对冲',
-        group: '对冲',
-        color: 'white',
-        does: '花 2 亿美元买 300 万股的看涨期权，行权价比现价高三成：逼空越凶，它赚得越多。',
-        cost: '2 亿美元权利金；不涨就归零。',
-        when: 'any',
-        status: flag(g, 'callStrike') ? `行权价 ${usd(g.flags.callStrike as number)}` : undefined,
-        blocked: flag(g, 'callStrike') ? '已经买过' : g.player.cash < 200_000_000 ? '现金不够' : undefined,
-      },
-      {
         id: 'borrow',
         name: '向券池借券',
         group: '借券',
@@ -881,17 +873,6 @@ function gmeCards(g: Game): CardDef[] {
       cost: '1 点精力。',
       when: 'night',
       blocked: used(`post-${d}`) ? '今晚已经发过' : g.energy <= 0 ? '精力用完了' : undefined,
-    },
-    {
-      id: 'calls',
-      name: '买价外看涨期权',
-      group: '杠杆',
-      color: 'grey',
-      does: '花 1,000 美元买 200 股的看涨期权，行权价比现价高五成：涨过去就翻几倍，涨不过去就归零。',
-      cost: '1,000 美元权利金。',
-      when: 'any',
-      status: flag(g, 'callStrike') ? `行权价 ${usd(g.flags.callStrike as number)}` : undefined,
-      blocked: flag(g, 'callStrike') ? '已经买过' : g.player.cash < 1000 ? '现金不够' : undefined,
     },
     {
       id: 'switch',

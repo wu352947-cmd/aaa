@@ -1,5 +1,6 @@
 import { fmtYi, setUnits, UNITS, type Account, type RuleDeck } from './exchange';
 import { Market, SSE_1995, type DayDef, type MarketParams, type Session } from './market';
+import { optKey, price as optPrice, quote as optQuote, type OptionSpec, type OptKind, type OptPosition } from './options';
 import { Rng } from './rng';
 import type { Fen, OrderReq, RuleHit, Side } from './types';
 
@@ -326,6 +327,10 @@ export interface Scenario {
   draft?: DraftRules;
   /** 场外配资：这个座位能向谁借、借几倍、平仓线在哪 */
   credit?(g: Game): CreditOffer | null;
+  /** 场内期权：这个座位能不能交易、交易什么 */
+  options?(g: Game): OptionSpec | null;
+  /** 卖期权给玩家、并替这些期权做 delta 对冲的做市商账户 */
+  optionsDealer?: string;
   /** 复盘与逐笔里怎么称呼一个群体或账户 */
   groupName?(g: Game, who: string): string;
   setup(g: Game): void;
@@ -399,6 +404,7 @@ export type PlayerAction =
   | { type: 'convert'; id: string }
   | { type: 'draft'; id: string | null }
   | { type: 'credit'; op: 'take' | 'repay'; amount: number }
+  | { type: 'option'; side: 'buy' | 'sell'; kind: OptKind; strike: Fen; expiry: string; qty: number }
   | { type: 'doc'; id: string; marks: Record<string, string> }
   | { type: 'end-night' };
 
@@ -475,6 +481,10 @@ export class Game {
   private readonly rngDraft: Rng;
   /** 场外配资（没有借就是 null） */
   credit: CreditLine | null = null;
+  /** 买入的期权 */
+  opts: OptPosition[] = [];
+  /** 做市商为玩家的期权持有的对冲股数 */
+  dealerHedge = 0;
 
   constructor(
     readonly scenario: Scenario,
@@ -714,10 +724,98 @@ export class Game {
         }
         return null;
       }
+      case 'option':
+        this.tradeOption(action);
+        return null;
       case 'end-night':
         this.endNight();
         return null;
     }
+  }
+
+  // ── 期权 ──
+
+  /** 离到期还有多少年：按交易日算，当天收盘到期 */
+  optYears(expiry: string): number {
+    const e = this.scenario.options?.(this)?.expiries.find((x) => x.id === expiry);
+    if (!e) return 0;
+    const frac = this.phase === 'trading' ? this.market.t / this.market.session.minutes : 1;
+    return Math.max(0, e.day - this.dayIndex + 1 - frac) / 252;
+  }
+
+  /** 一个合约的报价（每股美元）与 delta */
+  optQuote(kind: OptKind, strike: Fen, expiry: string, s: Fen = this.market.last): { mid: number; bid: number; ask: number; delta: number } {
+    const spec = this.scenario.options?.(this);
+    if (!spec) return { mid: 0, bid: 0, ask: 0, delta: 0 };
+    const p = optPrice(kind, s, strike, this.optYears(expiry), spec.iv(this.dayIndex));
+    return { mid: p.value, ...optQuote(p.value, spec.spread), delta: p.delta };
+  }
+
+  /** 持有的期权按中间价的市值 */
+  optValue(s: Fen = this.market.last): number {
+    const spec = this.scenario.options?.(this);
+    if (!spec) return 0;
+    return this.opts.reduce((a, o) => a + o.qty * spec.size * this.optQuote(o.kind, o.strike, o.expiry, s).mid, 0);
+  }
+
+  private markOptions(): void {
+    if (this.opts.length || this.player.extra) this.player.extra = this.optValue();
+  }
+
+  private tradeOption(a: Extract<PlayerAction, { type: 'option' }>): void {
+    const spec = this.scenario.options?.(this);
+    if (!spec || !this.market.ex.open || this.decision || this.ending || a.qty <= 0) return;
+    if (!spec.expiries.some((e) => e.id === a.expiry) || !spec.strikes.includes(a.strike)) return;
+    const q = this.optQuote(a.kind, a.strike, a.expiry);
+    const key = optKey(a);
+    let pos = this.opts.find((o) => optKey(o) === key);
+    const p = this.player;
+    if (a.side === 'buy') {
+      const cost = q.ask * spec.size * a.qty;
+      if (cost > Math.max(0, p.cash)) {
+        this.push({ kind: 'rule', rule: 'option-cash', blocked: true, text: `买期权要付现金：${fmtYi(cost)}，你只有 ${fmtYi(p.cash)}` });
+        return;
+      }
+      p.cash -= cost;
+      if (!pos) this.opts.push((pos = { kind: a.kind, strike: a.strike, expiry: a.expiry, qty: 0, cost: 0 }));
+      pos.qty += a.qty;
+      pos.cost += cost;
+    } else {
+      if (!pos || pos.qty <= 0) return;
+      const n = Math.min(a.qty, pos.qty);
+      p.cash += q.bid * spec.size * n;
+      pos.cost -= (pos.cost * n) / pos.qty;
+      pos.qty -= n;
+      if (!pos.qty) this.opts = this.opts.filter((o) => o !== pos);
+    }
+    this.markOptions();
+  }
+
+  /** 做市商：玩家买了多少期权，它就替这些期权按 delta 对冲多少股票 */
+  private dealerOrders(): OrderReq[] {
+    const dealer = this.scenario.optionsDealer;
+    const spec = this.scenario.options?.(this);
+    if (!dealer || !spec || this.market.t % 2 !== 0) return [];
+    const target = Math.round(this.opts.reduce((a, o) => a + o.qty * spec.size * this.optQuote(o.kind, o.strike, o.expiry).delta, 0));
+    const diff = target - this.dealerHedge;
+    const cap = Math.round((this.day.vDay / this.market.session.minutes) * spec.hedgeCap);
+    if (Math.abs(diff) < Math.max(100, Math.abs(target) * 0.02)) return [];
+    const q = Math.min(Math.abs(diff), cap);
+    this.dealerHedge += Math.sign(diff) * q;
+    return [{ owner: dealer, side: diff > 0 ? 'buy' : 'sell', qty: q, type: 'market' }];
+  }
+
+  /** 收盘时到期的期权按收盘价行权了结 */
+  private expireOptions(close: Fen): void {
+    const spec = this.scenario.options?.(this);
+    if (!spec || !this.opts.length) return;
+    const due = spec.expiries.filter((e) => e.day === this.dayIndex).map((e) => e.id);
+    for (const o of this.opts.filter((x) => due.includes(x.expiry))) {
+      const v = optPrice(o.kind, close, o.strike, 0, 1).value * spec.size * o.qty;
+      this.player.cash += v;
+      this.push({ kind: 'intel', text: `${o.kind === 'call' ? '看涨' : '看跌'}期权（行权价 ${(o.strike / 100).toFixed(0)}）到期：${v > 0 ? `行权了结 ${fmtYi(v)}` : '一文不值'}` });
+    }
+    this.opts = this.opts.filter((x) => !due.includes(x.expiry));
   }
 
   private logCard(card: { id: string; name: string }, result: CardResult, target?: string): void {
@@ -787,7 +885,7 @@ export class Game {
     // 停市期间委托与计划都原样留着，复市后再报
     const halted = this.market.t < this.market.haltUntil;
     const orders = halted ? [] : this.pending.splice(0);
-    if (!halted) orders.push(...this.runPlans());
+    if (!halted) orders.push(...this.runPlans(), ...this.dealerOrders());
     const rep = this.market.step(orders);
     this.onRuleHits(rep.hits);
     if (rep.luld) {
@@ -811,6 +909,7 @@ export class Game {
       this.tape.unshift({ day: this.dayIndex, time: this.market.session.label(this.market.t - 1), seat: acct.seat, side: e.side, qty: e.qty, price: Math.round(e.notional / e.qty) });
     }
     if (this.tape.length > 200) this.tape.length = 200;
+    this.markOptions();
     this.intradayRisk();
     this.scenario.onTick(this);
     if (this.market.dayOver && !this.decision) this.closeDay();
@@ -908,6 +1007,8 @@ export class Game {
     const price = settle ?? (this.flags['settle'] as number | undefined) ?? m.last;
     delete this.flags['settle'];
     m.closeDay(price);
+    this.expireOptions(price);
+    this.markOptions();
     this.pending = [];
     this.plans = this.plans.filter((p) => !p.done && p.remaining == null);
 
@@ -1028,7 +1129,7 @@ export class Game {
     const parts: (string | number)[] = [this.dayIndex, this.market.t, ex.last, ex.trades.length, this.heat.toFixed(4), this.reputation];
     for (const a of [...ex.accounts.values()].sort((x, y) => x.id.localeCompare(y.id))) parts.push(a.id, a.pos, a.cash.toFixed(2));
     for (const n of [...this.npcs.values()].sort((x, y) => x.id.localeCompare(y.id))) parts.push(n.id, n.relation);
-    parts.push(...this.market.closePrices, ...this.hand);
+    parts.push(...this.market.closePrices, ...this.hand, ...this.opts.map((o) => `${optKey(o)}x${o.qty}`), this.dealerHedge);
     let h = 2166136261 >>> 0;
     const s = parts.join('|');
     for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 16777619);

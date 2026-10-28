@@ -57,6 +57,8 @@ export interface Account {
   borrowLimit?: number;
   /** 本账户的持仓限额（借壳分仓、监管限仓时与卡组不同）；不设表示按卡组 */
   limit?: number;
+  /** 账户里其他资产的市值（例如买入的期权），计入权益 */
+  extra?: number;
 }
 
 export function newAccount(p: Partial<Account> & Pick<Account, 'id' | 'name' | 'group'>): Account {
@@ -110,7 +112,7 @@ export class Exchange {
   }
 
   equity(a: Account, p: Fen = this.last): number {
-    return a.cash + this.unrealized(a, p);
+    return a.cash + this.unrealized(a, p) + (a.extra ?? 0);
   }
 
   marginReq(pos: number, p: Fen = this.last): number {

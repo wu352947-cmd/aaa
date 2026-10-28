@@ -183,6 +183,12 @@ export function PositionCard({ game }: { game: Game }) {
         <dd>{p.pos === 0 ? '空仓' : <span className={p.pos > 0 ? 'up' : 'down'}>{p.pos > 0 ? '多' : '空'} {qty(Math.abs(p.pos))}</span>}</dd>
         <dt title="（最新价 − 持仓均价）× 合约乘数 × 持仓数量。每天收盘后结转进现金（逐日盯市）">浮动盈亏</dt>
         <dd className={dir(upnl)}>{signed(upnl, money)}</dd>
+        {game.opts.length > 0 && (
+          <>
+            <dt title="持有的期权按中间价的市值，计入权益">期权市值</dt>
+            <dd>{money(p.extra ?? 0)}</dd>
+          </>
+        )}
         {open && (
           <>
             <dt title={game.market.ex.deck.markToMarket ? "逐日盯市后，均价重置为前一日结算价" : "买入或卖空的平均成本"}>持仓均价</dt>

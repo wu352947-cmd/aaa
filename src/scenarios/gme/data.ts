@@ -1,5 +1,6 @@
 import type { RuleDeck } from '../../engine/exchange';
 import type { Faction, NpcDef, Principle, RuleCardDef, SourceCard } from '../../engine/game';
+import type { OptionSpec } from '../../engine/options';
 import { bridgePath, makeSession, type DayDef, type MarketParams } from '../../engine/market';
 
 // ───────────── 散户起义：2021 年 1 月，纽约 ─────────────
@@ -75,6 +76,22 @@ export const DAYS_2021: DayDef[] = [
 ];
 
 export const BATTLE_2021 = DAYS_2021.length - 1;
+
+/**
+ * 这只股票的期权链（拆股前价格）。到期日按交易日数：1 月 29 日是第 5 个交易日，2 月 19 日是第 20 个。
+ * 隐含波动率按当时的报道取一个逐日升高的近似值，行权价取交易所挂牌的那一串。
+ */
+export const OPTIONS_2021: OptionSpec = {
+  expiries: [
+    { id: '0129', label: '1 月 29 日（周期权）', day: 5 },
+    { id: '0219', label: '2 月 19 日（月期权）', day: 20 },
+  ],
+  strikes: [10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 80, 90, 100, 115, 130, 150, 175, 200, 250, 300, 350, 400, 450, 500, 600, 800].map((x) => x * 100),
+  iv: (d) => [1.5, 2.0, 2.5, 3.5, 5.0][Math.min(d, 4)],
+  size: 100,
+  spread: 0.08,
+  hedgeCap: 0.3,
+};
 export const START_2021 = 4259;
 
 export const FACTIONS_2021: Faction[] = [
