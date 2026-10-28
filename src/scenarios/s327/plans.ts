@@ -1,4 +1,5 @@
 import type { CardResult, Clock, Directive, DocSheet, Game } from '../../engine/game';
+import { mofScore, verdictOf, VERDICTS } from './world';
 import {
   addDeter,
   addOrder,
@@ -122,7 +123,7 @@ export function s327Clocks(g: Game): Clock[] {
       filled: fired ? 5 : clamp(d, 0, 5),
       known: knows(g, 'wei'),
       then: '消息一出，席位 102 用到持仓限额，把价格托在 148 元以上，尾盘护着往 151 元走。',
-      now: flag(g, 'zcBust') ? '它被强平了。' : flag(g, 'zcCurbed') ? '被点名之后，它只敢用一半弹药。' : flag(g, 'mofPublic') ? '公告提前了：它失去先手，9:35 才跟着入场。' : '它比所有人先知道消息。',
+      now: flag(g, 'zcBust') ? '它被强平了。' : st(g).world.verdict && st(g).world.verdict !== 'full' ? '部里的方案对它不利：它不会再托盘，而是想办法把多单卖掉。' : flag(g, 'zcCurbed') ? '被点名之后，它只敢用一半弹药。' : flag(g, 'mofPublic') ? '公告提前了：它失去先手，9:35 才跟着入场。' : '它比所有人先知道消息。',
       counter: isOfficial(g)
         ? '吹风会点名中财，它的托盘力度减半；请财政部提前公告，就没有人能抢跑。'
         : f === 'short'
@@ -144,9 +145,15 @@ export function s327Clocks(g: Game): Clock[] {
       segs: 5,
       filled: fired ? 5 : clamp(d, 0, 5),
       known,
-      then: '方案公布：327 按远高于 132 元的价格兑付。',
-      now: flag(g, 'mofPublic') ? '已经答应 23 日开盘前公告：所有人同时知道。' : '23 日上午消息会先从多方那里流出来。',
-      counter: isOfficial(g) ? '请财政部提前公告，消息就没人能抢跑。' : f === 'long' ? '你比市场早知道——但不能让人知道。' : '托关系去北京打听，越临近 23 日，问到的越准。',
+      then: '方案公布：327 按 148.50 元兑付，远高于 132 元。这一局部里会看局面再定：22 日晚定案。',
+      now: `${known ? `部里眼下的倾向：${VERDICTS[st(g).world.verdict ?? verdictOf(mofScore(g))].name}${st(g).world.verdict ? '（已定案）' : '（22 日晚定案）'}。` : ''}${flag(g, 'mofPublic') ? '已经答应 23 日开盘前公告：所有人同时知道。' : '23 日上午消息会先从多方那里流出来。'}`,
+      counter: isOfficial(g)
+        ? '请财政部提前公告，消息就没人能抢跑；向部里反映市场过热，贴息可能打折。'
+        : f === 'long'
+          ? '你比市场早知道——但不能让人知道。加紧游说能稳住部里；被查出关联就坏事了。'
+          : f === 'short'
+            ? '托人给部里递材料，能把倾向往“不贴”那边挪；价格炒得越高，部里也越不想替投机者兑现。'
+            : '托关系去北京打听，越临近 23 日，问到的越准。',
       tone: f === 'short' ? 'threat' : f === 'long' ? 'friend' : 'neutral',
       state: fired ? 'fired' : 'running',
     });

@@ -6,6 +6,7 @@ import { PRE } from './data';
 /** 剧本日：二月十六日是第 0 天，一月份是负数（见 data.ts） */
 export const sd = (g: Game) => g.dayIndex - PRE;
 import type { Fen } from '../../engine/types';
+import type { World } from './world';
 
 // ───────────── 剧本私有状态（随 Game 实例存在，参与确定性） ─────────────
 
@@ -55,6 +56,8 @@ export interface State {
   memberStart: Record<string, number>;
   /** 借来的钱：结局时要还（元） */
   debt: number;
+  /** 这一局的世界：财政部的倾向、市场共识的偏离（见 world.ts） */
+  world: World;
 }
 
 export const knows = (g: Game, npc: string) => {

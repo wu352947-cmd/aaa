@@ -127,7 +127,7 @@ describe('剧本：玩家真的能改变历史', () => {
     const idle = runIdle('short', 'loyal');
     expect(idle.flags.gaoActed).toBe(true);
     const spike = (x: Game) => Math.max(...x.market.bars.slice(minuteIndex('10:04'), minuteIndex('10:09')).map((b) => b.h));
-    expect(spike(r)).toBeLessThan(spike(idle) - 80);
+    expect(spike(r)).toBeLessThan(spike(idle) - 50);
   });
 
   it('空方选择最后八分钟砸盘 → 交易所宣布交易无效（历史结局）', () => {

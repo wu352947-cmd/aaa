@@ -2,6 +2,7 @@ import { addCrowdFlow } from '../../engine/flows';
 import type { Game } from '../../engine/game';
 import { Rng } from '../../engine/rng';
 import { flag, mi, p2, sd } from './common';
+import { newsLine, verdict } from './world';
 import { BATTLE } from './data';
 
 /**
@@ -117,14 +118,15 @@ export function roomTick(g: Game, t: number): void {
   const n0 = flag(g, 'mofPublic') ? 0 : mi('9:58');
   if (t === n0 + 1 && !flag(g, 'mofPublic')) {
     const n = roomLots(g);
+    const good = verdict(g) === 'full';
     g.decision = {
       id: 'room-news',
       title: '消息传开了',
-      body: `大户室炸了锅：327 要贴息。价格 ${p2(g.market.last)} 元。${flag(g, 'zhouCall') === 'flip' ? '老周昨晚讲，217 会翻多。' : flag(g, 'zhouCall') === 'hold' ? '老周昨晚讲，217 会守住锁仓。' : ''}贴息是真是假、空方会不会认输，现在谁都说不准。`,
+      body: `大户室炸了锅：${newsLine(g)}。价格 ${p2(g.market.last)} 元。${flag(g, 'zhouCall') === 'flip' ? '老周昨晚讲，217 会翻多。' : flag(g, 'zhouCall') === 'hold' ? '老周昨晚讲，217 会守住锁仓。' : ''}消息是真是假、哪一方会认输，现在谁都说不准。`,
       choices: [
         { id: 'wait', label: '等等看', detail: '先看逐笔里大席位怎么动。' },
-        { id: 'chase', label: `追进：买入 ${n} 口`, detail: '用全部保证金额度。赌消息是真的、空方会被逼平仓。' },
-        { id: 'short', label: `不信：卖出 ${Math.max(1, Math.floor(n / 2))} 口`, detail: '赌消息是假的，涨上去还会掉下来。' },
+        { id: 'chase', label: good ? `追进：买入 ${n} 口` : `抄底：买入 ${n} 口`, detail: '用全部保证金额度。赌价格还要往上走。' },
+        { id: 'short', label: good ? `不信：卖出 ${Math.max(1, Math.floor(n / 2))} 口` : `跟着跑：卖出 ${Math.max(1, Math.floor(n / 2))} 口`, detail: '赌价格要往下走。' },
       ],
       countdown: 20,
     };
