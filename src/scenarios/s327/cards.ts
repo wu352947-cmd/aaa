@@ -19,7 +19,7 @@ import {
   spendCap,
   st,
   usage,
-  wan,
+  wan, sd
 } from './common';
 import { BATTLE } from './data';
 import { breakDirective } from './plans';
@@ -83,7 +83,7 @@ export function regMeters(g: Game): Meter[] {
 
 export function regCards(g: Game): CardDef[] {
   const s = st(g);
-  const d = g.dayIndex;
+  const d = sd(g);
   const ex = g.market.ex;
   const m = g.market;
   const pre = d < BATTLE;
@@ -355,7 +355,7 @@ export function regPlay(g: Game, id: string, target?: string): CardResult {
   const s = st(g);
   const m = g.market;
   const ex = m.ex;
-  const d = g.dayIndex;
+  const d = sd(g);
   const tName = target ? memberName(g, target) : '';
   const tNpc = target ? MEMBER_NPC[target] : '';
   switch (id) {
@@ -628,7 +628,7 @@ const HIDE_POS_ABS = (g: Game) => Math.abs(g.market.ex.acct(HIDE).pos);
 
 export function traderCards(g: Game): CardDef[] {
   const s = st(g);
-  const d = g.dayIndex;
+  const d = sd(g);
   const pre = d < BATTLE;
   const after = g.isAftermath;
   const f = g.factionId;
@@ -855,7 +855,7 @@ export function traderPlay(g: Game, id: string, target?: string): CardResult {
   const s = st(g);
   const ex = g.market.ex;
   const p = g.player;
-  const d = g.dayIndex;
+  const d = sd(g);
   const close = ex.last;
   switch (id) {
     case 'lobby': {

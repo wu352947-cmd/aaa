@@ -160,8 +160,8 @@ export default function App() {
           key={scenario.id}
           scenario={scenario}
           onBack={() => setScreen('title')}
-          onBegin={(f, p, seed, difficulty) => {
-            const g = new Game(scenario, seed, f, p);
+          onBegin={(f, p, seed, difficulty, startDay) => {
+            const g = new Game(scenario, seed, f, p, startDay ? { startDay } : undefined);
             g.difficulty = difficulty;
             setGame(g);
             setScreen('game');

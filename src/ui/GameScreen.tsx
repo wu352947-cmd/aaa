@@ -263,6 +263,7 @@ export function GameScreen({ game, llm, ui, onSettings, onEnd, onReplace }: { ga
         <div className="clock">
           <span className="date">{day.date}</span>
           <span className="muted">{day.label.replace(' · 决战日', '')}</span>
+          {game.chapter && <span className="chapter-tag">{game.chapter.title}</span>}
           {game.isBattleDay && <span className="battle-badge">决战日</span>}
           <span className="time">{game.phase === 'trading' ? game.time : '收盘'}</span>
         </div>

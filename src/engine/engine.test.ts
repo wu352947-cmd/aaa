@@ -1,12 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import { S327 } from '../scenarios/s327';
-import { BATTLE, DAYS, DECK_1995, PARAMS } from '../scenarios/s327/data';
+import { BATTLE, BATTLE_IDX, DAYS, DECK_1995, PARAMS, PRE } from '../scenarios/s327/data';
+import { sd } from '../scenarios/s327/common';
+
+/** 这些测试写于一月那一章之前：从第二章（二月十六日）开始 */
+const FEB = { startDay: PRE };
 import { Game, replay } from './game';
 import { Market, minuteIndex } from './market';
 
 /** 不做任何操作地跑完整个剧本（决策一律选默认项） */
 function runIdle(faction: string, seed = 'test'): Game {
-  return replay(S327, seed, faction, 'no-violation', []);
+  return replay(S327, seed, faction, 'no-violation', [], Infinity, FEB);
 }
 
 describe('引擎验收 5.2-1 零干预回放', () => {
@@ -14,7 +18,7 @@ describe('引擎验收 5.2-1 零干预回放', () => {
 
   it('布局期每日收盘贴近真实（重建）收盘价', () => {
     for (let d = 0; d < BATTLE; d++) {
-      const hist = DAYS[d].hist[DAYS[d].hist.length - 1];
+      const hist = DAYS[PRE + d].hist[DAYS[PRE + d].hist.length - 1];
       expect(Math.abs(g.market.closePrices[d] - hist)).toBeLessThanOrEqual(20); // ±0.20 元
     }
   });
@@ -56,7 +60,7 @@ describe('引擎验收 5.2-2 冲击符合平方根律', () => {
 
 describe('引擎验收 5.2-3 可复现', () => {
   it('同一种子 + 同一串操作 → 同一局', () => {
-    const live = new Game(S327, 'seed-a', 'short', 'no-violation');
+    const live = new Game(S327, 'seed-a', 'short', 'no-violation', FEB);
     for (let i = 0; i < 60; i++) live.tick();
     live.act({ type: 'order', req: { side: 'buy', qty: 200_000, type: 'market' } });
     for (let i = 0; i < 300; i++) live.tick();
@@ -64,7 +68,7 @@ describe('引擎验收 5.2-3 可复现', () => {
     live.act({ type: 'social', verb: 'exchange', npc: 'gao', option: 'share' });
     live.act({ type: 'end-night' });
     for (let i = 0; i < 100; i++) live.tick();
-    const re = replay(S327, 'seed-a', 'short', 'no-violation', live.log, live.globalTick);
+    const re = replay(S327, 'seed-a', 'short', 'no-violation', live.log, live.globalTick, FEB);
     expect(re.stateHash()).toBe(live.stateHash());
   });
 
@@ -76,7 +80,7 @@ describe('引擎验收 5.2-3 可复现', () => {
 
 describe('引擎验收 5.2-4 规则在撮合层强制执行', () => {
   it('保证金不足的委托被挡下，并产生规则事件', () => {
-    const g = new Game(S327, 'rules', 'retail', 'no-violation');
+    const g = new Game(S327, 'rules', 'retail', 'no-violation', FEB);
     g.tick();
     g.act({ type: 'order', req: { side: 'buy', qty: 1000, type: 'market' } });
     g.tick();
@@ -85,7 +89,7 @@ describe('引擎验收 5.2-4 规则在撮合层强制执行', () => {
   });
 
   it('超额透支的委托能成交，但被记录为违规并推高监管热度', () => {
-    const g = new Game(S327, 'rules', 'retail', 'no-violation');
+    const g = new Game(S327, 'rules', 'retail', 'no-violation', FEB);
     g.tick();
     g.act({ type: 'order', req: { side: 'buy', qty: 1000, type: 'market', overdraw: true } });
     g.tick();
@@ -96,7 +100,7 @@ describe('引擎验收 5.2-4 规则在撮合层强制执行', () => {
   });
 
   it('休市时委托被拒绝', () => {
-    const g = new Game(S327, 'rules', 'retail', 'no-violation');
+    const g = new Game(S327, 'rules', 'retail', 'no-violation', FEB);
     while (g.phase === 'trading') g.tick();
     g.act({ type: 'order', req: { side: 'buy', qty: 10, type: 'market' } });
     expect(g.events.some((e) => e.rule === 'session')).toBe(true);
@@ -105,7 +109,7 @@ describe('引擎验收 5.2-4 规则在撮合层强制执行', () => {
 
 describe('剧本：玩家真的能改变历史', () => {
   it('空方守住盟友（违约金 + 高关系）时，辽北不会倒戈，10:05 的跳涨明显变小', () => {
-    const g = new Game(S327, 'loyal', 'short', 'no-violation');
+    const g = new Game(S327, 'loyal', 'short', 'no-violation', FEB);
     const night = () => {
       while (g.phase === 'trading') g.tick();
     };
@@ -118,7 +122,7 @@ describe('剧本：玩家真的能改变历史', () => {
     g.act({ type: 'social', verb: 'exchange', npc: 'gao', option: 'share' });
     g.act({ type: 'social', verb: 'probe', npc: 'gao' });
     g.act({ type: 'end-night' });
-    const r = replay(S327, 'loyal', 'short', 'no-violation', g.log);
+    const r = replay(S327, 'loyal', 'short', 'no-violation', g.log, Infinity, FEB);
     expect(r.flags.gaoActed).toBeFalsy();
     const idle = runIdle('short', 'loyal');
     expect(idle.flags.gaoActed).toBe(true);
@@ -127,7 +131,7 @@ describe('剧本：玩家真的能改变历史', () => {
   });
 
   it('空方选择最后八分钟砸盘 → 交易所宣布交易无效（历史结局）', () => {
-    const g = new Game(S327, 'dump', 'short', 'no-violation');
+    const g = new Game(S327, 'dump', 'short', 'no-violation', FEB);
     for (let guard = 0; guard < 5000 && !g.ending; guard++) {
       if (g.phase === 'night') g.act({ type: 'end-night' });
       else if (g.decision) g.act({ type: 'decision', id: g.decision.id, choice: g.decision.id === 'last-eight' ? 'dump' : 'hold' });
@@ -145,7 +149,7 @@ describe('剧本：玩家真的能改变历史', () => {
 
 describe('新座位：空翻多的盟友', () => {
   function play(choice: string): Game {
-    const g = new Game(S327, 'ally', 'ally', 'no-betrayal');
+    const g = new Game(S327, 'ally', 'ally', 'no-betrayal', FEB);
     for (let guard = 0; guard < 5000 && !g.ending; guard++) {
       if (g.phase === 'night') g.act({ type: 'end-night' });
       else if (g.decision) g.act({ type: 'decision', id: g.decision.id, choice: g.decision.id === 'ally-flip' ? choice : g.decision.choices[0].id });
@@ -176,13 +180,13 @@ describe('监管座位：交易所监管负责人', () => {
   type Night = Record<number, [string, string?][]>;
   /** 跑完一局：nights 是每晚要打的卡，day 是盘中每分钟的钩子，ruling 是当晚裁决 */
   function play(opts: { nights?: Night; day?: (g: Game) => void; ruling?: string; seed?: string } = {}): Game {
-    const g = new Game(S327, opts.seed ?? 'official', 'official', 'no-violation');
+    const g = new Game(S327, opts.seed ?? 'official', 'official', 'no-violation', FEB);
     const done = new Set<number>();
     for (let guard = 0; guard < 8000 && !g.ending; guard++) {
       if (g.phase === 'night') {
-        if (!done.has(g.dayIndex)) {
-          done.add(g.dayIndex);
-          for (const [id, target] of opts.nights?.[g.dayIndex] ?? []) g.act({ type: 'card', id, target });
+        if (!done.has(sd(g))) {
+          done.add(sd(g));
+          for (const [id, target] of opts.nights?.[sd(g)] ?? []) g.act({ type: 'card', id, target });
         }
         g.act({ type: 'end-night' });
       } else if (g.decision) g.act({ type: 'decision', id: g.decision.id, choice: g.decision.id === 'ruling' ? (opts.ruling ?? 'void') : g.decision.choices[0].id });
@@ -198,7 +202,7 @@ describe('监管座位：交易所监管负责人', () => {
   it('剧本多出两夜余波：决战日之后还有清算', () => {
     const g = play();
     expect(DAYS.filter((d) => d.kind === 'aftermath').length).toBe(2);
-    expect(g.papers.some((p) => p.day === BATTLE + 1)).toBe(true);
+    expect(g.papers.some((p) => p.day === BATTLE_IDX + 1)).toBe(true);
     expect(g.ending).not.toBeNull();
   });
 
@@ -267,14 +271,14 @@ describe('监管座位：交易所监管负责人', () => {
   });
 
   it('提高保证金只影响这一局，不污染剧本常量', () => {
-    const g = play({ day: (x) => x.dayIndex === 0 && x.market.t === 10 && x.act({ type: 'card', id: 'margin-now' }) });
+    const g = play({ day: (x) => sd(x) === 0 && x.market.t === 10 && x.act({ type: 'card', id: 'margin-now' }) });
     expect(g.market.ex.deck.marginRate).toBe(0.05);
     expect(S327.deck.marginRate).toBe(0.025);
-    expect(new Game(S327, 'x', 'retail', 'no-violation').market.ex.deck.marginRate).toBe(0.025);
+    expect(new Game(S327, 'x', 'retail', 'no-violation', FEB).market.ex.deck.marginRate).toBe(0.025);
   });
 
   it('政治资本不够时，卡打不出去', () => {
-    const g = new Game(S327, 'broke', 'official', 'no-violation');
+    const g = new Game(S327, 'broke', 'official', 'no-violation', FEB);
     while (g.phase === 'trading') g.tick();
     g.act({ type: 'card', id: 'mof' });
     g.act({ type: 'card', id: 'limit' });
@@ -290,7 +294,7 @@ describe('监管座位：交易所监管负责人', () => {
   });
 
   it('卡牌结算写进动作日志，读档重放得到同一局', () => {
-    const live = new Game(S327, 'cards', 'official', 'no-violation');
+    const live = new Game(S327, 'cards', 'official', 'no-violation', FEB);
     while (live.phase === 'trading') live.tick();
     live.act({ type: 'card', id: 'inspect', target: 'zhongcai' });
     live.act({ type: 'card', id: 'mediate' });
@@ -298,7 +302,7 @@ describe('监管座位：交易所监管负责人', () => {
     for (let i = 0; i < 30; i++) live.tick();
     live.act({ type: 'card', id: 'notice' });
     for (let i = 0; i < 30; i++) live.tick();
-    const re = replay(S327, 'cards', 'official', 'no-violation', live.log, live.globalTick);
+    const re = replay(S327, 'cards', 'official', 'no-violation', live.log, live.globalTick, FEB);
     expect(re.stateHash()).toBe(live.stateHash());
     expect(re.cardLog.map((c) => c.result.title)).toEqual(live.cardLog.map((c) => c.result.title));
   });
@@ -306,7 +310,7 @@ describe('监管座位：交易所监管负责人', () => {
 
 describe('交易座位的手段', () => {
   function day1(f: string, card?: string) {
-    const g = new Game(S327, 'w', f, 'no-violation');
+    const g = new Game(S327, 'w', f, 'no-violation', FEB);
     while (g.phase === 'trading') g.tick();
     g.act({ type: 'end-night' });
     while (g.market.t < 215) {
@@ -327,21 +331,21 @@ describe('交易座位的手段', () => {
   });
 
   it('借壳分仓：空方的持仓限额变成 400 万口，越过“绝不违规”的底线', () => {
-    const g = new Game(S327, 's', 'short', 'no-violation');
+    const g = new Game(S327, 's', 'short', 'no-violation', FEB);
     g.act({ type: 'card', id: 'split' });
     expect(g.market.ex.limitOf(g.player)).toBe(4_000_000);
     expect(g.linesCrossed).toBe(1);
   });
 
   it('多方拿到代持证据后举报：申江在尾盘不敢全力砸盘', () => {
-    const g = new Game(S327, 'rep', 'long', 'no-violation');
+    const g = new Game(S327, 'rep', 'long', 'no-violation', FEB);
     for (let guard = 0; guard < 8000 && !g.ending; guard++) {
       if (g.phase === 'night') {
-        if ((g.dayIndex === 1 || g.dayIndex === 2) && g.flags[`probed-${g.dayIndex}`] == null) {
-          g.flags[`probed-${g.dayIndex}`] = true;
+        if ((sd(g) === 1 || sd(g) === 2) && g.flags[`probed-${sd(g)}`] == null) {
+          g.flags[`probed-${sd(g)}`] = true;
           g.act({ type: 'social', verb: 'probe', npc: 'zhou' });
         }
-        if (g.dayIndex === 3 && !g.flags.repDone) {
+        if (sd(g) === 3 && !g.flags.repDone) {
           g.flags.repDone = true;
           g.act({ type: 'card', id: 'report-split' });
         }
@@ -364,10 +368,10 @@ describe('消息树', () => {
   });
 
   it('背叛过高振宇的空方会收到他放的假消息；守约的不会', () => {
-    const betray = new Game(S327, 'bait', 'short', 'no-violation');
+    const betray = new Game(S327, 'bait', 'short', 'no-violation', FEB);
     while (betray.phase === 'trading') betray.tick();
     betray.act({ type: 'social', verb: 'betray', npc: 'gao' });
-    const g = replay(S327, 'bait', 'short', 'no-violation', betray.log);
+    const g = replay(S327, 'bait', 'short', 'no-violation', betray.log, Infinity, FEB);
     const bait = g.intel.find((i) => i.id === 'gao-bait');
     expect(bait).toBeDefined();
     expect(bait!.credibility).toBeLessThan(0.2);

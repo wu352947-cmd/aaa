@@ -1,7 +1,7 @@
 import { fmtYi } from '../../engine/exchange';
 import { addCrowdFlow } from '../../engine/flows';
 import type { CardDef, CardResult, DraftRules, Game } from '../../engine/game';
-import { addDeter, addOrder, ALLY, flag, isPlayer, LONG, memberName, members, rumor, SHORT, spendCap, st, wan } from './common';
+import { addDeter, addOrder, ALLY, flag, isPlayer, LONG, memberName, members, rumor, SHORT, spendCap, st, wan, sd } from './common';
 import { BATTLE } from './data';
 
 /**
@@ -17,7 +17,7 @@ type Deal = CardDef & { /** 能发的日子与条件 */ ok(g: Game): boolean; pt
 
 function officialDeck(g: Game): Deal[] {
   const s = st(g);
-  const d = g.dayIndex;
+  const d = sd(g);
   const pre = d < BATTLE;
   const mem = members(g).map((id) => ({ id, label: memberName(g, id) }));
   return [
@@ -32,7 +32,7 @@ function officialDeck(g: Game): Deal[] {
       blocked: flag(g, 'mofPublic') ? '财政部已经答应' : !pre ? '来不及了' : s.cap < 1 ? '政治资本不足（需 1 点）' : undefined,
       convert: '+1 点政治资本',
       pts: 1,
-      ok: (g) => g.dayIndex >= 1 && g.dayIndex < BATTLE && !flag(g, 'mofPublic'),
+      ok: (g) => sd(g) >= 1 && sd(g) < BATTLE && !flag(g, 'mofPublic'),
     },
     {
       id: 'x-taskforce',
@@ -45,7 +45,7 @@ function officialDeck(g: Game): Deal[] {
       targets: mem.filter((x) => !s.used.has(`insp-${x.id}`)),
       convert: '+1 点政治资本',
       pts: 1,
-      ok: (g) => g.dayIndex < BATTLE,
+      ok: (g) => sd(g) < BATTLE,
     },
     {
       id: 'x-overtime',
@@ -57,7 +57,7 @@ function officialDeck(g: Game): Deal[] {
       when: 'night',
       convert: '+1 点政治资本',
       pts: 1,
-      ok: (g) => g.dayIndex < BATTLE && !st(g).know.has('all'),
+      ok: (g) => sd(g) < BATTLE && !st(g).know.has('all'),
     },
     {
       id: 'x-fund',
@@ -82,7 +82,7 @@ function officialDeck(g: Game): Deal[] {
       blocked: g.market.t < g.market.haltUntil ? '正在停市' : undefined,
       convert: '+1 点政治资本',
       pts: 1,
-      ok: (g) => g.dayIndex >= 3 && g.dayIndex < BATTLE,
+      ok: (g) => sd(g) >= 3 && sd(g) < BATTLE,
     },
     {
       id: 'x-backing',
@@ -95,7 +95,7 @@ function officialDeck(g: Game): Deal[] {
       status: flag(g, 'coBacked') ? '已授权' : undefined,
       convert: '+2 点政治资本',
       pts: 2,
-      ok: (g) => g.dayIndex >= 2 && g.dayIndex < BATTLE,
+      ok: (g) => sd(g) >= 2 && sd(g) < BATTLE,
     },
     {
       id: 'x-ledger',
@@ -108,7 +108,7 @@ function officialDeck(g: Game): Deal[] {
       status: flag(g, 'preciseFree') ? '已就绪' : undefined,
       convert: '+1 点政治资本',
       pts: 1,
-      ok: (g) => g.dayIndex >= 2 && g.dayIndex < BATTLE,
+      ok: (g) => sd(g) >= 2 && sd(g) < BATTLE,
     },
     {
       id: 'x-foe-letter',
@@ -121,7 +121,7 @@ function officialDeck(g: Game): Deal[] {
       foe: '换算：上面有人替你说话，政治资本 +3。但申江知道你收了信——它对你的威慑 −2。',
       convert: '+3 点政治资本',
       pts: 3,
-      ok: (g) => g.dayIndex < BATTLE && !isPlayer(g, SHORT),
+      ok: (g) => sd(g) < BATTLE && !isPlayer(g, SHORT),
     },
     {
       id: 'x-foe-dinner',
@@ -134,14 +134,14 @@ function officialDeck(g: Game): Deal[] {
       foe: '换算：席上有人替你在部里美言，政治资本 +3。但被记者看见了：秩序 −5，中财不再怕你（威慑 −1）。',
       convert: '+3 点政治资本',
       pts: 3,
-      ok: (g) => g.dayIndex < BATTLE && !isPlayer(g, LONG),
+      ok: (g) => sd(g) < BATTLE && !isPlayer(g, LONG),
     },
   ];
 }
 
 function traderDeck(g: Game): Deal[] {
   const f = g.factionId;
-  const d = g.dayIndex;
+  const d = sd(g);
   const pre = d < BATTLE;
   const s = st(g);
   const big = f !== 'retail';
@@ -156,7 +156,7 @@ function traderDeck(g: Game): Deal[] {
       when: 'night',
       convert: '+1 点精力',
       pts: 1,
-      ok: (g) => g.dayIndex < BATTLE && !st(g).know.has('all'),
+      ok: (g) => sd(g) < BATTLE && !st(g).know.has('all'),
     },
     {
       id: 'x-calm',
@@ -186,7 +186,7 @@ function traderDeck(g: Game): Deal[] {
       blocked: g.energy <= 0 ? '精力用完了' : !pre ? '来不及了' : undefined,
       convert: '+1 点精力',
       pts: 1,
-      ok: (g) => g.dayIndex < BATTLE,
+      ok: (g) => sd(g) < BATTLE,
     },
   ];
   if (big)
@@ -200,7 +200,7 @@ function traderDeck(g: Game): Deal[] {
       when: 'any',
       convert: '+1 点精力',
       pts: 1,
-      ok: (g) => g.dayIndex < BATTLE,
+      ok: (g) => sd(g) < BATTLE,
     });
   if (f === 'short')
     out.push(
@@ -214,7 +214,7 @@ function traderDeck(g: Game): Deal[] {
         when: 'any',
         convert: '+1 点精力',
         pts: 1,
-        ok: (g) => g.dayIndex < BATTLE,
+        ok: (g) => sd(g) < BATTLE,
       },
       {
         id: 'x-halt-req',
@@ -227,7 +227,7 @@ function traderDeck(g: Game): Deal[] {
         blocked: !g.isBattleDay ? '只有决战日用得上' : g.market.t < g.market.haltUntil ? '正在停市' : undefined,
         convert: '+1 点精力',
         pts: 1,
-        ok: (g) => g.dayIndex >= 3 && g.dayIndex < BATTLE,
+        ok: (g) => sd(g) >= 3 && sd(g) < BATTLE,
       },
       {
         id: 'x-foe-wei',
@@ -240,7 +240,7 @@ function traderDeck(g: Game): Deal[] {
         foe: '换算：你借着这句话跟同行通气，精力 +2。但话传开了——明早散户情绪偏多。',
         convert: '+2 点精力',
         pts: 2,
-        ok: (g) => g.dayIndex < BATTLE,
+        ok: (g) => sd(g) < BATTLE,
       },
     );
   if (f === 'long')
@@ -255,7 +255,7 @@ function traderDeck(g: Game): Deal[] {
         when: 'trading',
         convert: '+1 点精力',
         pts: 1,
-        ok: (g) => g.dayIndex >= 1 && g.dayIndex <= BATTLE - 1,
+        ok: (g) => sd(g) >= 1 && sd(g) <= BATTLE - 1,
       },
       {
         id: 'x-shell',
@@ -267,7 +267,7 @@ function traderDeck(g: Game): Deal[] {
         when: 'any',
         convert: '+1 点精力',
         pts: 1,
-        ok: (g) => g.dayIndex < BATTLE,
+        ok: (g) => sd(g) < BATTLE,
       },
       {
         id: 'x-foe-shen',
@@ -280,7 +280,7 @@ function traderDeck(g: Game): Deal[] {
         foe: '换算：你借这个由头去北京又问了一圈，精力 +2。但谣言已经传开——明早散户会抛出约 60 万口。',
         convert: '+2 点精力',
         pts: 2,
-        ok: (g) => g.dayIndex < BATTLE && !isPlayer(g, SHORT),
+        ok: (g) => sd(g) < BATTLE && !isPlayer(g, SHORT),
       },
     );
   if (f === 'ally')
@@ -296,7 +296,7 @@ function traderDeck(g: Game): Deal[] {
         blocked: g.player.pos >= 0 ? '没有空单了' : undefined,
         convert: '+1 点精力',
         pts: 1,
-        ok: (g) => g.dayIndex < BATTLE && g.player.pos < 0,
+        ok: (g) => sd(g) < BATTLE && g.player.pos < 0,
       },
       {
         id: 'x-foe-shen',
@@ -309,7 +309,7 @@ function traderDeck(g: Game): Deal[] {
         foe: '换算：你将计就计，借他的嘴传话，精力 +2。但你的底细也漏了出去——沈立行 关系 −15。',
         convert: '+2 点精力',
         pts: 2,
-        ok: (g) => g.dayIndex < BATTLE && !isPlayer(g, SHORT),
+        ok: (g) => sd(g) < BATTLE && !isPlayer(g, SHORT),
       },
     );
   if (f === 'retail')
@@ -324,7 +324,7 @@ function traderDeck(g: Game): Deal[] {
         when: 'any',
         convert: '+1 点精力',
         pts: 1,
-        ok: (g) => g.dayIndex < BATTLE,
+        ok: (g) => sd(g) < BATTLE,
       },
       {
         id: 'x-zhou',
@@ -341,7 +341,7 @@ function traderDeck(g: Game): Deal[] {
         ].filter((t) => !s.know.has(t.id)),
         convert: '+1 点精力',
         pts: 1,
-        ok: (g) => g.dayIndex < BATTLE,
+        ok: (g) => sd(g) < BATTLE,
       },
     );
   return out;
@@ -383,7 +383,7 @@ export const DRAFT_327: DraftRules = {
       case 'x-foe-shen':
         if (g.factionId === 'long') {
           g.flags.vetoNext = true;
-          rumor(g, `foe-veto-${g.dayIndex}`, '贴息被财政部否了', '申江的交易员在饭桌上说：“贴息？早就被否了。”话已经传到了大户室。', '饭局上', 0.1);
+          rumor(g, `foe-veto-${sd(g)}`, '贴息被财政部否了', '申江的交易员在饭桌上说：“贴息？早就被否了。”话已经传到了大户室。', '饭局上', 0.1);
           fx.push('明早散户会抛出约 60 万口');
         } else {
           g.relate('shen', -15, '从眼线那里知道了你的底细');

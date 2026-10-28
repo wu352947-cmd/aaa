@@ -100,6 +100,25 @@ export interface GameOpts {
   heat?: number;
   /** 这一局是生涯里的一章 */
   career?: boolean;
+  /** 从第几天开始（跳过前面的章节）；剧本在 setup 里据此调整开局 */
+  startDay?: number;
+}
+
+export interface Chapter {
+  id: string;
+  title: string;
+  sub: string;
+  /** 这一章最后一天在 days 里的下标 */
+  until: number;
+}
+
+/** 一章开始时的账面：章末小结拿它比 */
+export interface ChapterMark {
+  eq: number;
+  heat: number;
+  rep: number;
+  lines: number;
+  letters: number;
 }
 
 /** 一期报纸。tone：这期报纸整体有多看多（+1）或看空（−1）；spun：塞稿的人 */
@@ -337,6 +356,8 @@ export interface Ending {
 }
 
 export interface Scenario {
+  /** 分章：每章到哪一天（真实下标）为止。章末那一晚有一张小结 */
+  chapters?: Chapter[];
   /** 股东名册：控制权之争里谁手里有多少票（持股比例 0–1） */
   holders?(g: Game): { id: string; name: string; pct: number; note?: string; you?: boolean }[];
   /** 今晚过后是第几天（默认明天）；只能往后跳 */
@@ -561,6 +582,8 @@ export class Game {
   private readonly rngDraft: Rng;
   /** 场外配资（没有借就是 null） */
   credit: CreditLine | null = null;
+  /** 每章开始时的账面（章 id → 账面） */
+  chapterMarks: Record<string, ChapterMark> = {};
   /** 今天开盘前的净值：场外配资按它算能借多少 */
   creditBase = 0;
   /** 买入的期权 */
@@ -583,6 +606,7 @@ export class Game {
     setUnits(scenario.units ?? { qty: '口', cur: '元' });
     this.market = new Market({ ...scenario.deck }, scenario.params, `${scenario.id}:${seed}:market`, scenario.startPrice, scenario.session ?? SSE_1995);
     for (const d of scenario.npcs) if (d.factionId !== factionId) this.npcs.set(d.id, { ...d, memory: [] });
+    this.dayIndex = Math.max(0, Math.min(scenario.days.length - 1, setupOpts.startDay ?? 0));
     scenario.setup(this);
     if (setupOpts.reputation != null) this.reputation = setupOpts.reputation;
     // 旧账带进来：热度只降不清零
@@ -938,6 +962,7 @@ export class Game {
 
   private startDay(): void {
     this.energy = this.maxEnergy;
+    this.markChapter();
     if (this.isAftermath || this.isHalted) {
       // 余波：市场不再开盘，直接进入夜晚
       this.phase = 'night';
@@ -1299,6 +1324,18 @@ export class Game {
       credibility: 1,
       kind: 'news',
     });
+  }
+
+  /** 今天属于哪一章 */
+  get chapter(): Chapter | undefined {
+    return this.scenario.chapters?.find((c) => this.dayIndex <= c.until);
+  }
+
+  /** 新的一章第一天：记下账面 */
+  private markChapter(): void {
+    const c = this.chapter;
+    if (!c || this.chapterMarks[c.id]) return;
+    this.chapterMarks[c.id] = { eq: this.netEquity(), heat: this.heat, rep: this.reputation, lines: this.linesCrossed, letters: this.intel.filter((i) => i.kind === 'victim').length };
   }
 
   private endNight(): void {

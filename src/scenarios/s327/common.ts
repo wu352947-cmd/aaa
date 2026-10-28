@@ -1,6 +1,10 @@
 import type { Account } from '../../engine/exchange';
 import type { CreditLine, Directive, DocSheet, Game, Intel } from '../../engine/game';
 import { minuteIndex as mi } from '../../engine/market';
+import { PRE } from './data';
+
+/** 剧本日：二月十六日是第 0 天，一月份是负数（见 data.ts） */
+export const sd = (g: Game) => g.dayIndex - PRE;
 import type { Fen } from '../../engine/types';
 
 // ───────────── 剧本私有状态（随 Game 实例存在，参与确定性） ─────────────
@@ -189,7 +193,7 @@ export function rumor(g: Game, id: string, title: string, body: string, source: 
 }
 export function mentor(g: Game, text: string) {
   if (!g.npc('zhou')) return;
-  g.addIntel({ id: `mentor-${g.dayIndex}-${g.intel.length}`, title: text.slice(0, 22) + (text.length > 22 ? '…' : ''), body: text, source: '老周', credibility: 0.75, kind: 'mentor' });
+  g.addIntel({ id: `mentor-${sd(g)}-${g.intel.length}`, title: text.slice(0, 22) + (text.length > 22 ? '…' : ''), body: text, source: '老周', credibility: 0.75, kind: 'mentor' });
 }
 export function evidence(g: Game, id: string, title: string, body: string, source: string, against: string) {
   if (g.intel.some((i) => i.id === id)) return;

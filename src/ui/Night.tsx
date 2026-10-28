@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react';
+import { Fragment, useEffect, useState } from 'react';
 import type { Game } from '../engine/game';
+import { fmtYi } from '../engine/exchange';
 import { headline } from '../llm/director';
 import { eraOf } from '../llm/era';
 import type { LlmSettings } from '../llm/settings';
@@ -122,6 +123,7 @@ export function Night({ game, llm, dlg, showMentor, onSleep }: { game: Game; llm
             {todays.length === 0 && <p style={{ fontFamily: 'var(--serif)' }}>今日市况平稳，多空双方各执一词。</p>}
             <div style={{ fontSize: 11, color: 'var(--ink-soft)', marginTop: 8 }}>{hl?.source === 'llm' ? '标题由模型按当年腔调改写，数字取自引擎' : '标题由引擎生成'}</div>
           </div>
+          <ChapterEnd game={game} />
           {letters.map((l) => (
             <div key={l.id} className="victim-letter paper">
               <div className="victim-from">{l.title}</div>
@@ -224,6 +226,43 @@ export function Night({ game, llm, dlg, showMentor, onSleep }: { game: Game; llm
           </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+/** 一章的最后一晚：这一章里你的账面变了多少，下一章是什么 */
+function ChapterEnd({ game }: { game: Game }) {
+  const chapters = game.scenario.chapters ?? [];
+  const i = chapters.findIndex((c) => c.until === game.dayIndex);
+  if (i < 0 || game.ending) return null;
+  const c = chapters[i];
+  const next = chapters[i + 1];
+  const m = game.chapterMarks[c.id];
+  if (!m) return null;
+  const eq = game.netEquity();
+  const letters = game.intel.filter((x) => x.kind === 'victim').length;
+  const rows: [string, string][] = [];
+  if (!game.faction.observer) rows.push(['权益', `${fmtYi(m.eq)} → ${fmtYi(eq)}（${eq >= m.eq ? '+' : '−'}${(Math.abs(eq - m.eq) / Math.max(1, Math.abs(m.eq)) * 100).toFixed(1)}%）`]);
+  rows.push(['监管热度', `${Math.round(m.heat)} → ${Math.round(game.heat)}`], ['声望', `${m.rep} → ${game.reputation}`]);
+  if (game.linesCrossed > m.lines) rows.push(['越过底线', `这一章 ${game.linesCrossed - m.lines} 次`]);
+  if (letters > m.letters) rows.push(['收到的信', `这一章 ${letters - m.letters} 封`]);
+  return (
+    <div className="chapter-end paper">
+      <div className="chapter-kicker">本章完</div>
+      <h3>{c.title}</h3>
+      <dl className="kv">
+        {rows.map(([k, v]) => (
+          <Fragment key={k}>
+            <dt>{k}</dt>
+            <dd>{v}</dd>
+          </Fragment>
+        ))}
+      </dl>
+      {next && (
+        <p className="chapter-next">
+          下一章：<b>{next.title}</b>——{next.sub}
+        </p>
+      )}
     </div>
   );
 }

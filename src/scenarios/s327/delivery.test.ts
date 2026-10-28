@@ -3,15 +3,21 @@ import { Game } from '../../engine/game';
 import { BATTLE } from './data';
 import { FLOAT, spot, spotPrice } from './delivery';
 import { S327 } from './index';
+import { PRE as FEB_DAY } from './data';
+import { sd } from './common';
+
+/** 这些测试写于一月那一章之前：从第二章（二月十六日）开始 */
+const FEB = { startDay: FEB_DAY };
+
 
 /** 跑到第 day 晚（余波日直接就是夜晚），night 每晚调一次 */
 function play(seat: string, seed: string, night: (g: Game) => void): Game {
-  const g = new Game(S327, seed, seat, 'no-violation');
+  const g = new Game(S327, seed, seat, 'no-violation', FEB);
   const seen = new Set<number>();
   for (let guard = 0; guard < 20000 && !g.ending; guard++) {
     if (g.phase === 'night') {
-      if (!seen.has(g.dayIndex)) {
-        seen.add(g.dayIndex);
+      if (!seen.has(sd(g))) {
+        seen.add(sd(g));
         night(g);
       }
       if (!g.ending) g.act({ type: 'end-night' });
@@ -24,7 +30,7 @@ const ret = (g: Game) => Number(g.ending!.stats.find(([k]) => k === '收益率')
 
 describe('92(3) 现券与实物交割', { timeout: 120000 }, () => {
   it('买现券：全额付现金，报价被推高，市值计入权益', () => {
-    const g = new Game(S327, 'spot', 'long', 'no-violation');
+    const g = new Game(S327, 'spot', 'long', 'no-violation', FEB);
     while (g.phase !== 'night') g.tick();
     const p0 = spotPrice(g);
     const eq = g.equity();
@@ -38,15 +44,15 @@ describe('92(3) 现券与实物交割', { timeout: 120000 }, () => {
   it('多头囤券再坚持交割：逼仓赚到溢价，但交易所干预、监管热度上去；协议平仓就没有这笔', () => {
     // 每晚囤 2 万口，三晚下来占流通量的四成
     const hoard = (g: Game) => {
-      if (g.dayIndex < 3) g.act({ type: 'card', id: 'dlv-buy', target: '20000' });
+      if (sd(g) < 3) g.act({ type: 'card', id: 'dlv-buy', target: '20000' });
     };
     const agree = play('long', 'sq', (g) => {
       hoard(g);
-      if (g.dayIndex > BATTLE && !spot(g).choice) g.act({ type: 'card', id: 'dlv-agree' });
+      if (sd(g) > BATTLE && !spot(g).choice) g.act({ type: 'card', id: 'dlv-agree' });
     });
     const deliver = play('long', 'sq', (g) => {
       hoard(g);
-      if (g.dayIndex > BATTLE && !spot(g).choice) g.act({ type: 'card', id: 'dlv-deliver' });
+      if (sd(g) > BATTLE && !spot(g).choice) g.act({ type: 'card', id: 'dlv-deliver' });
     });
     expect(spot(deliver).held).toBe(60_000);
     expect(spot(deliver).held / FLOAT).toBeGreaterThan(0.3);
@@ -57,10 +63,10 @@ describe('92(3) 现券与实物交割', { timeout: 120000 }, () => {
 
   it('空头坚持交割却手里没券：高价求购，买不到的付违约金', () => {
     const noBonds = play('short', 'dl', (g) => {
-      if (g.dayIndex > BATTLE && g.player.pos < 0 && !spot(g).choice) g.act({ type: 'card', id: 'dlv-deliver' });
+      if (sd(g) > BATTLE && g.player.pos < 0 && !spot(g).choice) g.act({ type: 'card', id: 'dlv-deliver' });
     });
     const agree = play('short', 'dl', (g) => {
-      if (g.dayIndex > BATTLE && g.player.pos < 0 && !spot(g).choice) g.act({ type: 'card', id: 'dlv-agree' });
+      if (sd(g) > BATTLE && g.player.pos < 0 && !spot(g).choice) g.act({ type: 'card', id: 'dlv-agree' });
     });
     if (noBonds.player.pos < 0) {
       expect(ret(noBonds)).toBeLessThan(ret(agree));

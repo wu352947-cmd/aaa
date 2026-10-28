@@ -6,12 +6,20 @@ import { BATTLE } from '../scenarios/s327/data';
 import { TULIP_NPCS } from '../scenarios/tulip/data';
 import { replayTulip, TulipGame } from '../scenarios/tulip/game';
 import { Game, replay, traderArchetype } from './game';
+import { PRE as FEB_DAY } from '../scenarios/s327/data';
+import { sd } from '../scenarios/s327/common';
+
+/** 这些测试写于一月那一章之前：从第二章（二月十六日）开始 */
+const FEB = { startDay: FEB_DAY };
+/** 327 按剧本日数（二月十六日是 0），其它剧本就是第几天 */
+const dayOf = (g: Game) => (g.scenario.id === 's327' ? sd(g) : g.dayIndex);
+
 
 /** 跑到第 day 晚停下 */
 function toNight(g: Game, day: number): Game {
   for (let guard = 0; guard < 9000 && !g.ending; guard++) {
     if (g.phase === 'night') {
-      if (g.dayIndex >= day) return g;
+      if (dayOf(g) >= day) return g;
       g.act({ type: 'end-night' });
     } else if (g.decision) g.act({ type: 'decision', id: g.decision.id, choice: g.decision.choices[0].id });
     else g.tick();
@@ -24,8 +32,8 @@ function finish(g: Game, night?: (g: Game) => void): Game {
   const done = new Set<number>();
   for (let guard = 0; guard < 9000 && !g.ending; guard++) {
     if (g.phase === 'night') {
-      if (!done.has(g.dayIndex)) {
-        done.add(g.dayIndex);
+      if (!done.has(dayOf(g))) {
+        done.add(dayOf(g));
         night?.(g);
       }
       g.act({ type: 'end-night' });
@@ -37,20 +45,20 @@ function finish(g: Game, night?: (g: Game) => void): Game {
 
 describe('每晚选卡：三选一，打出或换算', () => {
   it('每晚发三张；收下进手牌，同一种子同一串动作重放一致', () => {
-    const g = toNight(new Game(S327, 'draft', 'official', 'no-violation'), 0);
+    const g = toNight(new Game(S327, 'draft', 'official', 'no-violation', FEB), 0);
     expect(g.offer?.length).toBe(3);
     const pick = g.offer![0];
     g.act({ type: 'draft', id: pick });
     expect(g.hand).toEqual([pick]);
     expect(g.offer).toBeNull();
     expect(g.cards().some((c) => c.id === pick && c.group === '手牌')).toBe(true);
-    const r = replay(S327, 'draft', 'official', 'no-violation', g.log, g.globalTick);
+    const r = replay(S327, 'draft', 'official', 'no-violation', g.log, g.globalTick, FEB);
     expect(r.hand).toEqual(g.hand);
     expect(r.stateHash()).toBe(g.stateHash());
   });
 
   it('换算：不打出，换成政治资本；收下过的牌不会再发', () => {
-    const g = toNight(new Game(S327, 'draft', 'official', 'no-violation'), 0);
+    const g = toNight(new Game(S327, 'draft', 'official', 'no-violation', FEB), 0);
     const pick = g.offer![0];
     g.act({ type: 'draft', id: pick });
     const cap = st(g).cap;
@@ -62,7 +70,7 @@ describe('每晚选卡：三选一，打出或换算', () => {
   });
 
   it('对手的牌只能换算：换得多，但替对手办事', () => {
-    const g = toNight(new Game(S327, 'draft', 'official', 'no-violation'), 0);
+    const g = toNight(new Game(S327, 'draft', 'official', 'no-violation', FEB), 0);
     // 直接把对手的牌塞进手牌，验证结算
     g.offer = ['x-foe-letter'];
     g.act({ type: 'draft', id: 'x-foe-letter' });
@@ -74,7 +82,7 @@ describe('每晚选卡：三选一，打出或换算', () => {
   });
 
   it('手牌最多三张', () => {
-    const g = toNight(new Game(S327, 'hand', 'short', 'no-violation'), 0);
+    const g = toNight(new Game(S327, 'hand', 'short', 'no-violation', FEB), 0);
     g.hand = ['x-eyes', 'x-calm', 'x-loan'];
     const before = g.offer;
     g.act({ type: 'draft', id: g.offer![0] });
@@ -83,7 +91,7 @@ describe('每晚选卡：三选一，打出或换算', () => {
   });
 
   it('交易座位：眼线让所有人的盘算都摸清', () => {
-    const g = toNight(new Game(S327, 'eyes', 'short', 'no-violation'), 0);
+    const g = toNight(new Game(S327, 'eyes', 'short', 'no-violation', FEB), 0);
     expect(g.scenario.clocks!(g).filter((c) => c.who !== 'lu').every((c) => !c.known)).toBe(true);
     g.offer = ['x-eyes'];
     g.act({ type: 'draft', id: 'x-eyes' });
@@ -94,7 +102,7 @@ describe('每晚选卡：三选一，打出或换算', () => {
 
 describe('对手动向：进度钟', () => {
   it('当面聊过才摸得清；辽北倒戈后钟走满', () => {
-    const g = toNight(new Game(S327, 'clock', 'short', 'no-violation'), 0);
+    const g = toNight(new Game(S327, 'clock', 'short', 'no-violation', FEB), 0);
     const gao = () => g.scenario.clocks!(g).find((c) => c.id === 'gao-flip')!;
     expect(gao().known).toBe(false);
     g.act({ type: 'social', verb: 'probe', npc: 'gao' });
@@ -104,14 +112,14 @@ describe('对手动向：进度钟', () => {
   });
 
   it('申江的钟：16:15 拿定主意后显示已经发生或没有发生', () => {
-    const g = finish(new Game(S327, 'clock', 'official', 'no-violation'));
+    const g = finish(new Game(S327, 'clock', 'official', 'no-violation', FEB));
     expect(g.ending).not.toBeNull();
   });
 });
 
 describe('会员日报：监管座位每晚的案头工作', () => {
   it('诚实的行：昨日 + 买入 − 卖出 = 申报；浦江的委托从申江的交易室报进来', () => {
-    const g = toNight(new Game(S327, 'audit', 'official', 'no-violation'), 1);
+    const g = toNight(new Game(S327, 'audit', 'official', 'no-violation', FEB), 1);
     const doc = g.scenario.docs!(g)[0];
     const n = (x: string) => Number(x.replace('−', '-').replace('+', ''));
     for (const r of doc.rows) {
@@ -122,7 +130,7 @@ describe('会员日报：监管座位每晚的案头工作', () => {
   });
 
   it('标出浦江的终端异常：拿到借壳证据，合并超限的部分明早减仓', () => {
-    const g = toNight(new Game(S327, 'audit', 'official', 'no-violation'), 1);
+    const g = toNight(new Game(S327, 'audit', 'official', 'no-violation', FEB), 1);
     g.act({ type: 'doc', id: 'audit-1', marks: { pujiang: 'term' } });
     expect(st(g).evidence.has('split')).toBe(true);
     expect(st(g).reduce.get('shenjiang')).toBeGreaterThan(0);
@@ -130,7 +138,7 @@ describe('会员日报：监管座位每晚的案头工作', () => {
   });
 
   it('冤枉人要付代价', () => {
-    const g = toNight(new Game(S327, 'audit', 'official', 'no-violation'), 1);
+    const g = toNight(new Game(S327, 'audit', 'official', 'no-violation', FEB), 1);
     const wei = g.npc('wei')!.relation;
     g.act({ type: 'doc', id: 'audit-1', marks: { zhongcai: 'pos' } });
     expect(g.npc('wei')!.relation).toBe(wei - 8);
@@ -138,7 +146,7 @@ describe('会员日报：监管座位每晚的案头工作', () => {
   });
 
   it('保证金提到 5% 之后，吃紧的申江会在日报上少报空单', () => {
-    const g = new Game(S327, 'misreport', 'official', 'no-violation');
+    const g = new Game(S327, 'misreport', 'official', 'no-violation', FEB);
     toNight(g, 0);
     g.act({ type: 'card', id: 'margin' });
     toNight(g, 1);
@@ -150,22 +158,22 @@ describe('会员日报：监管座位每晚的案头工作', () => {
 
 describe('上级指示', () => {
   it('什么都不做：上面交代的事大半办砸，仕途受影响', () => {
-    const idle = finish(new Game(S327, 'dirs', 'official', 'no-violation'));
+    const idle = finish(new Game(S327, 'dirs', 'official', 'no-violation', FEB));
     const dirs = st(idle).dirs;
     expect(dirs.length).toBeGreaterThanOrEqual(7);
     expect(dirs.filter((d) => d.status === 'failed').length).toBeGreaterThanOrEqual(3);
   });
 
   it('照办：查一家、核日报、落实应急措施——办到的多，档案更好看', () => {
-    const idle = finish(new Game(S327, 'dirs', 'official', 'no-violation'));
-    const busy = finish(new Game(S327, 'dirs', 'official', 'no-violation'), (g) => {
-      if (g.dayIndex === 0) g.act({ type: 'card', id: 'brief', target: 'general' });
-      if (g.dayIndex === 1) {
+    const idle = finish(new Game(S327, 'dirs', 'official', 'no-violation', FEB));
+    const busy = finish(new Game(S327, 'dirs', 'official', 'no-violation', FEB), (g) => {
+      if (sd(g) === 0) g.act({ type: 'card', id: 'brief', target: 'general' });
+      if (sd(g) === 1) {
         g.act({ type: 'card', id: 'inspect', target: 'pujiang' });
         g.act({ type: 'doc', id: 'audit-1', marks: { pujiang: 'term' } });
       }
-      if (g.dayIndex === 2) g.act({ type: 'doc', id: 'audit-2', marks: { pujiang: 'term' } });
-      if (g.dayIndex === 3) g.act({ type: 'card', id: 'band' });
+      if (sd(g) === 2) g.act({ type: 'doc', id: 'audit-2', marks: { pujiang: 'term' } });
+      if (sd(g) === 3) g.act({ type: 'card', id: 'band' });
     });
     const met = (g: Game) => st(g).dirs.filter((d) => d.status === 'met').length;
     expect(met(busy)).toBeGreaterThan(met(idle) + 2);
@@ -173,7 +181,7 @@ describe('上级指示', () => {
   });
 
   it('财政部说别动保证金：一动就当场办砸', () => {
-    const g = toNight(new Game(S327, 'lu', 'official', 'no-violation'), 2);
+    const g = toNight(new Game(S327, 'lu', 'official', 'no-violation', FEB), 2);
     g.act({ type: 'card', id: 'margin' });
     expect(st(g).dirs.find((d) => d.id === 'no-margin')?.status).toBe('failed');
   });
@@ -272,7 +280,7 @@ describe('每个座位每晚都收牌、能打就打、不能打就换算：整�
   };
   for (const f of ['official', 'short', 'long', 'ally', 'retail'])
     it(`327 · ${f}`, () => {
-      const g = finish(new Game(S327, `greedy-${f}`, f, 'no-violation'), greedy);
+      const g = finish(new Game(S327, `greedy-${f}`, f, 'no-violation', FEB), greedy);
       expect(g.ending).not.toBeNull();
       expect(g.drafted.length).toBeGreaterThan(2);
     });
@@ -306,7 +314,7 @@ describe('猎手要跑赢“开局仓位拿着不动”', { timeout: 60000 }, ()
     expect(traderArchetype(-0.7, -0.7, true, false)).toBe('长青者');
   });
   it('327 中财：什么都不做也赚钱，但不算猎手', () => {
-    const g = finish(new Game(S327, 'hold', 'long', 'no-violation'));
+    const g = finish(new Game(S327, 'hold', 'long', 'no-violation', FEB));
     expect(g.ending!.stats.find(([k]) => k === '收益率')![1]).not.toMatch(/^-/);
     expect(g.ending!.archetype).not.toBe('猎手');
     expect(g.ending!.body.join('')).toContain('主要是历史');

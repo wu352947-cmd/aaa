@@ -1,7 +1,7 @@
 import { addCrowdFlow } from '../../engine/flows';
 import type { Game } from '../../engine/game';
 import { Rng } from '../../engine/rng';
-import { flag, mi, p2 } from './common';
+import { flag, mi, p2, sd } from './common';
 import { BATTLE } from './data';
 
 /**
@@ -43,6 +43,23 @@ const TIPS: (Tip | null)[] = [
   { at: '13:10', who: '老周', up: '102 在悄悄收，侬看逐笔，下午还有一波。', down: '今朝有人在出货，下午要回落。' },
   { at: '10:10', who: '营业部经理', up: '几个大客户刚下了买单，量不小。', down: '几个大客户刚下了卖单，量不小。' },
 ];
+/** 一月份（剧本日 −11 到 −2）每天的一句话 */
+const JAN_TIPS: Tip[] = [
+  { at: '10:20', who: '钱有福', up: '北京来的那家今天还要买，老板跟上！', down: '申江今天要砸，老板先出来。' },
+  { at: '13:30', who: '隔壁的股评家', up: '均线拐头向上，下午有一波。', down: '量价背离，下午要回落。' },
+  { at: '10:40', who: '营业部经理', up: '几个大户刚打电话来要加仓。', down: '几个大户刚打电话来要减仓。' },
+  { at: '11:00', who: '老周', up: '侬看 102 的单子，一笔比一笔大，下午还要涨。', down: '305 在出货，下午压一压。' },
+  { at: '9:50', who: '钱有福', up: '财政部的消息！今天要涨！', down: '财政部的消息！今天要跌！' },
+  { at: '13:15', who: '隔壁的股评家', up: '147 是铁底，今天要往上走。', down: '头肩顶，今天破位。' },
+  { at: '10:10', who: '营业部经理', up: '机构的买单排着队呢。', down: '机构的卖单排着队呢。' },
+  { at: '14:00', who: '老周', up: '收盘前有人要拉一拉。', down: '收盘前有人要砸一砸。' },
+  { at: '10:30', who: '钱有福', up: '节前红包行情，老板要不要搏一记？', down: '节前大家都要换钱过年，要跌。' },
+  { at: '9:45', who: '隔壁的股评家', up: '节前最后一天，多头要封盘过节。', down: '节前最后一天，空头要砸盘过节。' },
+];
+const tipFor = (d: number): Tip | null | undefined => (d < 0 ? JAN_TIPS[d + 11] : TIPS[d]);
+/** 这一天那句话是几点递过来的（没有就是 undefined） */
+export const tipAt = (d: number): string | undefined => tipFor(d)?.at ?? undefined;
+
 /** 跟风盘的规模：约等于布局日成交量的四分之一，二十五分钟里涌完 */
 const TIP_FLOW = 500_000;
 /** 消息兑现时，市场的共识价挪多少（分）：一口赚赔 70 元，百十口就是本金的一成 */
@@ -52,8 +69,8 @@ const TIP_DELAY = 6;
 /** 每分钟调用（onTick，t 是刚走完的那一分钟） */
 export function roomTick(g: Game, t: number): void {
   if (!isRetail(g) || g.bankrupt) return;
-  const d = g.dayIndex;
-  const tip = TIPS[d];
+  const d = sd(g);
+  const tip = tipFor(d);
   if (d < BATTLE && tip) {
     if (t === mi(tip.at)) {
       const up = coin(g, `dir-${d}`) < 0.5;
@@ -136,7 +153,7 @@ export function roomTick(g: Game, t: number): void {
 
 export function roomDecide(g: Game, id: string, choice: string): void {
   const p = g.player;
-  const d = g.dayIndex;
+  const d = sd(g);
   const plan = (label: string, side: 'buy' | 'sell', qty: number, closeOnly = false) => {
     if (qty > 0) g.addPlanFromScript({ label, cond: 'now', price: 0, side, qty, spread: 2, closeOnly });
   };
@@ -159,13 +176,13 @@ export function roomDecide(g: Game, id: string, choice: string): void {
 
 /** 收盘时揭晓：今天那句话兑现了没有 */
 export function roomDayEnd(g: Game): void {
-  const d = g.dayIndex;
+  const d = sd(g);
   const f = flag(g, `tip-${d}`) as string | undefined;
-  if (!isRetail(g) || !f || !TIPS[d]) return;
+  if (!isRetail(g) || !f || !tipFor(d)) return;
   const truth = f.endsWith(':1');
   const choice = flag(g, `tipChoice-${d}`) as string | undefined;
   const right = choice ? (choice === 'follow') === truth : null;
-  g.push({ kind: 'intel', text: `${TIPS[d]!.who}今天那句话${truth ? '兑现了' : '落空了'}${right == null ? '。' : right ? '——你押对了。' : '——你押错了。'}` });
+  g.push({ kind: 'intel', text: `${tipFor(d)!.who}今天那句话${truth ? '兑现了' : '落空了'}${right == null ? '。' : right ? '——你押对了。' : '——你押错了。'}` });
 }
 
 /** 决战前夜：老周对 217 的判断。他也会看走眼 */

@@ -1,13 +1,19 @@
 import { describe, expect, it } from 'vitest';
 import { S327 } from '../scenarios/s327';
 import { Game } from './game';
+import { PRE as FEB_DAY } from '../scenarios/s327/data';
+import { sd } from '../scenarios/s327/common';
+
+/** 这些测试写于一月那一章之前：从第二章（二月十六日）开始 */
+const FEB = { startDay: FEB_DAY };
+
 
 /** 跑到第 day 天第 minute 分钟 */
 function to(g: Game, day: number, minute: number) {
   for (let guard = 0; guard < 20000; guard++) {
     if (g.phase === 'night') g.act({ type: 'end-night' });
     else if (g.decision) g.act({ type: 'decision', id: g.decision.id, choice: g.decision.choices[0].id });
-    else if (g.dayIndex >= day && g.market.t >= minute) return;
+    else if (sd(g) >= day && g.market.t >= minute) return;
     else g.tick();
   }
 }
@@ -17,8 +23,8 @@ const run = (g: Game, n: number) => {
 
 describe('盘口博弈：操纵手法真的推得动价格，也真的会被抓', { timeout: 60000 }, () => {
   it('虚假申报：现价下方挂一张大买单，价格被托上去；撤掉后被记一笔', () => {
-    const a = new Game(S327, 'spoof', 'short', 'no-violation');
-    const b = new Game(S327, 'spoof', 'short', 'no-violation');
+    const a = new Game(S327, 'spoof', 'short', 'no-violation', FEB);
+    const b = new Game(S327, 'spoof', 'short', 'no-violation', FEB);
     to(a, 0, 60);
     to(b, 0, 60);
     const px = a.market.last - 5;
@@ -38,14 +44,14 @@ describe('盘口博弈：操纵手法真的推得动价格，也真的会被抓'
 
   it('冰山单：只露出一小截，盘口倾斜远小于把整张单子亮出来', () => {
     const lean = (display?: number) => {
-      const g = new Game(S327, 'ice', 'short', 'no-violation');
+      const g = new Game(S327, 'ice', 'short', 'no-violation', FEB);
       to(g, 0, 60);
       g.act({ type: 'order', req: { side: 'buy', qty: 600_000, type: 'limit', price: g.market.last - 5, display, ttl: 20 } });
       run(g, 3);
       return g.market.lean;
     };
     const none = (() => {
-      const g = new Game(S327, 'ice', 'short', 'no-violation');
+      const g = new Game(S327, 'ice', 'short', 'no-violation', FEB);
       to(g, 0, 60);
       run(g, 3);
       return g.market.lean;
@@ -55,8 +61,8 @@ describe('盘口博弈：操纵手法真的推得动价格，也真的会被抓'
   });
 
   it('对倒：持仓不变，成交量放大，跟风盘把价格抬上去；收盘被交易所记下', () => {
-    const a = new Game(S327, 'wash', 'short', 'no-violation');
-    const b = new Game(S327, 'wash', 'short', 'no-violation');
+    const a = new Game(S327, 'wash', 'short', 'no-violation', FEB);
+    const b = new Game(S327, 'wash', 'short', 'no-violation', FEB);
     to(a, 0, 100);
     to(b, 0, 100);
     const pos = a.player.pos;
@@ -78,8 +84,8 @@ describe('盘口博弈：操纵手法真的推得动价格，也真的会被抓'
   });
 
   it('尾市拉抬：收盘前十分钟集中买入，收盘价被抬高，交易所记一笔', () => {
-    const a = new Game(S327, 'close', 'short', 'no-violation');
-    const b = new Game(S327, 'close', 'short', 'no-violation');
+    const a = new Game(S327, 'close', 'short', 'no-violation', FEB);
+    const b = new Game(S327, 'close', 'short', 'no-violation', FEB);
     // eslint-disable-next-line prefer-const
     let L = a.market.session.minutes;
     to(a, 0, L - 10);
