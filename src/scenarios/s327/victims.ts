@@ -43,6 +43,46 @@ const PEOPLE: Persona[] = [
       bust: (mv) => `“327 被推了 ${mv}，我被强平了。我想知道是哪个席位干的。你们报社敢不敢登？”`,
     },
   },
+  {
+    from: '顾老师',
+    who: '他在虹口一所中学教了三十年物理，退休后迷上了 K 线，五万块退休金，营业部给他垫了一倍',
+    stake: 50_000,
+    lev: 80,
+    says: {
+      lost: (loss, mv) => `价格被推了 ${mv}，他亏了 ${loss}。他把那天的分时图画在了方格纸上，想弄明白那根线是怎么来的。`,
+      bust: (mv) => `价格被推了 ${mv}，营业部把他平了仓。五万块没了。他没告诉老伴。`,
+    },
+  },
+  {
+    from: '宁波来的周家夫妻',
+    who: '他们在七浦路批发服装，十二万块是两口子攒了六年的钱，打算明年在上海买房',
+    stake: 120_000,
+    lev: 40,
+    says: {
+      lost: (loss, mv) => `价格被推了 ${mv}，他们亏了 ${loss}。那天晚上两口子吵到半夜，楼下的人都听见了。`,
+      bust: (mv) => `价格被推了 ${mv}，十二万块被强平。买房的事不提了，他们回了宁波。`,
+    },
+  },
+  {
+    from: '红马甲小陆',
+    who: '他是一家小券商派驻交易所的出市代表，二十三岁，替营业部的散户报单，也偷偷用自己的工资跟单',
+    stake: 15_000,
+    lev: 40,
+    says: {
+      lost: (loss, mv) => `价格被推了 ${mv}，他亏了 ${loss}，差不多是半年的工资。他说场内谁都知道那几笔单子是谁报的，可谁也不说。`,
+      bust: (mv) => `价格被推了 ${mv}，他的一万五全没了。他在场内的电话旁边站了很久，接着替客户报平仓单。`,
+    },
+  },
+  {
+    from: '出租车司机老沈',
+    who: '他开大众桑塔纳跑浦东，听乘客说 327 能赚钱，把车的份子钱和两万块积蓄都押了进去',
+    stake: 20_000,
+    lev: 40,
+    says: {
+      lost: (loss, mv) => `价格被推了 ${mv}，他亏了 ${loss}。他说以后乘客再讲股票，他就把收音机开大。`,
+      bust: (mv) => `价格被推了 ${mv}，两万块没了。下个月的份子钱，他去找车队借。`,
+    },
+  },
 ];
 
 const OPENING: Record<string, (label: string) => string> = {
@@ -60,6 +100,7 @@ const OPENING: Record<string, (label: string) => string> = {
 export function victim327(g: Game, deed: DarkDeed): Victim | null {
   const open = (OPENING[deed.cause] ?? OPENING.card)(deed.label);
   const p = pick(g, deed, PEOPLE);
+  if (!p) return null;
   return letterFrom(
     g,
     p,

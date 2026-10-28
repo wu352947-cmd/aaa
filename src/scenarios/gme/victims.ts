@@ -43,6 +43,46 @@ const PEOPLE: Persona[] = [
       bust: (mv) => `“股价被推了 ${mv}，借券对手方违约。损失将由四万名退休教师承担。我们要求调查当日的交易。”`,
     },
   },
+  {
+    from: '罗莎',
+    who: '她在凤凰城一家墨西哥餐馆做服务员，三千美元是攒下的小费，第一次开户，第一次买股票',
+    stake: 3_000,
+    lev: 1,
+    says: {
+      lost: (loss, mv) => `股价被推了 ${mv}，她亏了 ${loss}。她问女儿：股票不是越多人买越涨吗？`,
+      bust: (mv) => `股价被推了 ${mv}，三千美元只剩零头。她把那个应用删了。`,
+    },
+  },
+  {
+    from: '马库斯',
+    who: '他是德州的退伍军人，把伤残补助金里的一万美元拿来买股票，开了两倍融资',
+    stake: 10_000,
+    lev: 2,
+    says: {
+      lost: (loss, mv) => `股价被推了 ${mv}，他亏了 ${loss}。他在论坛上写：“我在伊拉克见过真正的恐慌，这不算。”第二天他又补了仓。`,
+      bust: (mv) => `股价被推了 ${mv}，券商强平了他的账户。一万美元，剩下几十块。`,
+    },
+  },
+  {
+    from: '杰西卡',
+    who: '她是俄勒冈的单亲妈妈，在家做客服，两千五百美元是给儿子存的牙齿矫正费',
+    stake: 2_500,
+    lev: 6,
+    says: {
+      lost: (loss, mv) => `股价被推了 ${mv}，她亏了 ${loss}。她说矫正可以再等半年。`,
+      bust: (mv) => `股价被推了 ${mv}，两千五百美元的期权一文不值。她给牙医诊所打电话，问能不能分期。`,
+    },
+  },
+  {
+    from: '小基金的分析师普丽娅',
+    who: '她在一家只有六个人的对冲基金做分析，基金跟着大机构做空，止损线写在合同里',
+    stake: 400_000,
+    lev: 3,
+    says: {
+      lost: (loss, mv) => `股价被推了 ${mv}，基金亏了 ${loss}。合伙人开了一整晚的会，她被要求解释为什么模型没看到。`,
+      bust: (mv) => `股价被推了 ${mv}，基金触及止损线被迫清盘。六个人，下周一不用来了。`,
+    },
+  },
 ];
 
 const OPENING: Record<string, (label: string) => string> = {
@@ -56,9 +96,11 @@ const OPENING: Record<string, (label: string) => string> = {
 
 export function victimGme(g: Game, deed: DarkDeed): Victim | null {
   const open = (OPENING[deed.cause] ?? OPENING.card)(deed.label);
+  const p = pick(g, deed, PEOPLE);
+  if (!p) return null;
   return letterFrom(
     g,
-    pick(g, deed, PEOPLE),
+    p,
     open,
     (x) => `${x.toLocaleString()} 美元`,
     (f) => `${(f / 100).toFixed(2)} 美元`,

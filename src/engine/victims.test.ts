@@ -56,6 +56,28 @@ describe('受害者视角：每次黑色操作，对面都有一个人', { timeo
     expect(letters(g).some((l) => l.body.includes('对敲'))).toBe(true);
   });
 
+  it('黑牌打得再多：每个人一局只来一次信，爆了仓的人不会再写；同一种操作只回音一次', () => {
+    for (const seed of ['m1', 'm2', 'm3']) {
+      const g = play(
+        S327,
+        'short',
+        seed,
+        (id) => (id === 'last-eight' ? 'dump' : id === 'after-flip' ? 'press' : undefined),
+        (g) => {
+          for (const c of g.cards()) if (c.color === 'black' && !g.canPlay(c.id, c.targets?.[0]?.id)) g.act({ type: 'card', id: c.id, target: c.targets?.[0]?.id });
+        },
+      );
+      const ls = letters(g);
+      const from = ls.map((l) => l.source);
+      expect(new Set(from).size).toBe(from.length);
+      expect(new Set(ls.map((l) => l.body)).size).toBe(ls.length);
+      expect(ls.length).toBeLessThanOrEqual(8);
+      expect(g.darkDeeds.length).toBeGreaterThan(0);
+      // 最重的那一下不能因为人用完了就没有回音
+      expect(ls.some((l) => l.body.includes('最后八分钟'))).toBe(true);
+    }
+  });
+
   it('散户起义：做市商撤掉报价，对面是美国的散户', () => {
     const g = play(GME, 'mm', 'v4', (id) => (id === 'mm-quote' ? 'pull' : undefined));
     if (g.flags.mmQuote === 'pull') expect(letters(g).some((l) => l.body.includes('撤掉了报价') && l.body.includes('美元'))).toBe(true);

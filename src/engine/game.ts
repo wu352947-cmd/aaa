@@ -87,6 +87,9 @@ export interface Intel {
 }
 
 /** 一次黑色操作：黑牌、违规成交、被监察抓到的对倒与虚假申报、剧本里危险的抉择 */
+/** 引擎自己认得的轻一档的黑色操作；剧本自定的原因都算重的 */
+export const MINOR_DEEDS = ['overdraw', 'wash-trade', 'spoofing', 'marking-close'];
+
 export interface DarkDeed {
   /** 'card' | 'overdraw' | 'wash-trade' | 'spoofing' | 'marking-close' | 剧本自定的 id */
   cause: string;
@@ -496,6 +499,8 @@ export class Game {
   /** 打过的行动卡与结算结果 */
   /** 所有黑色操作，按发生顺序 */
   darkDeeds: DarkDeed[] = [];
+  /** 已经回过音的黑色操作 */
+  private lettered = new Set<string>();
   cardLog: { day: number; time: string; id: string; name: string; target?: string; result: CardResult }[] = [];
   /** 手牌：每晚选来的一次性卡 */
   hand: string[] = [];
@@ -1149,14 +1154,23 @@ export class Game {
     if (this.phase === 'night') this.writeLetters();
   }
 
-  /** 把还没回音的黑色操作写成受害者的信（每天最多两封） */
+  /**
+   * 把还没回音的黑色操作写成受害者的信。同一种操作一局只回音一次（不同的黑牌各算一种），
+   * 每天最多两封；剧本找不到新的人（每个人一局只出现一次）就不写。
+   */
   private writeLetters(): void {
-    const today = this.darkDeeds.filter((d) => d.day === this.dayIndex);
-    const sent = this.intel.filter((i) => i.kind === 'victim' && i.day === this.dayIndex).length;
-    today.slice(sent, 2).forEach((d, k) => {
+    const key = (d: DarkDeed) => (d.cause === 'card' ? `card:${d.label}` : d.cause);
+    let sent = this.intel.filter((i) => i.kind === 'victim' && i.day === this.dayIndex).length;
+    // 重的先写：剧本里的危险抉择（砸盘、内幕加仓……）在前，黑牌其次，普通的违规成交最后
+    const weight = (d: DarkDeed) => (MINOR_DEEDS.includes(d.cause) ? 2 : d.cause === 'card' ? 1 : 0);
+    for (const d of [...this.darkDeeds].sort((a, b) => weight(a) - weight(b))) {
+      if (sent >= 2) break;
+      if (d.day !== this.dayIndex || this.lettered.has(key(d))) continue;
+      this.lettered.add(key(d));
       const v = this.scenario.victim?.(this, d);
-      if (v) this.addIntel({ id: `victim-${this.dayIndex}-${sent + k}`, title: v.title, body: v.body, source: v.from, credibility: 1, kind: 'victim' });
-    });
+      if (!v) continue;
+      this.addIntel({ id: `victim-${this.dayIndex}-${sent++}`, title: v.title, body: v.body, source: v.from, credibility: 1, kind: 'victim' });
+    }
   }
 
   private endNight(): void {

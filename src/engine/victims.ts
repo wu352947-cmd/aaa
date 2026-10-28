@@ -1,4 +1,4 @@
-import type { DarkDeed, Game, Victim } from './game';
+import { MINOR_DEEDS, type DarkDeed, type Game, type Victim } from './game';
 import { Rng } from './rng';
 
 /**
@@ -33,9 +33,16 @@ export function dayMove(g: Game): { move: number; open: number; last: number } {
   return { move: g.market.last - open, open, last: g.market.last };
 }
 
-/** 按种子、日子和原因挑一个人：同一局重放出来是同一封信 */
-export function pick<T>(g: Game, deed: DarkDeed, list: T[]): T {
-  return list[Math.floor(new Rng(`${g.seed}/victim/${deed.day}/${deed.cause}/${deed.label}`).next() * list.length)];
+/**
+ * 按种子、日子和原因挑一个这一局还没出现过的人：每个人只写一次信，爆了仓的人不会再出现。
+ * 同一局重放出来是同一封信。人都用完了返回 null。
+ */
+export function pick(g: Game, deed: DarkDeed, list: Persona[]): Persona | null {
+  const seen = new Set(g.intel.filter((i) => i.kind === 'victim').map((i) => i.source));
+  const left = list.filter((p) => !seen.has(p.from));
+  // 最后两个人留给剧本里的危险抉择：砸盘那一下不能因为人用完了就没有回音
+  if (left.length <= (MINOR_DEEDS.includes(deed.cause) || deed.cause === 'card' ? 2 : 0)) return null;
+  return left[Math.floor(new Rng(`${g.seed}/victim/${deed.day}/${deed.cause}/${deed.label}`).next() * left.length)];
 }
 
 /**
