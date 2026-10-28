@@ -23,7 +23,13 @@ const SPEEDS = {
   layout: [250, 120, 40, 8],
   battle: [1500, 600, 200, 30],
 };
-const SPEED_LABEL = ['慢', '中', '快', '极快'];
+const SPEED_LABEL = ['慢', '中', '快', '极快', '自动'];
+/** 自动档：没有新消息就快进，一有动静（消息、决策、成交放量）就放慢；决战日最后一刻钟按最慢的档走 */
+const AUTO = 4;
+const AUTO_SPEED = {
+  layout: { quiet: 8, busy: 120 },
+  battle: { quiet: 200, busy: 600, final: 1500 },
+};
 
 type Drawer = null | 'buy' | 'sell' | 'plan' | 'people' | 'intel' | 'cards';
 interface Toast {
@@ -35,7 +41,9 @@ interface Toast {
 export function GameScreen({ game, llm, ui, onSettings, onEnd }: { game: Game; llm: LlmSettings; ui: UiSettings; onSettings: () => void; onEnd: () => void }) {
   const [rev, bump] = useReducer((x: number) => x + 1, 0);
   const [paused, setPaused] = useState(true);
-  const [speed, setSpeed] = useState(1);
+  const [speed, setSpeed] = useState(AUTO);
+  // 自动档：到第几个 tick 之前保持慢速
+  const busyUntil = useRef(0);
   const [drawer, setDrawer] = useState<Drawer>(null);
   const [limitPick, setLimitPick] = useState<number | null>(null);
   const [ruleCard, setRuleCard] = useState<{ id: string; detail?: string } | null>(null);
@@ -71,6 +79,7 @@ export function GameScreen({ game, llm, ui, onSettings, onEnd }: { game: Game; l
     let stop = false;
     const evs: GameEvent[] = game.events.slice(cursor.current);
     cursor.current = game.events.length;
+    if (evs.length) busyUntil.current = game.market.ex.tick + 10;
     for (const e of evs) {
       if (e.kind === 'intel' && !ui.mentor && e.text.startsWith('老周')) continue;
       if (e.rule) {
@@ -139,18 +148,37 @@ export function GameScreen({ game, llm, ui, onSettings, onEnd }: { game: Game; l
   // 时钟
   useEffect(() => {
     if (paused || ruleCard || game.phase !== 'trading' || game.decision) return;
-    const ms = SPEEDS[game.isBattleDay ? 'battle' : 'layout'][speed];
-    const steps = ms < 16 ? Math.ceil(16 / ms) : 1;
-    const id = setInterval(() => {
+    const kind = game.isBattleDay ? 'battle' : 'layout';
+    const pace = () => {
+      if (speed !== AUTO) return SPEEDS[kind][speed];
+      const m = game.market;
+      if (game.isBattleDay && m.t >= m.session.minutes - 15) return AUTO_SPEED.battle.final;
+      // 成交突然放大也算动静
+      const bar = m.bars[m.bars.length - 1];
+      if (bar && bar.v > (2.5 * game.day.vDay) / m.session.minutes) busyUntil.current = Math.max(busyUntil.current, m.ex.tick + 5);
+      return m.ex.tick < busyUntil.current ? AUTO_SPEED[kind].busy : AUTO_SPEED[kind].quiet;
+    };
+    let id = 0;
+    const run = () => {
+      const ms = pace();
+      const steps = ms < 16 ? Math.ceil(16 / ms) : 1;
+      let halt = false;
       for (let i = 0; i < steps; i++) {
         const ok = game.tick();
         const stop = processEvents();
         if (stop) setPaused(true);
-        if (!ok || stop || game.decision || game.phase !== 'trading') break;
+        if (!ok || stop || game.decision || game.phase !== 'trading') {
+          halt = true;
+          break;
+        }
+        // 快进中撞上动静，立刻按慢速走
+        if (speed === AUTO && pace() > ms) break;
       }
       bump();
-    }, Math.max(ms, 16));
-    return () => clearInterval(id);
+      if (!halt) id = window.setTimeout(run, Math.max(pace(), 16));
+    };
+    id = window.setTimeout(run, Math.max(pace(), 16));
+    return () => clearTimeout(id);
   }, [paused, ruleCard, speed, game, processEvents, game.phase, game.decision, game.dayIndex]);
 
   useEffect(() => {
@@ -205,8 +233,8 @@ export function GameScreen({ game, llm, ui, onSettings, onEnd }: { game: Game; l
     game.act({ type: 'end-night' });
     processEvents();
     if (game.isBattleDay) {
-      setSpeed(0);
-      toast('决战日：时间放慢到按分钟推进。盯住订单簿与逐笔。', 'danger');
+      if (speed !== AUTO) setSpeed(0);
+      toast(speed === AUTO ? '决战日：有动静时自动放慢，最后一刻钟按分钟推进。盯住订单簿与逐笔。' : '决战日：时间放慢到按分钟推进。盯住订单簿与逐笔。', 'danger');
     }
     setPaused(true);
     setDrawer(null);
@@ -225,7 +253,7 @@ export function GameScreen({ game, llm, ui, onSettings, onEnd }: { game: Game; l
         <button className="btn small" onClick={() => setPaused(!paused)} disabled={game.phase !== 'trading'}>
           {paused ? '▶ 继续' : '❚❚ 暂停'} <span className="kbd">空格</span>
         </button>
-        <div className="speed" title="时间流速">
+        <div className="speed" title="时间流速。自动：没动静就快进，有消息、决策或成交放量就放慢">
           {SPEED_LABEL.map((l, i) => (
             <button key={l} className={cls(speed === i && 'on')} onClick={() => setSpeed(i)}>
               {l}

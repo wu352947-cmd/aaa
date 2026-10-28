@@ -56,7 +56,7 @@ export function DecisionModal({ d, onChoose }: { d: Decision; onChoose: (id: str
       <div className="modal decision">
         <div style={{ fontSize: 12, color: 'var(--seal)', letterSpacing: '0.2em', fontWeight: 700 }}>关 键 时 刻</div>
         <h3>{d.title}</h3>
-        <p style={{ margin: '6px 0 4px' }}>{d.body}</p>
+        <p style={{ margin: '6px 0 4px', whiteSpace: 'pre-line' }}>{d.body}</p>
         {d.choices.map((c) => (
           <button key={c.id} className={cls('choice', c.danger && 'danger')} onClick={() => choose(c.id)}>
             <b>{c.label}</b>

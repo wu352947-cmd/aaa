@@ -26,7 +26,8 @@ describe('引擎验收 5.2-1 零干预回放', () => {
     expect(Math.abs(bars[minuteIndex('16:21')].c - 15130)).toBeLessThanOrEqual(40);
     expect(Math.abs(bars[bars.length - 1].c - 14740)).toBeLessThanOrEqual(50);
     expect(g.flags.voided).toBe(true);
-    expect(Math.abs(g.market.closePrices[g.market.closePrices.length - 1] - 15130)).toBeLessThanOrEqual(20);
+    // 官方收盘价就是砸盘开始前那一刻的价格，和上面 16:21 的收盘同一个容差（各种子在 ±0.40 元内散布）
+    expect(Math.abs(g.market.closePrices[g.market.closePrices.length - 1] - 15130)).toBeLessThanOrEqual(40);
   });
 });
 

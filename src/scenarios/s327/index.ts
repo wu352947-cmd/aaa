@@ -34,6 +34,7 @@ import {
 import { BATTLE, DAYS, DECK_1995, FACTIONS, NPCS, OFFICIAL_CLOSE, PARAMS, PRINCIPLES, PROLOGUE, RULE_CARDS, SOURCES, START_PRICE } from './data';
 import { draftPlay, DRAFT_327 } from './draft';
 import { deliveryCards, deliveryPlay, deliverySettle, spotNight, spotValue } from './delivery';
+import { roomDayEnd, roomDecide, roomTick, zhouCall } from './room';
 import { directivesAt, directivesMorning, fileAudit, makeAudit, s327Clocks, s327Directives, s327Docs } from './plans';
 import { ally, breakLock, exchange, offers, probe, report, stance, type Out } from './social';
 
@@ -316,6 +317,8 @@ export const S327: Scenario = {
     if (d === 1 && t === mi('10:30')) news(g, 'vol', '国债期货成交连创新高', '327 合约持仓量突破历史纪录，多空双方都在加码。', 0.95);
     if (d === 2 && t === mi('14:00')) rumor(g, 'mof-visit', '财政部的人这两天在开会', '大户室里有人说，财政部正在研究 327 的贴息方案。', '大户室传言', 0.6);
     if (d === 3 && t === mi('11:00')) news(g, 'cpi', '通胀仍处高位，保值贴补率居高不下', '市场普遍预期，到期国债的实际兑付价将高于票面本息。', 0.9);
+    // 散户座位：大户室里递过来的话，信不信由你
+    roomTick(g, t);
 
     if (!g.isBattleDay) return;
 
@@ -341,7 +344,7 @@ export const S327: Scenario = {
     if (flag(g, 'gaoActed') && !flag(g, 'gaoAnnounced')) {
       g.flags.gaoAnnounced = true;
       g.push({ kind: 'pause', text: '席位 217 巨量买入！' });
-      mentor(g, '217 在吃货！这不是平仓，是翻多。');
+      mentor(g, '217 在买，量老大。是平空，还是翻多？侬看它买够了停不停。');
     }
     if (t === n0 && g.factionId === 'ally') {
       g.decision = {
@@ -435,6 +438,7 @@ export const S327: Scenario = {
 
   onDayEnd(g) {
     dayEnd(g);
+    roomDayEnd(g);
     directivesAt(g, 'close');
   },
 
@@ -474,6 +478,7 @@ export const S327: Scenario = {
 
   decide(g, id, choice) {
     const p = g.player;
+    if (id.startsWith('room-')) return roomDecide(g, id, choice);
     switch (`${id}:${choice}`) {
       case 'insider-add:add':
         g.addPlanFromScript({ label: '抢先加仓', cond: 'now', price: 0, side: 'buy', qty: 600_000, spread: 3 });
@@ -642,6 +647,7 @@ function night(g: Game) {
     rumor(g, 'zc-visit', '某多方机构最近常去财政部门', '有人看到中财信托的人进出财政部门的办公楼。', '大户室传言', 0.8);
   }
   if (d === 3 || d === 4) decideFlip(g);
+  if (d === 4) zhouCall(g);
   // 被你背叛过的人会故意放假消息钓你
   const lock = g.alliances.find((x) => x.id === 'lock' && x.npc === 'gao' && x.brokenBy === 'player');
   if (lock && lock.brokenDay != null && lock.brokenDay < d && d < BATTLE) {
@@ -937,8 +943,11 @@ function reckon(g: Game): Ending {
     } else {
       id = 'retail';
       title = r >= 0 ? '活下来了' : '交了学费';
-      headline = voided && flag(g, 'boughtDip') ? '散户：我的单子被取消了' : r >= 0 ? '大户室里的幸存者' : '327 风暴中的小散';
-      subhead = voided ? '交易所宣布违规时段的交易无效，期间所有成交一并作废' : '';
+      const dipVoided = voided && !!flag(g, 'boughtDip');
+      // 标题跟着你自己的战果走：被撤销的只是抄底那一笔，此前的盈亏照常结算
+      headline = r >= 0.1 ? `大户室里的赢家：八万块赚了 ${(r * 100).toFixed(0)}%` : r >= 0 ? '大户室里的幸存者' : dipVoided && r > -0.05 ? '散户：我的单子被取消了' : '327 风暴中的小散';
+      subhead = dipVoided ? '你的抄底单落在违规时段，被交易所一并撤销；此前的成交照常结算' : voided ? '交易所宣布违规时段的交易无效，期间所有成交一并作废' : '';
+      if (flag(g, 'eightChoice') === 'exit') body.push(dumped ? '16:16 那通电话，你信了。八分钟的砸盘，你站在场外看完。' : '16:16 那通电话，你信了。可 011 没有动——你提前下了车。');
       if (voided && flag(g, 'boughtDip')) body.push('你抄的底，被交易所一笔勾销。违规者受罚的同时，所有在那几分钟里成交的人也一起被抹掉了。');
       body.push(
         Math.abs(r) < 0.001
