@@ -25,6 +25,10 @@ export interface RuleDeck {
   luld?: { band: number; window: number; pause: number };
   /** 佣金与规费（按成交额的比例，双边各收） */
   feeRate?: number;
+  /** 维持保证金比例：收盘权益低于它才追保（不设则等于 marginRate） */
+  maintRate?: number;
+  /** 融资年利率：股票账户里超出自有资金的那部分持仓按它计息（不设表示不计息） */
+  loanRate?: number;
 }
 
 /** 数量与货币单位（只影响文字） */
@@ -111,6 +115,17 @@ export class Exchange {
 
   marginReq(pos: number, p: Fen = this.last): number {
     return Math.abs(pos) * this.contractValue(p) * this.deck.marginRate;
+  }
+
+  /** 维持保证金：低于它，收盘就会收到追保通知 */
+  maintReq(pos: number, p: Fen = this.last): number {
+    return Math.abs(pos) * this.contractValue(p) * (this.deck.maintRate ?? this.deck.marginRate);
+  }
+
+  /** 融资额：多头市值超出权益的部分，就是向券商借的钱 */
+  marginLoan(a: Account, p: Fen = this.last): number {
+    if (a.pos <= 0 || this.deck.markToMarket) return 0;
+    return Math.max(0, a.pos * this.contractValue(p) - this.equity(a, p));
   }
 
   limitOf(a: Account): number {

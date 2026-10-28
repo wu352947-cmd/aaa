@@ -177,6 +177,18 @@ export const S327: Scenario = {
   docs: (g) => s327Docs(g),
   fileDoc: (g, id, marks) => fileAudit(g, id, marks),
   draft: DRAFT_327,
+  // 大户室的散户可以找营业部垫资：1:3，平仓线由营业部定
+  credit: (g) =>
+    g.factionId === 'retail'
+      ? {
+          lender: '营业部',
+          multiple: 3,
+          line: 1.1,
+          rate: 0.0006,
+          color: 'grey',
+          note: '营业部经理愿意替熟客垫资，最多是你自有资金的三倍。权益跌到借款的 110%，他会不打招呼直接平掉你的仓——他的钱要先拿回来。日息万分之六。',
+        }
+      : null,
 
   setup(g) {
     const ex = g.market.ex;
@@ -805,8 +817,8 @@ function reckon(g: Game): Ending {
   const startEq = (flag(g, 'startEq') as number) || 1;
   let eq = ex.equity(p);
   if (flag(g, 'loan')) eq -= 360_000_000;
-  // 拆借、透支借来的钱，结局时连本带息还掉
-  eq -= s.debt;
+  // 拆借、透支、营业部垫资借来的钱，结局时连本带息还掉
+  eq -= s.debt + (g.credit?.loan ?? 0);
   const r = g.faction.observer ? 0 : (eq - startEq) / startEq;
   const voided = !!flag(g, 'voided');
   const voidedByPlayer = voided && flag(g, 'voidedBy') === p.id;

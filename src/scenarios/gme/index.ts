@@ -223,9 +223,9 @@ export const GME: Scenario = {
   onDayEnd(g) {
     // 卖空要付借券费：按收盘市值和当天的借券年费率计
     const ex = g.market.ex;
-    const rate = BORROW_RATE[g.dayIndex] ?? 1;
     for (const a of ex.accounts.values()) {
       if (a.exempt || a.pos >= 0) continue;
+      const rate = a.id === g.player.id ? borrowRate(g) : (BORROW_RATE[g.dayIndex] ?? 1);
       const fee = (Math.abs(a.pos) * (ex.last / 100) * rate) / 252;
       a.cash -= fee;
       if (a.id === g.player.id) g.push({ kind: 'intel', text: `借券费：今天付出 ${fmtYi(fee)}（年费率 ${Math.round(rate * 100)}%）` });
@@ -237,6 +237,7 @@ export const GME: Scenario = {
 
   onNight(g) {
     const d = g.dayIndex;
+    recall(g);
     const rc = g.recaps[g.recaps.length - 1];
     for (const p of rc.parts) {
       if (p.who === 'gravity' || p.who === 'crowd' || p.who === 'trend' || Math.abs(p.net) < 100_000) continue;
@@ -340,14 +341,14 @@ export const GME: Scenario = {
     if (isMm(g) && mmDecide(g, id, choice)) return;
     switch (`${id}:${choice}`) {
       case 'gap-open:cover-all':
-        g.addPlanFromScript({ label: '全部回补', cond: 'now', price: 0, side: 'buy', qty: -p.pos, spread: 30 });
+        g.addPlanFromScript({ label: '全部回补', cond: 'now', price: 0, side: 'buy', qty: -p.pos, spread: 30, closeOnly: true });
         g.flags.coveredDay = g.dayIndex;
         break;
       case 'gap-open:cover-half':
-        g.addPlanFromScript({ label: '回补一半', cond: 'now', price: 0, side: 'buy', qty: Math.round(-p.pos / 2), spread: 20 });
+        g.addPlanFromScript({ label: '回补一半', cond: 'now', price: 0, side: 'buy', qty: Math.round(-p.pos / 2), spread: 20, closeOnly: true });
         break;
       case 'restricted-dip:cover-all':
-        g.addPlanFromScript({ label: '趁暴跌回补', cond: 'now', price: 0, side: 'buy', qty: -p.pos, spread: 10 });
+        g.addPlanFromScript({ label: '趁暴跌回补', cond: 'now', price: 0, side: 'buy', qty: -p.pos, spread: 10, closeOnly: true });
         g.flags.coveredDay = g.dayIndex;
         break;
       case 'restricted-dip:press':
@@ -438,6 +439,25 @@ function rumor(g: Game, id: string, title: string, body: string, source: string,
 }
 function mentor(g: Game, text: string) {
   g.addIntel({ id: `bill-${g.dayIndex}-${g.intel.length}`, title: text.slice(0, 22) + (text.length > 22 ? '…' : ''), body: text, source: '比尔', credibility: 0.8, kind: 'mentor' });
+}
+
+/**
+ * 召回：价格翻倍之后，出借股票的券商和基金要把一部分券收回去。
+ * 召回之后空单比借到的券还多，按 SHO 条例，明早开盘就得强制买回。
+ */
+function recall(g: Game) {
+  const p = g.player;
+  if (p.exempt || p.pos >= 0 || p.borrowLimit == null) return;
+  const share = { 2: 0.1, 3: 0.15 }[g.dayIndex];
+  if (!share || g.market.last < START_2021 * 2) return;
+  const q = Math.round((p.borrowLimit * share) / 10_000) * 10_000;
+  p.borrowLimit -= q;
+  const excess = -p.pos - p.borrowLimit;
+  rumor(g, `recall-${g.dayIndex}`, `出借人召回 ${shares(q)}`, `价格翻了几倍，借券给你的机构收回了一部分券。你现在借着 ${shares(p.borrowLimit)}。`, '券商借券部', 1);
+  if (excess > 0) {
+    g.addPlanFromScript({ label: '强制买回（召回）', cond: 'now', price: 0, side: 'buy', qty: excess, spread: 15, closeOnly: true });
+    g.push({ kind: 'rule', rule: 'buy-in', blocked: true, text: `券被召回：空单比借到的券多 ${shares(excess)}，明早开盘 15 分钟内强制买回` });
+  }
 }
 
 function applyRestriction(g: Game) {
@@ -533,7 +553,7 @@ function reckon(g: Game): Ending {
   const p = g.player;
   const startEq = (flag(g, 'startEq') as number) || 1;
   const calls = callPayoff(g);
-  const eq = ex.equity(p) + calls;
+  const eq = ex.equity(p) + calls - (g.credit?.loan ?? 0);
   const r = g.faction.observer ? 0 : (eq - startEq) / startEq;
   const bars = g.market.bars;
   const high = Math.max(...bars.map((b) => b.h));
@@ -707,8 +727,20 @@ function brokerMeters(g: Game): Meter[] {
   ];
 }
 
+/** 券池里还能借给你的股数：别的空头也在借，越往后越少 */
+function borrowPool(g: Game): number {
+  const total = [4_000_000, 3_000_000, 2_000_000, 1_000_000, 0][g.dayIndex] ?? 0;
+  return Math.max(0, total - ((g.flags.borrowExtra as number) || 0));
+}
+
+/** 借券年费率：当天的市场费率，加上你自己多借推高的部分 */
+function borrowRate(g: Game): number {
+  return (BORROW_RATE[g.dayIndex] ?? 1) + (0.15 * ((g.flags.borrowExtra as number) || 0)) / 1_000_000;
+}
+
 function gmeCards(g: Game): CardDef[] {
   const d = g.dayIndex;
+  const p0 = g.player;
   const used = (k: string) => !!flag(g, `used-${k}`);
   const battle = g.isBattleDay;
   if (isMm(g)) return mmCards(g);
@@ -806,13 +838,15 @@ function gmeCards(g: Game): CardDef[] {
       },
       {
         id: 'borrow',
-        name: '加价借 300 万股券',
-        group: '对冲',
+        name: '向券池借券',
+        group: '借券',
         color: 'white',
-        does: '出高价从券商那里多借一些券，能继续卖空。',
-        cost: '5000 万美元。',
+        does: `券池里还能借 ${shares(borrowPool(g))}。借到多少，就能多卖空多少。已借 ${shares(p0.borrowLimit ?? 0)}，空单 ${shares(Math.max(0, -p0.pos))}。`,
+        cost: `每多借 100 万股，借券年费率加 15 个百分点（现在 ${Math.round(borrowRate(g) * 100)}%）；价格翻倍以后，出借人会召回一部分。`,
         when: 'any',
-        blocked: used('borrow') ? '已经借过' : undefined,
+        targets: [1_000_000, 3_000_000].filter((q) => q <= borrowPool(g)).map((q) => ({ id: String(q), label: `借 ${shares(q)}` })),
+        status: flag(g, 'borrowExtra') ? `多借了 ${shares(g.flags.borrowExtra as number)}` : undefined,
+        blocked: borrowPool(g) < 1_000_000 ? '券池里借不到了' : undefined,
       },
       {
         id: 'collude',
@@ -923,11 +957,12 @@ function gmePlay(g: Game, id: string, _target?: string): CardResult {
       g.flags.callQty = g.factionId === 'short' ? 3_000_000 : 200;
       return R(`买入看涨期权：行权价 ${usd(g.flags.callStrike as number)}`, [`付权利金 ${fmtYi(premium)}`, `${shares(g.flags.callQty as number)}`]);
     }
-    case 'borrow':
-      mark('borrow');
-      p.borrowLimit = (p.borrowLimit ?? 0) + 3_000_000;
-      p.cash -= 50_000_000;
-      return R('多借到 300 万股券', ['付 5000 万美元']);
+    case 'borrow': {
+      const q = Math.min(Number(_target) || 1_000_000, borrowPool(g));
+      p.borrowLimit = (p.borrowLimit ?? 0) + q;
+      g.flags.borrowExtra = ((g.flags.borrowExtra as number) || 0) + q;
+      return R(`借到 ${shares(q)}`, [`能卖空的上限 ${shares(p.borrowLimit)}`, `借券年费率升到 ${Math.round(borrowRate(g) * 100)}%`]);
+    }
     case 'collude':
       mark(`collude-${d}`);
       addCrowdFlow(g, 'sell', 4_000_000, 30);

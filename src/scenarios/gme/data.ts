@@ -20,6 +20,9 @@ export const DECK_2021: RuleDeck = {
   luld: { band: 0.1, window: 5, pause: 5 },
   // 零佣金券商不收佣金，但交易所规费和监管费按成交额收一点
   feeRate: 0.00003,
+  // FINRA 规定维持保证金不低于 25%，券商普遍要 30%；融资年利率按当时零佣金券商的水平
+  maintRate: 0.3,
+  loanRate: 0.08,
 };
 
 export const PARAMS_2021: MarketParams = { Y: 1, kappa: 0.5, trendThreshold: 0.8, trendScale: 0.4 };
@@ -216,6 +219,13 @@ export const NPCS_2021: NpcDef[] = [
 ];
 
 export const RULES_2021: RuleCardDef[] = [
+  {
+    id: 'buy-in',
+    title: '召回与强制买回',
+    plain: '你卖空的股票是借来的，出借人随时可以要回去。券被召回、你又借不到新的，就得在下一个交易日买回来还掉——不管那时候价格多高。',
+    why: '卖空的人永远欠着别人的股票。逼空最危险的时候，往往也是出借人最想把券收回去的时候。',
+    source: '美国 SHO 条例规则 204：卖空未能按期交收的，经纪商须在下一个交易日开盘前后买入了结（close-out）。',
+  },
   {
     id: 'wash-trade',
     title: '对敲交易（wash trade）',

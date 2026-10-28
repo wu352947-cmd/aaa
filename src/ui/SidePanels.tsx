@@ -39,6 +39,97 @@ export function OrderBookCard({ game }: { game: Game }) {
   );
 }
 
+/** 杠杆：券商融资、场外配资、止损止盈 */
+function Leverage({ game }: { game: Game }) {
+  const ex = game.market.ex;
+  const p = game.player;
+  const offer = game.scenario.credit?.(game);
+  const c = game.credit;
+  const loan = ex.marginLoan(p);
+  const [stop, setStop] = useState('');
+  const [take, setTake] = useState('');
+  const stops = game.plans.filter((x) => x.oco != null && !x.done && x.remaining == null);
+  const own = game.netEquity();
+  const setStops = () => {
+    const group = Date.now() % 100000;
+    const side = p.pos > 0 ? 'sell' : 'buy';
+    const q = Math.abs(p.pos);
+    const sp = Math.round(parseFloat(stop) * 100);
+    const tp = Math.round(parseFloat(take) * 100);
+    // 多头：跌到止损价卖、涨到止盈价卖；空头反过来
+    if (sp > 0) game.act({ type: 'plan-add', plan: { label: `止损 ${price(sp)}`, cond: p.pos > 0 ? 'lte' : 'gte', price: sp, side, qty: q, spread: 1, oco: group, closeOnly: true } });
+    if (tp > 0) game.act({ type: 'plan-add', plan: { label: `止盈 ${price(tp)}`, cond: p.pos > 0 ? 'gte' : 'lte', price: tp, side, qty: q, spread: 1, oco: group, closeOnly: true } });
+    setStop('');
+    setTake('');
+  };
+  return (
+    <div style={{ marginTop: 8, display: 'grid', gap: 6, fontSize: 12 }}>
+      {loan > 0 && (
+        <div title="多头市值超出权益的部分是向券商借的钱，按天计息。权益低于维持保证金，收盘就会追保。">
+          <span className="muted">融资</span> {money(loan)}
+          {ex.deck.loanRate ? <span className="faint">（年息 {Math.round(ex.deck.loanRate * 100)}%，已付 {money((game.flags.loanInterest as number) || 0)}）</span> : null}
+        </div>
+      )}
+      {p.pos !== 0 && ex.deck.maintRate != null && (
+        <div title="收盘时权益低于这个数，就会收到追加保证金通知">
+          <span className="muted">维持保证金</span> {money(ex.maintReq(p.pos))}
+        </div>
+      )}
+      {offer && (
+        <div className="credit-box">
+          {c && c.loan > 0 ? (
+            <>
+              <div>
+                <b>{c.lender}垫资</b> {money(c.loan)}
+                <span className="faint">（日息 {(c.rate * 10000).toFixed(0)}‱，已付 {money(c.paid)}）</span>
+              </div>
+              <div className={cls(ex.equity(p) < c.loan * c.line * 1.15 && 'up')}>
+                平仓线：权益 {money(c.loan * c.line)}，现在 {money(ex.equity(p))}
+              </div>
+              <button className="btn small" disabled={p.cash <= 0} onClick={() => game.act({ type: 'credit', op: 'repay', amount: c.loan })}>
+                还钱
+              </button>
+            </>
+          ) : (
+            <>
+              <div className="faint">{offer.note}</div>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 4 }}>
+                {[1, 2, offer.multiple].filter((v, i, a) => a.indexOf(v) === i && v <= offer.multiple).map((k) => (
+                  <button key={k} className={cls('btn small', offer.color !== 'white' && 'grey')} disabled={own <= 0} onClick={() => game.act({ type: 'credit', op: 'take', amount: own * k })}>
+                    借 {k} 倍（{money(own * k)}）
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+      )}
+      {p.pos !== 0 && (
+        <div>
+          <div className="muted">止损 / 止盈（触发一张，另一张自动撤掉）</div>
+          {stops.map((x) => (
+            <div key={x.id} style={{ display: 'flex', justifyContent: 'space-between' }}>
+              <span>{x.label}</span>
+              <button className="btn ghost small" onClick={() => game.act({ type: 'plan-remove', id: x.id })}>
+                撤
+              </button>
+            </div>
+          ))}
+          {!stops.length && (
+            <div style={{ display: 'flex', gap: 4 }}>
+              <input className="num" style={{ width: '33%' }} placeholder="止损价" value={stop} onChange={(e) => setStop(e.target.value)} inputMode="decimal" aria-label="止损价" />
+              <input className="num" style={{ width: '33%' }} placeholder="止盈价" value={take} onChange={(e) => setTake(e.target.value)} inputMode="decimal" aria-label="止盈价" />
+              <button className="btn small" disabled={!stop && !take} onClick={setStops}>
+                设置
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 /** 我的挂单：限价单、冰山单、带时限的单子，都可以单独撤 */
 function MyOrders({ game }: { game: Game }) {
   const ex = game.market.ex;
@@ -115,6 +206,7 @@ export function PositionCard({ game }: { game: Game }) {
         <div style={{ width: `${Math.min(100, use * 100)}%` }} />
       </div>
       {game.marginCall && <div className="danger-box">追加保证金通知：明早开盘前补足，否则强制平仓。</div>}
+      {!game.faction.observer && <Leverage game={game} />}
       <MyOrders game={game} />
     </div>
   );

@@ -324,6 +324,8 @@ export interface Scenario {
   fileDoc?(g: Game, id: string, marks: Record<string, string>): CardResult;
   /** 每晚选卡 */
   draft?: DraftRules;
+  /** 场外配资：这个座位能向谁借、借几倍、平仓线在哪 */
+  credit?(g: Game): CreditOffer | null;
   /** 复盘与逐笔里怎么称呼一个群体或账户 */
   groupName?(g: Game, who: string): string;
   setup(g: Game): void;
@@ -351,10 +353,38 @@ export interface Plan {
   /** 分几分钟执行完 */
   spread: number;
   overdraw?: boolean;
+  /** 同一组里一张触发，其余的撤掉（止损与止盈） */
+  oco?: number;
+  /** 只平仓：触发时按当时的持仓数量平掉，不会反手开出新仓 */
+  closeOnly?: boolean;
   /** 执行中：剩余数量与每分钟数量 */
   remaining?: number;
   perTick?: number;
   done?: boolean;
+}
+
+/** 场外配资 / 营业部垫资：钱借给你，平仓线由出借方说了算 */
+export interface CreditLine {
+  lender: string;
+  /** 借来的钱 */
+  loan: number;
+  /** 平仓线：权益 ≤ 借款 × line 时，出借方立即替你平仓并收回借款 */
+  line: number;
+  /** 日利率 */
+  rate: number;
+  /** 一共付了多少利息 */
+  paid: number;
+}
+
+/** 剧本提供的配资条件 */
+export interface CreditOffer {
+  lender: string;
+  /** 最多借自有资金的几倍 */
+  multiple: number;
+  line: number;
+  rate: number;
+  color: CardColor;
+  note: string;
 }
 
 export type PlayerAction =
@@ -368,6 +398,7 @@ export type PlayerAction =
   | { type: 'card'; id: string; target?: string }
   | { type: 'convert'; id: string }
   | { type: 'draft'; id: string | null }
+  | { type: 'credit'; op: 'take' | 'repay'; amount: number }
   | { type: 'doc'; id: string; marks: Record<string, string> }
   | { type: 'end-night' };
 
@@ -442,6 +473,8 @@ export class Game {
   drafted: string[] = [];
   readonly maxHand = 3;
   private readonly rngDraft: Rng;
+  /** 场外配资（没有借就是 null） */
+  credit: CreditLine | null = null;
 
   constructor(
     readonly scenario: Scenario,
@@ -530,6 +563,11 @@ export class Game {
     if (c.when === 'night' && this.phase !== 'night') return '只能在收盘后使用';
     if (c.targets && !c.targets.some((t) => t.id === target)) return '先选一个对象';
     return null;
+  }
+
+  /** 自己的钱：账户权益减去场外借来的钱 */
+  netEquity(p = this.market.last): number {
+    return this.market.ex.equity(this.player, p) - (this.credit?.loan ?? 0);
   }
 
   equity(): number {
@@ -653,6 +691,29 @@ export class Game {
         this.logCard({ id: action.id, name: doc.title }, result);
         return null;
       }
+      case 'credit': {
+        const offer = this.scenario.credit?.(this);
+        if (!offer || this.ending) return null;
+        const p = this.player;
+        if (action.op === 'take') {
+          const own = this.netEquity();
+          const room = Math.max(0, own * offer.multiple - (this.credit?.loan ?? 0));
+          const amt = Math.min(Math.max(0, action.amount), room);
+          if (amt <= 0) return null;
+          p.cash += amt;
+          this.credit = { lender: offer.lender, loan: (this.credit?.loan ?? 0) + amt, line: offer.line, rate: offer.rate, paid: this.credit?.paid ?? 0 };
+          if (offer.color !== 'white') this.addHeat(offer.color === 'black' ? 8 : 2, `向${offer.lender}借钱加杠杆`);
+          this.push({ kind: 'intel', text: `${offer.lender}借给你 ${fmtYi(amt)}：权益跌到借款的 ${Math.round(offer.line * 100)}% 时，对方立即平仓收回` });
+        } else if (this.credit) {
+          const amt = Math.min(Math.max(0, action.amount), this.credit.loan, Math.max(0, p.cash));
+          if (amt <= 0) return null;
+          p.cash -= amt;
+          this.credit.loan -= amt;
+          this.push({ kind: 'intel', text: `还给${this.credit.lender} ${fmtYi(amt)}` });
+          if (this.credit.loan <= 1) this.credit = { ...this.credit, loan: 0 };
+        }
+        return null;
+      }
       case 'end-night':
         this.endNight();
         return null;
@@ -705,7 +766,7 @@ export class Game {
     const ex = this.market.ex;
     const a = this.player;
     const eq = ex.equity(a);
-    const need = ex.marginReq(a.pos);
+    const need = ex.maintReq(a.pos);
     if (eq >= need) {
       this.marginCall = false;
       return;
@@ -770,11 +831,31 @@ export class Game {
           p.cond === 'now' ||
           (p.cond === 'at' ? this.market.t >= p.price : p.cond === 'gte' ? last >= p.price : last <= p.price);
         if (!hit) continue;
+        if (p.closeOnly) {
+          const pos = this.player.pos;
+          const closes = pos !== 0 && (p.side === 'sell') === pos > 0;
+          if (!closes) {
+            p.done = true;
+            continue;
+          }
+          p.qty = Math.min(p.qty, Math.abs(pos));
+        }
+        if (p.oco != null) for (const o of this.plans) if (o !== p && o.oco === p.oco && o.remaining == null) o.done = true;
         p.remaining = p.qty;
         p.perTick = Math.ceil(p.qty / Math.max(1, p.spread));
         this.push({ kind: 'intel', text: `计划书「${p.label}」开始执行` });
       }
-      const q = Math.min(p.remaining, p.perTick!);
+      let q = Math.min(p.remaining, p.perTick!);
+      if (p.closeOnly) {
+        // 只平仓的计划每分钟都按剩下的持仓算：别的单子已经平掉的部分不再重复买卖
+        const pos = this.player.pos + out.reduce((a, o) => a + (o.side === 'buy' ? o.qty : -o.qty), 0);
+        const closes = pos !== 0 && (p.side === 'sell') === pos > 0;
+        q = closes ? Math.min(q, Math.abs(pos)) : 0;
+        if (!q) {
+          p.done = true;
+          continue;
+        }
+      }
       out.push({ owner: this.player.id, side: p.side, qty: q, type: 'market', overdraw: p.overdraw });
       p.remaining -= q;
       if (p.remaining <= 0) p.done = true;
@@ -786,6 +867,15 @@ export class Game {
   private intradayRisk(): void {
     const ex = this.market.ex;
     const mark = Math.round(this.market.reference);
+    const c = this.credit;
+    if (c && c.loan > 0 && this.player.pos !== 0 && ex.equity(this.player, mark) <= c.loan * c.line) {
+      // 出借方不等交易所：权益一碰平仓线，立刻替你平掉全部持仓，把借款拿回去
+      const r = ex.liquidate(this.player.id);
+      this.player.cash -= c.loan;
+      this.push({ kind: 'liquidation', rule: 'otc-liquidation', text: `${c.lender}强制平仓：权益碰到平仓线（借款的 ${Math.round(c.line * 100)}%），卖掉 ${r?.filled.toLocaleString() ?? 0} ${UNITS.qty}，收回借款 ${fmtYi(c.loan)}` });
+      this.credit = { ...c, loan: 0 };
+      this.flags.otcLiquidated = ((this.flags.otcLiquidated as number) || 0) + 1;
+    }
     for (const a of ex.accounts.values()) {
       if (a.exempt || a.pos === 0) continue;
       if (ex.equity(a, mark) < 0) {
@@ -840,14 +930,26 @@ export class Game {
     });
 
     const ex = m.ex;
+    // 借来的钱按天计息：券商的融资、场外的配资
+    const loan = ex.marginLoan(this.player);
+    if (loan > 0 && ex.deck.loanRate) {
+      const fee = (loan * ex.deck.loanRate) / 252;
+      this.player.cash -= fee;
+      this.flags.loanInterest = ((this.flags.loanInterest as number) || 0) + fee;
+    }
+    if (this.credit && this.credit.loan > 0) {
+      const fee = this.credit.loan * this.credit.rate;
+      this.player.cash -= fee;
+      this.credit.paid += fee;
+    }
     const eq = ex.equity(this.player);
     this.equityCurve.push(eq);
-    if (this.player.pos !== 0 && eq < ex.marginReq(this.player.pos)) {
+    if (this.player.pos !== 0 && eq < ex.maintReq(this.player.pos)) {
       this.marginCall = true;
       this.push({
         kind: 'margin',
         rule: 'daily-settlement',
-        text: `逐日盯市后权益 ${fmtYi(eq)}，低于所需保证金 ${fmtYi(ex.marginReq(this.player.pos))}：明早开盘前须补足，否则强制平仓`,
+        text: `收盘后权益 ${fmtYi(eq)}，低于维持保证金 ${fmtYi(ex.maintReq(this.player.pos))}：明早开盘前须补足，否则强制平仓`,
       });
     }
     // 布局期就穿仓：故事到此为止；决战日穿仓的人还要面对余波
