@@ -155,6 +155,8 @@ export class Market {
   crowdSellOnly = false;
   /** 券商限购、提高保证金时，散户买入的意愿打折（1 = 不打折） */
   crowdBuyScale = 1;
+  /** 背景做市商挂单的厚度（1 = 正常）：做市商加宽报价或撤单时变薄，同样的单子把价格推得更远 */
+  depthScale = 1;
   private rngCrowd: Rng;
   private rngTrend: Rng;
   closePrices: Fen[] = [];
@@ -247,7 +249,7 @@ export class Market {
     for (const base of LADDER) {
       const off = base * unit;
       const cum = V * Math.pow(off / 100 / s, 2);
-      const size = Math.max(1, Math.round(cum - prevC));
+      const size = Math.max(1, Math.round((cum - prevC) * this.depthScale));
       prevC = cum;
       ex.book.rest({ owner: MM, side: 'buy', price: c - off, qty: size, tick: ex.tick });
       ex.book.rest({ owner: MM, side: 'sell', price: c + off, qty: size, tick: ex.tick });

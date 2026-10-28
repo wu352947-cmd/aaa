@@ -3,6 +3,7 @@ import { addCrowdFlow, crowdFlowOrders } from '../../engine/flows';
 import type { CardDef, CardResult, DialogueIntent, Ending, ExchangeOffer, Game, Meter, Scenario, SocialOutcome } from '../../engine/game';
 import { holdReturn, traderArchetype } from '../../engine/game';
 import type { Actor, Market } from '../../engine/market';
+import { isMm, mmBriefing, mmCards, mmClock, mmDayStart, mmDecide, mmEnding, mmHedgeActor, mmMeters, mmPlay, mmSetup, mmTick } from './mm';
 import { DRAFT_GME, gmeClocks, gmeDraftPlay } from './plans';
 import { BATTLE_2021, DAYS_2021, DECK_2021, FACTIONS_2021, NPCS_2021, NYSE, PARAMS_2021, PRINCIPLES_2021, PROLOGUE_2021, RULES_2021, SOURCES_2021, START_2021 } from './data';
 
@@ -29,7 +30,8 @@ function hedgerActor(g: Game): Actor {
     id: FT,
     onTick(m: Market) {
       const extra = crowdFlowOrders(g);
-      if (m.bars.length < 6) return extra;
+      // 你扮演做市商时，对冲由你自己来（见 mm.ts）
+      if (m.bars.length < 6 || isMm(g)) return extra;
       if (m.day.kind === 'battle' && m.t > mi('10:00')) return extra;
       const last = m.last;
       const mom = last - m.bars[m.bars.length - 6].o;
@@ -100,20 +102,24 @@ export const GME: Scenario = {
   lotPresets: [1_000_000, 5_000_000],
   groupName: (g, who) => groupName(g, who),
   cards: (g) => gmeCards(g),
-  playCard: (g, id, target) => (id.startsWith('x-') ? gmeDraftPlay(g, id) : gmePlay(g, id, target)),
-  meters: (g) => (g.factionId === 'broker' ? brokerMeters(g) : undefined),
-  clocks: (g) => gmeClocks(g, requirement),
+  playCard: (g, id, target) => (id.startsWith('x-') ? gmeDraftPlay(g, id) : id.startsWith('mm-') ? mmPlay(g, id, target)! : gmePlay(g, id, target)),
+  meters: (g) => (g.factionId === 'broker' ? brokerMeters(g) : isMm(g) ? mmMeters(g) : undefined),
+  clocks: (g) => (isMm(g) ? [mmClock(g), ...gmeClocks(g, requirement)] : gmeClocks(g, requirement)),
   draft: DRAFT_GME,
 
   setup(g) {
     const ex = g.market.ex;
     const grp = (id: string) => (isPlayer(g, id) ? 'player' : id);
     ex.add(newAccount({ id: GW, name: '灰狼资本', seat: 'GW', group: grp(GW), cash: 4_000_000_000, pos: -GW_POS, avg: 4000, borrowLimit: 11_000_000 }));
-    ex.add(newAccount({ id: FT, name: '堡垒集团', seat: 'FT', group: FT, cash: 50_000_000_000 }));
+    ex.add(newAccount({ id: FT, name: '堡垒集团', seat: 'FT', group: grp(FT), cash: 50_000_000_000 }));
     ex.add(newAccount({ id: PANIC, name: '被限制的散户', group: 'crowd', exempt: true }));
     if (g.factionId === 'retail') ex.add(newAccount({ id: YOU, name: '你', group: 'player', cash: 5000, pos: 50, avg: 1800, borrowLimit: 0 }));
     if (g.factionId === 'broker') ex.add(newAccount({ id: FEATHER, name: '羽毛证券', group: 'player', exempt: true }));
     g.market.actors.push(hedgerActor(g));
+    if (isMm(g)) {
+      mmSetup(g);
+      g.market.actors.push(mmHedgeActor(g));
+    }
     if (g.factionId === 'broker') {
       g.flags.capital = 700_000_000;
       g.flags.trust = 60;
@@ -130,6 +136,7 @@ export const GME: Scenario = {
 
   onDayStart(g) {
     const d = g.dayIndex;
+    if (isMm(g)) mmDayStart(g);
     if (flag(g, 'sentNext')) {
       g.market.sentiment = Math.max(-1, Math.min(1, g.market.sentiment + (g.flags.sentNext as number)));
       delete g.flags.sentNext;
@@ -184,6 +191,7 @@ export const GME: Scenario = {
     if (d === 1 && t === mi('10:50')) news(g, 'gme-high-25', '股价盘中冲上 159 美元', '论坛上有人喊：空头开始回补了！随后一个多小时，股价跌回 60 多美元。', 0.9);
     if (d === 3 && t === mi('10:00')) news(g, 'gme-27', '证交会：正在密切关注近期的市场波动', '监管机构表示，正在与其他部门协调，评估近期部分股票的极端波动。', 0.95);
     if (g.isBattleDay && t === mi('10:00')) applyRestriction(g);
+    if (isMm(g)) mmTick(g);
     if (g.isBattleDay && t === mi('10:01') && g.factionId === 'retail' && flag(g, 'restrictActive') && g.player.pos > 0) {
       g.decision = {
         id: 'restricted',
@@ -329,6 +337,7 @@ export const GME: Scenario = {
 
   decide(g, id, choice) {
     const p = g.player;
+    if (isMm(g) && mmDecide(g, id, choice)) return;
     switch (`${id}:${choice}`) {
       case 'gap-open:cover-all':
         g.addPlanFromScript({ label: '全部回补', cond: 'now', price: 0, side: 'buy', qty: -p.pos, spread: 30 });
@@ -495,7 +504,7 @@ export function groupName(_g: Game, who: string): string {
     case GW:
       return '灰狼资本';
     case FT:
-      return '堡垒集团（期权对冲）';
+      return isMm(_g) ? '你（期权对冲）' : '堡垒集团（期权对冲）';
   }
   return who;
 }
@@ -504,12 +513,20 @@ function briefing(g: Game): string {
   switch (g.factionId) {
     case 'short':
       return '灰狼资本空单 1,000 万股，均价 40 美元；管理资金 40 亿美元。卖空要按市值交 50% 保证金，还要每天付借券费。可借的券只剩 100 万股左右。';
+    case 'mm':
+      return mmBriefing(g);
     case 'broker':
       return '你是羽毛证券的 CEO。你不下单，但看得到大客户的仓位。你的客户买的股票要 T+2 才交收，在那之前，清算所按风险向你收押金。';
     default:
       return '你有 50 股（成本 18 美元）和 5,000 美元现金。你的券商不提供卖空。你在论坛上签了“钻石手公约”：到月球之前，一股不卖。';
   }
 }
+
+const MM_HISTORY = [
+  '2021 年 1 月下旬，最大的几家做市商买下了零佣金券商的大部分散户订单流，同时是这只股票期权的主要卖方。散户疯狂买入看涨期权，做市商按 delta 买股票对冲——价格越涨，要买的越多。',
+  '1 月 25 日，一家大型做市商的母公司与另一家基金共同向被逼空的对冲基金注资 27.5 亿美元。论坛据此认定做市商和空头是一伙的。',
+  '1 月 28 日券商限制买入后，国会举行听证会，追问做市商是否施压券商。同年 10 月证交会员工报告认为，限制买入的原因是清算所的押金要求，没有发现做市商施压的证据。',
+];
 
 function reckon(g: Game): Ending {
   const ex = g.market.ex;
@@ -534,6 +551,31 @@ function reckon(g: Game): Ending {
 
   if (calls > 0) body.push(`你的看涨期权到期值 ${fmtYi(calls)}。`);
   else if (flag(g, 'callStrike')) body.push('你的看涨期权没涨过行权价，权利金归零。');
+  if (isMm(g)) {
+    const e = mmEnding(g, close);
+    ({ id, title, headline, subhead } = e);
+    body.push(...e.body);
+    archetype =
+      e.eq <= 0 ? '出局者' : flag(g, 'mmFrontDays') ? '蛀虫' : flag(g, 'mmQuote') === 'keep' && e.r >= 0 && clean ? '守门人' : traderArchetype(e.r, 0, clean);
+    if (g.linesCrossed > 0) body.push(`你越过了自己定下的底线「${g.principle.label}」${g.linesCrossed} 次。`);
+    return {
+      id,
+      title,
+      archetype,
+      headline,
+      subhead,
+      body,
+      ruled: restricted ? '多家券商当日限制买入' : '券商未限制买入',
+      history: MM_HISTORY,
+      deviation: [
+        `券商限制买入：历史上发生了；这一局${restricted ? '也发生了' : '没有发生'}`,
+        `当日最高价：历史 483.00 美元，这一局 ${usd(high)}`,
+        `当日最低价：历史 112.25 美元，这一局 ${usd(low)}`,
+        `收盘价：历史 193.60 美元，这一局 ${usd(close)}`,
+      ],
+      stats: e.stats,
+    };
+  }
   if (g.factionId === 'broker') {
     const trust = g.flags.trust as number;
     if (flag(g, 'opened')) {
@@ -669,6 +711,7 @@ function gmeCards(g: Game): CardDef[] {
   const d = g.dayIndex;
   const used = (k: string) => !!flag(g, `used-${k}`);
   const battle = g.isBattleDay;
+  if (isMm(g)) return mmCards(g);
   if (g.factionId === 'broker') {
     const restricted = !!flag(g, 'restrictActive');
     const gap = requirement(g) - (g.flags.capital as number);

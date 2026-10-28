@@ -34,14 +34,19 @@ export function gmeClocks(g: Game, requirement: (g: Game) => number): Clock[] {
       known: knowsGme(g, 'rowan'),
       then: '26 日下午开始买回空单，27 日开盘半小时内平完。他每买一股，都在把价格往上推。',
       now: done ? '空单已经平完了：之后的上涨，跟他无关。' : `他还扛着 ${(Math.max(0, -gw.pos) / 10000).toFixed(0)} 万股空单。`,
-      counter: f === 'retail' ? '他回补的那半小时是最贵的时候；他平完之后，就再没有这股买盘了。' : '空头回补的那一段，正是你的客户追得最凶的时候。',
+      counter:
+        f === 'retail'
+          ? '他回补的那半小时是最贵的时候；他平完之后，就再没有这股买盘了。'
+          : f === 'mm'
+            ? '他回补的那半小时，价格会被推高一截：你的对冲也得跟着买。'
+            : '空头回补的那一段，正是你的客户追得最凶的时候。',
       tone: 'neutral',
       state: done ? 'fired' : 'running',
     });
   }
 
-  // 堡垒：期权对冲的买盘
-  {
+  // 堡垒：期权对冲的买盘（你扮演做市商时，这就是你自己，见交易台的钟）
+  if (f !== 'mm') {
     const bars = m.bars;
     const mom = bars.length >= 6 ? (m.last - bars[bars.length - 6].o) / m.last : 0;
     const off = !!flag(g, 'optionsOff');
@@ -86,7 +91,9 @@ export function gmeClocks(g: Game, requirement: (g: Game) => number): Clock[] {
           ? '上电视唱空、游说监管查论坛，能让他们犹豫一点。'
           : f === 'broker'
             ? '限购或限制买入，能把这股买盘挡在门外——代价是用户的信任。'
-            : '公约说价格到月球之前一股不卖。月球在哪里，没人写下来。',
+            : f === 'mm'
+              ? '他们买的每一张看涨期权都是你卖的；开盘那一刻，你的对冲得跟上。'
+              : '公约说价格到月球之前一股不卖。月球在哪里，没人写下来。',
       tone: f === 'short' ? 'threat' : f === 'retail' ? 'friend' : 'neutral',
       state: fired ? 'fired' : 'running',
     });
@@ -124,7 +131,7 @@ function deck(g: Game): Deal[] {
   const eyes: Deal = {
     ...base,
     id: 'x-eyes',
-    name: f === 'broker' ? '盘后的成交明细' : '论坛的数据爬虫',
+    name: f === 'broker' || f === 'mm' ? '盘后的成交明细' : '论坛的数据爬虫',
     color: 'white',
     does: '把这几天的成交明细和论坛帖子都过一遍：所有人的盘算，你都看得清。',
     cost: '无。',
@@ -146,6 +153,26 @@ function deck(g: Game): Deal[] {
         cost: '这是对手的牌。',
         when: 'any',
         foe: '换算：你拿这个帖子去董事会要人要钱，精力 +2。但帖子越传越广：用户信任 −10。',
+        convert: '+2 点精力',
+        pts: 2,
+        ok: pre,
+      },
+    ];
+  if (f === 'mm')
+    return [
+      eyes,
+      { ...base, id: 'x-pfof', name: '续签订单流合同', color: 'white', does: '另外两家零佣金券商也把订单流卖给你：之后的价差收入多三成。', cost: '每年付他们一笔钱，论坛又多一个话题。', when: 'night', ok: (g) => !flag(g, 'mmPfofBoost') },
+      { ...base, id: 'x-vol', name: '波动率交易员的报价', color: 'white', does: '你的波动率交易员说：散户根本不看价。之后卖出的看涨期权，权利金多收五成。', cost: '无。', when: 'night', ok: (g) => pre(g) && !flag(g, 'mmPremBoost') },
+      { ...base, id: 'x-algo', name: '对冲算法升级', color: 'white', does: '工程师连夜改了对冲程序：自动对冲每次能补的股数翻倍。', cost: '你的买单会更猛地推价格。', when: 'night', ok: (g) => !flag(g, 'mmFastHedge') },
+      {
+        ...base,
+        id: 'x-foe-pfof',
+        name: '论坛的订单流扒皮帖',
+        color: 'grey',
+        does: '论坛有人把“订单流付费”画成了一张图：散户的每一笔单子，都先经过你。',
+        cost: '这是对手的牌。',
+        when: 'any',
+        foe: '换算：你让公关连夜准备说法，精力 +2。但帖子照样上了首页——声望 −5，明早散户情绪偏多。',
         convert: '+2 点精力',
         pts: 2,
         ok: pre,
@@ -218,6 +245,11 @@ export const DRAFT_GME: DraftRules = {
       sent(0.4);
       fx.push('明早散户情绪偏多');
     }
+    if (id === 'x-foe-pfof') {
+      g.reputation -= 5;
+      sent(0.2);
+      fx.push('声望 −5', '明早散户情绪偏多');
+    }
     if (id === 'x-foe-short') {
       sent(-0.3);
       fx.push('明早散户情绪偏空');
@@ -263,6 +295,15 @@ export function gmeDraftPlay(g: Game, id: string): CardResult {
       g.addPlanFromScript({ label: '写下的卖出价：卖一半', cond: 'gte', price, side: 'sell', qty: Math.max(1, Math.floor(p.pos / 2)), spread: 1 });
       return R(true, `写下了：${(price / 100).toFixed(2)} 美元卖一半`, ['已加入计划书']);
     }
+    case 'x-pfof':
+      g.flags.mmPfofBoost = true;
+      return R(true, '订单流合同续签了', ['之后的价差收入 +30%']);
+    case 'x-vol':
+      g.flags.mmPremBoost = true;
+      return R(true, '之后的看涨期权卖得更贵', ['权利金 +50%'], { who: '波动率交易员', text: '他们只看行权价，不看隐含波动率。' });
+    case 'x-algo':
+      g.flags.mmFastHedge = true;
+      return R(true, '对冲程序升级了', ['自动对冲每次能补的股数翻倍']);
     case 'x-meme':
       sent(0.2);
       g.reputation += 2;

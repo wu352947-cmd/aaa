@@ -102,10 +102,9 @@ export const FACTIONS_2021: Faction[] = [
     id: 'mm',
     name: '做市商',
     role: '堡垒集团 · 交易台',
-    blurb: '你买下了零佣金券商的订单流，同时卖出了大量看涨期权，需要不停地买股票对冲。',
-    secretGoal: '赚价差，别被逼到墙角。',
+    blurb: '你买下了零佣金券商的散户订单流，每一笔成交赚一点价差；你还把大量看涨期权卖给了散户，得按 delta 不停地买股票对冲。价格越涨，你要买的越多。',
+    secretGoal: '赚价差和权利金，别被自己卖出的期权逼到墙角。',
     accountId: 'fortress',
-    locked: '后续开放',
   },
 ];
 
