@@ -155,6 +155,19 @@ describe('门口的野蛮人：控制权之争', { timeout: 120000 }, () => {
     expect(b.yes).toBeLessThan(a.yes);
   });
 
+  it('险资会算账：资金来源被举报、监管的火旺了，它就少收', () => {
+    const base = play('defender', 'calc');
+    const g = play('defender', 'calc', {
+      night: (x) => {
+        if (x.dayIndex === 0) {
+          x.act({ type: 'social', verb: 'report', npc: 'chang' });
+          x.act({ type: 'social', verb: 'report', npc: 'chang' });
+        }
+      },
+    });
+    expect(stake(g, RAIDER)).toBeLessThan(stake(base, RAIDER) - 0.01);
+  });
+
   it('可重放', () => {
     const g = play('raider', 'replay', { night: (g) => card(g, 'offbook') });
     const again = replay(TAKEOVER, 'replay', 'raider', 'no-violation', g.log);

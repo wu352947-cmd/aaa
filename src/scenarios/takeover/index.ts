@@ -135,13 +135,50 @@ function offBook(g: Game, id: string, upto: number, premium: number): number {
 
 /** 险资（玩家不扮演时）：按史料的节奏收货，被冷静期挡住就停；华岳增持了，它就追到华岳前面 */
 const RAID_TARGET = [0.0502, 0.1504, 0.1650, 0.2001, 0.2245];
+
+/**
+ * 险资还想收多少（0–1，1 就是照史料的节奏）：它不是照着剧本买，而是算账——
+ * 价格被抬得比史料高太多就少买；监管的火越旺越收手；钱快花完了就停。
+ */
+export function raiderAppetite(g: Game): { k: number; why: string[] } {
+  const why: string[] = [];
+  let k = 1;
+  const m = g.market;
+  const prem = m.last / Math.max(1, m.hist()) - 1;
+  if (prem > 0.1) {
+    k *= clamp(1 - 2 * (prem - 0.1), 0.3, 1);
+    why.push(`价格比它算的贵了 ${Math.round(prem * 100)}%`);
+  }
+  const heat = raiderHeat(g);
+  if (heat >= 30) {
+    k *= heat >= 45 ? 0.5 : 0.8;
+    why.push('监管的目光越来越近');
+  }
+  const a = m.ex.acct(RAIDER);
+  const room = m.ex.equity(a) - a.pos * (m.last / 100);
+  if (room < 5_000_000_000) {
+    k *= 0.5;
+    why.push('钱快花完了');
+  }
+  return { k, why };
+}
+
+/** 险资在第 d 个交易日想收到的比例：史料节奏 × 胃口，不低于已经持有的；华岳增持了，它就追到华岳前面 */
+function raidTarget(g: Game, sched: number): number {
+  const now = stake(g, RAIDER);
+  const want = now + Math.max(0, sched - now) * raiderAppetite(g).k;
+  return Math.max(want, Math.min(0.299, stake(g, HUAYUE) + 0.004));
+}
 function raiderActor(g: Game): Actor {
   return {
     id: RAIDER,
     onTick(m: Market) {
       const a = m.ex.acct(RAIDER);
       if (m.day.kind !== 'layout' || a.freeze || flag(g, 'raiderStopped')) return [];
-      const target = Math.max(RAID_TARGET[g.dayIndex] ?? 0, Math.min(0.299, stake(g, HUAYUE) + 0.004));
+      // 每天开盘算一次账，定下今天收到多少；华岳盘中增持了，它照样追
+      const key = `raidT-${g.dayIndex}`;
+      if (g.flags[key] == null) g.flags[key] = raidTarget(g, RAID_TARGET[g.dayIndex] ?? 0);
+      const target = Math.max(g.flags[key] as number, Math.min(0.299, stake(g, HUAYUE) + 0.004));
       const need = Math.floor(target * totalShares(g)) - a.pos;
       if (need <= 0) return [];
       // 不追高：价格被推离中枢太多就歇一歇
@@ -503,7 +540,7 @@ export const TAKEOVER: Scenario = {
     paper(g);
     // 夜里到下一个交易日之间隔着几周：险资（电脑扮演时）照着史料继续收
     if (!isRaider(g) && !flag(g, 'raiderStopped') && !halted(g)) {
-      const next = [0.1, 0.1504, 0.1735, 0.22, 0.2245][d] ?? 0;
+      const next = raidTarget(g, [0.1, 0.1504, 0.1735, 0.22, 0.2245][d] ?? 0);
       if (next > stake(g, RAIDER)) {
         offBook(g, RAIDER, next, 0.03);
         checkStake(g);
@@ -676,7 +713,7 @@ function haltNight(g: Game) {
   g.papers.push({ day: g.dayIndex, headline: first ? (halted(g) ? '万川停牌已近三个月，重组方案仍未出炉' : `鼎华系持股升至 ${pctS(stake(g, RAIDER))}`) : '万川股东大会：今晚见分晓', sub: halted(g) ? '股票停牌中' : '控制权之争转到会议室', facts: [] });
   // 没有停牌：鼎华（电脑扮演时）这几个月里接着在二级市场收
   if (!halted(g) && !isRaider(g) && !flag(g, 'raiderStopped')) {
-    offBook(g, RAIDER, Math.min(0.299, stake(g, RAIDER) + 0.035), 0.03);
+    offBook(g, RAIDER, Math.min(0.299, stake(g, RAIDER) + 0.035 * raiderAppetite(g).k), 0.03);
     checkStake(g);
   }
   if (first) {
@@ -1018,8 +1055,11 @@ function clocks(g: Game): Clock[] {
       filled: Math.min(6, lines(g)),
       known: true,
       then: '持股到 10% 就能提议罢免董事会；超过华岳就是第一大股东；30% 以上只能走要约。',
-      now: `持股 ${pctS(r)}。${halted(g) ? '停牌了，它买不了。' : '它会追到华岳前面。'}`,
-      counter: '停牌能把它冻在半路；请华岳增持能挡在它前面；举报资金来源能让监管提前出手。',
+      now: `持股 ${pctS(r)}。${halted(g) ? '停牌了，它买不了。' : (() => {
+        const ap = raiderAppetite(g);
+        return ap.why.length ? `它在收手：${ap.why.join('，')}。华岳增持，它还是会追。` : '照这个价钱，它会照原计划收，还会追到华岳前面。';
+      })()}`,
+      counter: '停牌能把它冻在半路；请华岳增持能挡在它前面；举报资金来源能让监管提前出手，它自己也会收手；股价被抬得太高，它也会少买。',
       tone: 'threat',
       state: flag(g, 'crackdown') ? 'defused' : 'running',
     });
