@@ -422,7 +422,9 @@ function SceneStrip({ game, paused, redUp }: { game: Game; paused: boolean; redU
   const move = recent.length > 1 ? recent[recent.length - 1].c - recent[0].o : 0;
   const dir: SceneState['dir'] = Math.abs(move) < m.last * 0.0005 ? 0 : move > 0 ? 1 : -1;
   const gme = game.scenario.id === 'gme2021';
-  const scene: SceneId = gme ? 'room' : 'floor';
+  // 做市商和做空基金坐在交易台前，散户和券商 CEO 在自己的房间里
+  const desk = gme && (game.factionId === 'mm' || game.factionId === 'short');
+  const scene: SceneId = desk ? 'desk' : gme ? 'room' : 'floor';
   // 走势的形状：只取 24 个点，不带数字
   const step = Math.max(1, Math.floor(bars.length / 24));
   const shape = bars.filter((_, i) => i % step === 0).map((b) => b.c);
@@ -436,7 +438,7 @@ function SceneStrip({ game, paused, redUp }: { game: Game; paused: boolean; redU
     shape: gme ? shape.slice(-24) : undefined,
     faded: Math.min(0.7, game.linesCrossed * 0.2),
   };
-  const cap = gme ? '纽约 · 一间卧室' : `上海 · 交易大厅${state.halted ? ' · 停市' : game.isBattleDay ? ' · 决战日' : ''}`;
+  const cap = desk ? `纽约 · ${game.factionId === 'mm' ? '堡垒集团交易台' : '灰狼资本交易室'}${state.halted ? ' · 暂停' : ''}` : gme ? '纽约 · 一间卧室' : `上海 · 交易大厅${state.halted ? ' · 停市' : game.isBattleDay ? ' · 决战日' : ''}`;
   return (
     <div className="scene-strip">
       <PixelScene scene={scene} state={state} label={cap} fit />

@@ -31,7 +31,7 @@ export interface SceneState {
   redUp?: boolean;
 }
 
-export type SceneId = 'tavern' | 'floor' | 'room' | 'study' | 'chamber';
+export type SceneId = 'tavern' | 'floor' | 'room' | 'desk' | 'study' | 'chamber';
 export const SCENE_SIZE = { w: 320, h: 96 };
 
 const WHITE = hex('#f2ece0');
@@ -404,6 +404,135 @@ function room2021(p: Pix, t: number, s: SceneState) {
   p.engrave(pal.ink, 0.25);
 }
 
+// ───────────── 2021：华尔街的交易台 ─────────────
+
+function desk2021(p: Pix, t: number, s: SceneState) {
+  const pal = PALETTES['2021'];
+  const { w, h } = p;
+  const heat = Math.max(0, Math.min(1, s.heat ?? 0.3));
+  const frame = Math.floor(t / (s.climax ? 1 : 2));
+  const up = s.redUp ? hex('#ff4a6a') : pal.accent2;
+  const down = s.redUp ? pal.accent2 : hex('#ff4a6a');
+  const wall = mix(pal.deep, pal.ink, 0.35);
+  p.vgrad(0, 0, w, 62, wall, pal.deep);
+  // 天花板的灯带
+  p.rect(0, 0, w, 3, pal.ink);
+  for (let x = 8; x < w; x += 44) {
+    p.rect(x, 2, 26, 1, pal.paper);
+    p.glow(x + 13, 3, 14, pal.glow, 0.25);
+  }
+  // 落地窗：曼哈顿的夜
+  p.rect(10, 6, 116, 50, mix(pal.mid, pal.ink, 0.55));
+  p.vgrad(12, 8, 112, 46, hex('#05030c'), hex('#1a0c34'));
+  for (let i = 0; i < 14; i++) {
+    const bx = 12 + i * 8 + Math.floor(noise(i, 4) * 3);
+    const bh = 12 + Math.floor(noise(i, 5) * 34);
+    p.rect(bx, 54 - bh, 7, bh, hex('#04020a'));
+    for (let y = 54 - bh + 2; y < 52; y += 3) for (let x = bx + 1; x < bx + 6; x += 2) if (noise(x, y, Math.floor(t / 30)) < 0.28) p.set(x, y, mix(pal.glow, pal.accent, noise(x, y, 7)));
+  }
+  for (const x of [40, 68, 96]) p.vline(x, 8, 53, mix(pal.mid, pal.ink, 0.5));
+  // 墙上的大屏：走势的形状和一片热力格，没有数字
+  const sx = 138;
+  const sy = 7;
+  const sw = 170;
+  const sh = 40;
+  p.rect(sx - 2, sy - 2, sw + 4, sh + 4, hex('#16121e'));
+  p.rect(sx, sy, sw, sh, hex('#06040c'));
+  const shape = s.shape && s.shape.length > 1 ? s.shape : Array.from({ length: 24 }, (_, i) => 0.5 + 0.3 * Math.sin(i / 3 + t / 10));
+  const lo = Math.min(...shape);
+  const hi = Math.max(...shape);
+  const lineC = s.dir === -1 ? down : up;
+  let x0 = -1;
+  let y0 = -1;
+  for (let i = 0; i < shape.length; i++) {
+    const x = sx + 3 + Math.round((i / (shape.length - 1)) * 100);
+    const y = sy + sh - 5 - Math.round(((shape[i] - lo) / Math.max(1e-9, hi - lo)) * (sh - 10));
+    if (x0 >= 0) p.line(x0, y0, x, y, lineC);
+    x0 = x;
+    y0 = y;
+  }
+  // 右边：期权链的热力格（越热越亮）
+  for (let r = 0; r < 7; r++)
+    for (let c = 0; c < 9; c++) {
+      const n = noise(c, r * 13 + frame);
+      const lit = n < 0.3 + heat * 0.6;
+      const k = noise(c + 40, r + frame);
+      p.rect(sx + 110 + c * 6, sy + 3 + r * 5, 5, 4, lit ? (k < (s.dir === -1 ? 0.3 : 0.7) ? mix(up, hex('#06040c'), 0.25) : mix(down, hex('#06040c'), 0.25)) : hex('#140f20'));
+    }
+  p.glow(sx + sw / 2, sy + sh / 2, 60, lineC, 0.18);
+  if (s.restricted) {
+    // 券商只许卖出：大屏上一条红色横幅和一把锁
+    p.rect(sx, sy + 15, sw, 10, hex('#7a1428'));
+    p.rect(sx + sw / 2 - 5, sy + 17, 10, 7, hex('#ff4a6a'));
+    p.rect(sx + sw / 2 - 3, sy + 13, 6, 4, hex('#7a1428'));
+    p.hline(sx + sw / 2 - 3, sx + sw / 2 + 2, sy + 13, hex('#ff4a6a'));
+    p.vline(sx + sw / 2 - 3, sy + 13, sy + 17, hex('#ff4a6a'));
+    p.vline(sx + sw / 2 + 2, sy + 13, sy + 17, hex('#ff4a6a'));
+  }
+  if (s.halted) for (let x = sx; x < sx + sw; x += 8) p.rect(x, sy + sh - 3, 5, 2, pal.accent);
+  // 地面
+  p.vgrad(0, 62, w, h - 62, mix(pal.deep, pal.ink, 0.5), pal.ink);
+  for (let x = -40; x < w + 40; x += 26) p.line(w / 2 + (x - w / 2) * 0.4, 62, x, h, mix(pal.deep, pal.ink, 0.7));
+  // 一排交易席位：每个座位两块屏，屏上是跳动的柱子
+  const seats = 6;
+  for (let i = 0; i < seats; i++) {
+    const dx = 8 + i * 52;
+    for (let m = 0; m < 2; m++) {
+      const mx = dx + m * 17;
+      p.rect(mx, 49, 16, 11, hex('#16121e'));
+      p.rect(mx + 1, 50, 14, 8, hex('#07050f'));
+      const busy = s.halted ? 0.1 : 0.35 + heat * 0.65;
+      for (let b = 0; b < 6; b++) {
+        if (noise(i * 7 + m, b, frame) > busy) continue;
+        const bh = 1 + Math.floor(noise(i + b, m, frame + 1) * 6);
+        p.vline(mx + 2 + b * 2, 57, 57 - bh + 1, noise(i, b + m * 9, frame) < (s.dir === -1 ? 0.35 : 0.65) ? up : down);
+      }
+      p.rect(mx + 7, 60, 2, 2, hex('#16121e'));
+      p.glow(mx + 8, 54, 10, pal.glow, 0.15 + heat * 0.15);
+    }
+  }
+  // 桌沿
+  p.rect(0, 62, w, 3, hex('#2a2238'));
+  p.hline(0, w, 62, mix(hex('#2a2238'), pal.light, 0.3));
+  // 交易员的背影：坐在屏幕前，后脑勺挡住屏幕下沿；越忙，越多人在打电话、比手势
+  for (let i = 0; i < seats; i++) {
+    const cx = 25 + i * 52;
+    const look = noise(i, 77);
+    const vest = look < 0.5 ? hex('#4a505e') : look < 0.8 ? hex('#2a3040') : hex('#5a4a6e');
+    const shirt = mix(pal.paper, vest, 0.3);
+    const skin = pal.skin[i % 3];
+    const hair = [hex('#1a1410'), hex('#5a3a22'), hex('#2a2a2a'), hex('#8a7a60')][i % 4];
+    const busy = !s.halted && noise(i, frame + 11) < heat * 0.8;
+    const bob = busy && (frame + i) % 2 === 0 ? -1 : 0;
+    // 椅背
+    p.rect(cx - 10, 74, 20, 22, hex('#0e0a14'));
+    p.hline(cx - 10, cx + 9, 74, hex('#2a2238'));
+    // 肩膀与背心
+    p.rect(cx - 11, 69 + bob, 22, 14, shirt);
+    p.rect(cx - 9, 68 + bob, 18, 15, vest);
+    p.rect(cx - 7, 67 + bob, 14, 1, vest);
+    // 后脑勺
+    p.rect(cx - 4, 59 + bob, 9, 9, skin);
+    p.rect(cx - 5, 58 + bob, 11, 6, hair);
+    p.rect(cx - 4, 57 + bob, 9, 1, hair);
+    p.set(cx - 5, 64 + bob, skin);
+    p.set(cx + 5, 64 + bob, skin);
+    if (busy) {
+      if (noise(i, frame + 5) < 0.5) {
+        // 举手比价
+        p.rect(cx + 10, 58 + bob, 2, 11, shirt);
+        p.rect(cx + 10, 56 + bob, 2, 2, skin);
+      } else {
+        // 打电话
+        p.rect(cx - 12, 62 + bob, 2, 8, shirt);
+        p.rect(cx - 7, 60 + bob, 2, 4, hex('#101010'));
+      }
+    }
+  }
+  if (s.halted) p.darken(0.25, pal.ink);
+  p.engrave(pal.ink, 0.22);
+}
+
 // ───────────── 夜间书房 ─────────────
 
 function study(p: Pix, t: number, s: SceneState & { era?: Era }) {
@@ -582,6 +711,9 @@ export function drawScene(p: Pix, id: SceneId, t: number, s: SceneState & { era?
       break;
     case 'room':
       room2021(p, t, s);
+      break;
+    case 'desk':
+      desk2021(p, t, s);
       break;
     case 'study':
       study(p, t, s);
