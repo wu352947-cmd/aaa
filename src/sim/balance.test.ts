@@ -13,7 +13,7 @@ const SEEDS = Array.from({ length: Math.max(1, N) }, (_, i) => String(i + 1));
 
 const SEATS: { scenario: typeof S327; seats: string[] }[] = [
   { scenario: S327, seats: ['official', 'short', 'long', 'ally', 'retail'] },
-  { scenario: GME, seats: ['broker', 'short', 'retail'] },
+  { scenario: GME, seats: ['broker', 'short', 'retail', 'mm'] },
 ];
 
 const pct = (n: number, of: number) => `${Math.round((100 * n) / of)}%`;

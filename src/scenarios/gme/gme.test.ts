@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { Game, replay } from '../../engine/game';
 import { DAYS_2021, NYSE } from './data';
 import { GME } from './index';
+import { DESK, deskEquity, hedgeTarget, mm } from './mm';
 
 function play(faction: string, choices: Record<string, string> = {}, seed = 'gme', night?: (g: Game) => void): Game {
   const g = new Game(GME, seed, faction, 'no-violation');
@@ -131,5 +132,88 @@ describe('散户起义：手段', { timeout: 60000 }, () => {
       g.tick();
     }
     expect(g.player.closeOnly).toBe(false);
+  });
+});
+
+describe('做市商：卖期权、做对冲、赚价差', { timeout: 120000 }, () => {
+  it('开局已经按 delta 对冲好；顶栏换成交易台的指标', () => {
+    const g = new Game(GME, 'mm', 'mm', 'no-violation');
+    expect(Math.abs(hedgeTarget(g) - g.player.pos)).toBeLessThan(10);
+    expect(deskEquity(g)).toBeCloseTo(DESK, -6);
+    expect(GME.meters!(g)!.map((m) => m.id)).toEqual(['desk', 'gap', 'calls', 'pfof', 'rep']);
+  });
+
+  it('自动对冲：价格往上冲，持股跟着加；停掉对冲，持股不动', () => {
+    const on = play('mm', {}, 'mm-h');
+    const off = play('mm', { 'mm-gap': 'bet' }, 'mm-h', (g) => {
+      if (g.dayIndex === 0 && mm(g).hedge) g.act({ type: 'card', id: 'mm-hedge' });
+    });
+    expect(mm(on).hedgeBought).toBeGreaterThan(5_000_000);
+    // 第一天收盘后才停：之后一股没再追
+    expect(mm(off).hedgeBought).toBeLessThan(mm(on).hedgeBought * 0.5);
+    expect(Math.abs(hedgeTarget(off) - off.player.pos)).toBeGreaterThan(Math.abs(hedgeTarget(on) - on.player.pos));
+  });
+
+  it('每晚照卖看涨期权：债越滚越大；停卖之后不再增加', () => {
+    const sell = play('mm', {}, 'mm-s');
+    const stop = play('mm', {}, 'mm-s', (g) => {
+      if (g.dayIndex === 0 && mm(g).selling) g.act({ type: 'card', id: 'mm-calls' });
+    });
+    // 开局一笔 + 22、25、26 日夜里的买单各一笔（决战日前夜不再卖）
+    expect(mm(sell).lots.length).toBe(4);
+    expect(mm(stop).lots.length).toBe(1);
+    expect(deskEquity(stop)).toBeGreaterThan(deskEquity(sell));
+  });
+
+  it('回购：期权了结，对冲的股票当晚按收盘价卖掉', () => {
+    const g = new Game(GME, 'mm-b', 'mm', 'no-violation');
+    while (g.phase !== 'night') g.tick();
+    const before = deskEquity(g);
+    g.act({ type: 'card', id: 'mm-buyback', target: 'all' });
+    expect(mm(g).lots.length).toBe(0);
+    expect(g.player.pos).toBe(0);
+    // 多付一成溢价
+    expect(deskEquity(g)).toBeLessThan(before);
+    expect(before - deskEquity(g)).toBeLessThan(before * 0.05);
+  });
+
+  it('抢先交易：价差收入翻倍，热度上去，结局是蛀虫', () => {
+    const clean = play('mm', {}, 'mm-f');
+    const dirty = new Game(GME, 'mm-f', 'mm', 'no-violation');
+    for (let guard = 0; guard < 10000 && !dirty.ending; guard++) {
+      if (dirty.phase === 'night') dirty.act({ type: 'end-night' });
+      else if (dirty.decision) dirty.act({ type: 'decision', id: dirty.decision.id, choice: dirty.decision.choices[0].id });
+      else {
+        if (dirty.market.t === 5) dirty.act({ type: 'card', id: 'mm-frontrun' });
+        dirty.tick();
+      }
+    }
+    expect(mm(dirty).pfof).toBeGreaterThan(mm(clean).pfof * 2);
+    expect(dirty.heatTier()).toBeGreaterThan(1);
+    expect(dirty.ending!.archetype).toBe('蛀虫');
+  });
+
+  it('决战日限制买入后要决定还报不报价：撤单让挂单变薄', () => {
+    const asked: string[] = [];
+    const g = new Game(GME, 'mm-q', 'mm', 'no-violation');
+    for (let guard = 0; guard < 10000 && !g.ending; guard++) {
+      if (g.phase === 'night') g.act({ type: 'end-night' });
+      else if (g.decision) {
+        asked.push(g.decision.id);
+        g.act({ type: 'decision', id: g.decision.id, choice: g.decision.id === 'mm-quote' ? 'pull' : g.decision.choices[0].id });
+        if (asked.at(-1) === 'mm-quote') expect(g.market.depthScale).toBe(0.25);
+      } else g.tick();
+    }
+    expect(asked).toContain('mm-quote');
+    expect(g.ending!.id).toBe('mm-pulled');
+  });
+
+  it('同一种子 + 同一串操作 → 同一局', () => {
+    const a = play('mm', {}, 'mm-r', (g) => {
+      if (g.dayIndex === 1 && !mm(g).quoting.startsWith('w')) g.act({ type: 'card', id: 'mm-wide' });
+    });
+    const b = replay(GME, 'mm-r', 'mm', 'no-violation', a.log);
+    expect(b.stateHash()).toBe(a.stateHash());
+    expect(deskEquity(b)).toBe(deskEquity(a));
   });
 });

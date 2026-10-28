@@ -276,7 +276,7 @@ describe('每个座位每晚都收牌、能打就打、不能打就换算：整�
       expect(g.ending).not.toBeNull();
       expect(g.drafted.length).toBeGreaterThan(2);
     });
-  for (const f of ['retail', 'short', 'broker'])
+  for (const f of ['retail', 'short', 'broker', 'mm'])
     it(`散户起义 · ${f}`, () => {
       const g = finish(new Game(GME, `greedy-${f}`, f, 'no-violation'), greedy);
       expect(g.ending).not.toBeNull();

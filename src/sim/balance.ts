@@ -1,6 +1,7 @@
 import type { CardDef, Decision, Game as GameT, Scenario } from '../engine/game';
 import { Game } from '../engine/game';
 import { Rng } from '../engine/rng';
+import { mm } from '../scenarios/gme/mm';
 import { st } from '../scenarios/s327/common';
 import { MEANS } from '../scenarios/tulip/data';
 import { TulipGame, type TulipFaction, type TulipRule } from '../scenarios/tulip/game';
@@ -167,6 +168,10 @@ export function runGame(scenario: Scenario, seat: string, policy: Policy, seed: 
     num.dumped = Number(!!g.flags.npcDump);
   }
   if (g.flags.trust != null) num.trust = Number(g.flags.trust);
+  if (scenario.id === 'gme2021' && seat === 'mm') {
+    num.pfofYi = mm(g).pfof / 1e8;
+    num.callLots = mm(g).lots.length;
+  }
   num.heat = g.heatTier();
   const played = g.log.filter((l) => l.action.type === 'card').length;
   const converted = g.log.filter((l) => l.action.type === 'convert').length;

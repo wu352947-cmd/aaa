@@ -56,7 +56,7 @@ export function Title({
             <div>
               <div style={{ fontFamily: 'var(--serif)', fontWeight: 700, fontSize: 18 }}>散户起义</div>
               <div style={{ fontSize: 13, color: 'var(--ink-soft)' }}>2021 · 纽约 · 游戏零售股逼空</div>
-              <div style={{ fontSize: 13, marginTop: 4 }}>没有涨跌停，只有熔断式暂停。论坛散户、做空基金、零佣金券商，三个座位。</div>
+              <div style={{ fontSize: 13, marginTop: 4 }}>没有涨跌停，只有熔断式暂停。论坛散户、做空基金、零佣金券商、做市商，四个座位。</div>
             </div>
           </button>
         </div>
