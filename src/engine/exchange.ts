@@ -212,6 +212,14 @@ export class Exchange {
     const bid = this.book.best('buy') ?? this.last;
     const ask = this.book.best('sell') ?? this.last;
     const p = Math.max(bid, Math.min(ask, req.price ?? this.last));
+    // 对倒不转移持仓，所以保证金与持仓限额本来就不适用；但双边佣金是真的要付。
+    // 以前这里不看账户有没有钱，一笔巨额对倒能把现金直接打成负数、还绕开穿仓判定。
+    const fee = this.feeOf(p, req.qty) * 2;
+    if (fee > Math.max(0, a.cash)) {
+      res.rejected = true;
+      res.hits.push({ rule: 'wash-cash', owner: a.id, blocked: true, detail: `对倒要付双边佣金 ${fmtYi(fee)}，账上只有 ${fmtYi(Math.max(0, a.cash))}` });
+      return res;
+    }
     const before = this.last;
     const t: Trade = { tick: this.tick, price: p, qty: req.qty, buyer: a.id, seller: a.id, aggressor: req.side, wash: true };
     this.trades.push(t);
@@ -219,7 +227,7 @@ export class Exchange {
     res.filled = req.qty;
     res.avgPrice = p;
     this.last = p;
-    a.cash -= 2 * this.contractValue(p) * req.qty * (this.deck.feeRate ?? 0.0003);
+    a.cash -= fee;
     this.stats(a.id).wash += req.qty;
     this.contribute(a.group, p - before);
     return res;
@@ -241,6 +249,20 @@ export class Exchange {
     const gone = this.book.cancelWhere((o) => o.expires != null && o.expires <= this.tick);
     this.noteCancelled(gone);
     return gone;
+  }
+
+  /** 一笔成交（一个方向）按成交额收的佣金与规费；免检账户不建模成本 */
+  feeOf(p: Fen, qty: number): number {
+    return this.contractValue(p) * qty * (this.deck.feeRate ?? 0);
+  }
+
+  /** 成交双方各自付自己的佣金。免检账户（做市、散户群体、趋势资金）不收，避免污染背景撮合 */
+  private chargeFee(a: Account, p: Fen, qty: number): number {
+    if (a.exempt) return 0;
+    const fee = this.feeOf(p, qty);
+    if (!fee) return 0;
+    a.cash -= fee;
+    return fee;
   }
 
   submit(req: OrderReq, tag = ''): SubmitResult {
@@ -282,6 +304,9 @@ export class Exchange {
       };
       this.applyFill(a, req.side, q, maker.price);
       this.applyFill(this.acct(maker.owner), opposite(req.side), q, maker.price);
+      // 买卖双方各付各的佣金：这笔成本要真的从现金里出去
+      this.chargeFee(a, maker.price, q);
+      this.chargeFee(this.acct(maker.owner), maker.price, q);
       this.trades.push(t);
       res.trades.push(t);
       notional += maker.price * q;

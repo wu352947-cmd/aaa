@@ -43,7 +43,8 @@ describe('新手教学：界面逐层解锁', () => {
     expect(tutorialLayer(g)).toBe(5);
   });
 
-  it('不去做目标也会按天解锁，决战日全部打开', () => {
+  // 剧本拉长到 19 天之后，全剧本重放会超过 vitest 默认的 5 秒（CI 或并行跑满时必挂）
+  it('不去做目标也会按天解锁，决战日全部打开', { timeout: 60_000 }, () => {
     const g = newGame('retail', 'novice');
     nextDay(g);
     expect(tutorialLayer(g)).toBe(2);

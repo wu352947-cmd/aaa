@@ -43,6 +43,8 @@ export interface Actor {
 export interface TickReport {
   hits: RuleHit[];
   trades: Trade[];
+  /** 带 tag 的委托（计划单）这一分钟的成交结果，供上层回填剩余量 */
+  tagFills: { tag: string; filled: number; rejected: boolean }[];
   /** 本分钟触发了涨跌幅区间暂停（LULD） */
   luld?: boolean;
 }
@@ -341,7 +343,7 @@ export class Market {
     ex.tick++;
     ex.minute = this.t;
     ex.cancelExpired();
-    const report: TickReport = { hits: [], trades: [] };
+    const report: TickReport = { hits: [], trades: [], tagFills: [] };
     if (this.t < this.haltUntil) {
       // 停市：时间照走，没有成交；做市商的记忆照常衰减
       this.bars.push({ tick: this.t, o: ex.last, h: ex.last, l: ex.last, c: ex.last, v: 0, hist: this.hist() });
@@ -364,6 +366,7 @@ export class Market {
     const submit = (o: OrderReq) => {
       const r = ex.submit(o);
       report.hits.push(...r.hits);
+      if (o.tag) report.tagFills.push({ tag: o.tag, filled: r.filled, rejected: r.rejected });
       if (!r.filled) return;
       // 对倒不转移持仓，做市商的记忆里也没有这笔净买卖
       if (!o.wash) net += o.side === 'buy' ? r.filled : -r.filled;
