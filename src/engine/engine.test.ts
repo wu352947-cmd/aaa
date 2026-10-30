@@ -58,7 +58,8 @@ describe('引擎验收 5.2-2 冲击符合平方根律', () => {
   });
 });
 
-describe('引擎验收 5.2-3 可复现', () => {
+// 剧本拉长到 19 天后，一次 runIdle 就是一次全剧本重放，默认 5 秒不够
+describe('引擎验收 5.2-3 可复现', { timeout: 60_000 }, () => {
   it('同一种子 + 同一串操作 → 同一局', () => {
     const live = new Game(S327, 'seed-a', 'short', 'no-violation', FEB);
     for (let i = 0; i < 60; i++) live.tick();
