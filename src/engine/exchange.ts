@@ -243,6 +243,20 @@ export class Exchange {
     return gone;
   }
 
+  /** 一笔成交（一个方向）按成交额收的佣金与规费；免检账户不建模成本 */
+  feeOf(p: Fen, qty: number): number {
+    return this.contractValue(p) * qty * (this.deck.feeRate ?? 0);
+  }
+
+  /** 成交双方各自付自己的佣金。免检账户（做市、散户群体、趋势资金）不收，避免污染背景撮合 */
+  private chargeFee(a: Account, p: Fen, qty: number): number {
+    if (a.exempt) return 0;
+    const fee = this.feeOf(p, qty);
+    if (!fee) return 0;
+    a.cash -= fee;
+    return fee;
+  }
+
   submit(req: OrderReq, tag = ''): SubmitResult {
     const a = this.acct(req.owner);
     if (req.wash) {
@@ -282,6 +296,9 @@ export class Exchange {
       };
       this.applyFill(a, req.side, q, maker.price);
       this.applyFill(this.acct(maker.owner), opposite(req.side), q, maker.price);
+      // 买卖双方各付各的佣金：这笔成本要真的从现金里出去
+      this.chargeFee(a, maker.price, q);
+      this.chargeFee(this.acct(maker.owner), maker.price, q);
       this.trades.push(t);
       res.trades.push(t);
       notional += maker.price * q;
