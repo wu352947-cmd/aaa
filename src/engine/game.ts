@@ -490,6 +490,11 @@ export interface Scenario {
   extraValue?(g: Game): number;
   /** 复盘与逐笔里怎么称呼一个群体或账户 */
   groupName?(g: Game, who: string): string;
+  /**
+   * 图表上的第二条价格线（例如 327 的现券）。offset 是它相对期货的固定价差（分）：
+   * 两条线之间的缝就是基差，玩家一眼能看出张得多开、收得多窄。
+   */
+  secondLine?(g: Game): { label: string; offset: Fen } | null;
   setup(g: Game): void;
   onDayStart(g: Game): void;
   onTick(g: Game): void;

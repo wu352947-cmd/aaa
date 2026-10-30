@@ -239,6 +239,7 @@ export function GameScreen({ game, llm, ui, onSettings, onEnd, onReplace }: { ga
   const unread = Math.max(0, intelCount - intelSeen);
   const latest = game.intel.find((i) => showMentor || i.kind !== 'mentor');
   const ruleDef = ruleCard && game.scenario.ruleCards.find((c) => c.id === ruleCard.id);
+  const second = game.scenario.secondLine?.(game) ?? null;
 
   const open = (d: Drawer) => {
     setDrawer(drawer === d ? null : d);
@@ -382,6 +383,21 @@ export function GameScreen({ game, llm, ui, onSettings, onEnd, onReplace }: { ga
                 <i className="legend-line hist" />
                 真实历史
               </span>
+              {second && (
+                <span title="现券是 327 要交割的那只国库券。两条线之间的缝就是基差：缝张开时做期现套利划算，交割日必须收拢。">
+                  <i className="legend-line spot" />
+                  {second.label}
+                  <b className={cls('num', second.offset >= 0 ? 'up' : 'down')} style={{ marginLeft: 4 }}>
+                    基差 {second.offset >= 0 ? '+' : '−'}
+                    {(Math.abs(second.offset) / 100).toFixed(2)}
+                  </b>
+                  {second.offset < -1 && (
+                    <span className="arb-pill" title="现券比期货便宜：买现券、同时在 327 上卖出，到交割日按结算价交券，这口价差就锁住了。下单面板 → 现券。">
+                      可套利 {(-second.offset / 100).toFixed(2)} 元/口
+                    </span>
+                  )}
+                </span>
+              )}
               <span className="prov" title={game.scenario.sources.find((s) => s.id === 'reconstruction')?.body}>
                 {day.provenance === 'measured' ? '实测' : '重建'}
               </span>
@@ -390,6 +406,7 @@ export function GameScreen({ game, llm, ui, onSettings, onEnd, onReplace }: { ga
           <Chart
             game={game}
             rev={rev}
+            second={second}
             mode={layer >= 2 ? chartMode : 'intraday'}
             onPickPrice={
               observer || layer < 3

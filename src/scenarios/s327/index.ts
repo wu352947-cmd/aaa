@@ -33,7 +33,7 @@ import {
 } from './common';
 import { BATTLE, CHAPTERS, DAYS, PRE, DECK_1995, FACTIONS, NPCS, OFFICIAL_CLOSE, PARAMS, PRINCIPLES, PROLOGUE, RULE_CARDS, SOURCES, START_PRICE } from './data';
 import { draftPlay, DRAFT_327 } from './draft';
-import { deliveryCards, deliveryPlay, deliverySettle, spotNight, spotValue } from './delivery';
+import { basis, deliveryCards, deliveryPlay, deliverySettle, spotNight, spotValue } from './delivery';
 import { victim327 } from './victims';
 import { holidayNight, JAN_NET, januaryDecide, januaryNight, januaryTick } from './january';
 import { seatPuzzle, solveSeats } from './seats';
@@ -197,6 +197,8 @@ export const S327: Scenario = {
   // 交易座位手里的 92(3) 现券按市价计入权益
   extraValue: (g) => (isOfficial(g) ? 0 : spotValue(g)),
   meters: (g) => (isOfficial(g) ? regMeters(g) : undefined),
+  // 交易座位在图表上多画一条现券线：它和期货线之间的缝就是基差
+  secondLine: (g) => (isOfficial(g) ? null : { label: '现券 92(3)', offset: basis(g) }),
   clocks: (g) => s327Clocks(g),
   directives: (g) => s327Directives(g),
   docs: (g) => s327Docs(g),

@@ -3,6 +3,12 @@ import type { Game } from '../engine/game';
 import type { Bar } from '../engine/types';
 import { price, qty } from './format';
 
+export interface Second {
+  label: string;
+  /** 相对期货的价差（分） */
+  offset: number;
+}
+
 interface Props {
   game: Game;
   rev: number;
@@ -11,6 +17,8 @@ interface Props {
   /** 结局页：从这一分钟起的成交已被宣布无效 */
   voidFrom?: number | null;
   showPosition?: boolean;
+  /** 第二条价格线（现券）：和主线之间的缝就是基差 */
+  second?: Second | null;
 }
 
 function css(name: string): string {
@@ -22,7 +30,7 @@ const PAD_T = 14;
 const PAD_B = 22;
 const PAD_L = 10;
 
-export function Chart({ game, rev, mode, onPickPrice, voidFrom, showPosition = true }: Props) {
+export function Chart({ game, rev, mode, onPickPrice, voidFrom, showPosition = true, second = null }: Props) {
   const wrap = useRef<HTMLDivElement>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
   const [size, setSize] = useState({ w: 600, h: 300 });
@@ -45,9 +53,9 @@ export function Chart({ game, rev, mode, onPickPrice, voidFrom, showPosition = t
     c.height = Math.max(1, size.h * dpr);
     const ctx = c.getContext('2d')!;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    if (mode === 'intraday') geo.current = drawIntraday(ctx, size.w, size.h, game, hover, voidFrom ?? null, showPosition);
-    else geo.current = drawDaily(ctx, size.w, size.h, game, hover);
-  }, [game, rev, mode, size, hover, voidFrom, showPosition]);
+    if (mode === 'intraday') geo.current = drawIntraday(ctx, size.w, size.h, game, hover, voidFrom ?? null, showPosition, second);
+    else geo.current = drawDaily(ctx, size.w, size.h, game, hover, second);
+  }, [game, rev, mode, size, hover, voidFrom, showPosition, second]);
 
   const pos = (e: React.MouseEvent) => {
     const r = canvas.current!.getBoundingClientRect();
@@ -80,7 +88,7 @@ function niceTicks(lo: number, hi: number, n: number): number[] {
   return out;
 }
 
-function drawIntraday(ctx: CanvasRenderingContext2D, w: number, h: number, g: Game, hover: number | null, voidFrom: number | null, showPos: boolean) {
+function drawIntraday(ctx: CanvasRenderingContext2D, w: number, h: number, g: Game, hover: number | null, voidFrom: number | null, showPos: boolean, second: Second | null) {
   const bars: Bar[] = g.market.bars;
   const up = css('--up');
   const down = css('--down');
@@ -92,7 +100,7 @@ function drawIntraday(ctx: CanvasRenderingContext2D, w: number, h: number, g: Ga
 
   const closes = g.market.closePrices;
   const prev = (g.phase === 'trading' ? closes[closes.length - 1] : closes[closes.length - 2]) ?? bars[0]?.o ?? g.market.last;
-  const vals = [...bars.flatMap((b) => [b.h, b.l, b.hist]), prev];
+  const vals = [...bars.flatMap((b) => [b.h, b.l, b.hist, second ? b.c + second.offset : b.c]), prev];
   let lo = Math.min(...vals);
   let hi = Math.max(...vals);
   const p = g.player;
@@ -216,6 +224,20 @@ function drawIntraday(ctx: CanvasRenderingContext2D, w: number, h: number, g: Ga
     ctx.stroke();
     ctx.setLineDash([]);
 
+    // 第二条价格线（现券）：和期货线之间的缝就是基差
+    if (second) {
+      ctx.setLineDash([2, 3]);
+      ctx.strokeStyle = css('--gold');
+      ctx.globalAlpha = 0.75;
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      bars.forEach((b, i) => (i ? ctx.lineTo(X(i), Y(b.c + second.offset)) : ctx.moveTo(X(i), Y(b.c + second.offset))));
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+      ctx.setLineDash([]);
+      ctx.lineWidth = 1;
+    }
+
     // 价格线 + 面积
     const last = bars[bars.length - 1].c;
     const col = last >= prev ? up : down;
@@ -268,6 +290,7 @@ function drawIntraday(ctx: CanvasRenderingContext2D, w: number, h: number, g: Ga
     ctx.stroke();
     ctx.setLineDash([]);
     const lines = [S.label(hover), `成交 ${price(b.c)}`, `历史 ${price(b.hist)}`, `偏离 ${b.c - b.hist >= 0 ? '+' : ''}${((b.c - b.hist) / 100).toFixed(2)}`, `量 ${qty(b.v)}`];
+    if (second) lines.push(`${second.label} ${price(b.c + second.offset)}`, `基差 ${(second.offset / 100).toFixed(2)}`);
     tooltip(ctx, x, PAD_T + 6, lines, w);
   }
 
@@ -277,7 +300,7 @@ function drawIntraday(ctx: CanvasRenderingContext2D, w: number, h: number, g: Ga
   };
 }
 
-function drawDaily(ctx: CanvasRenderingContext2D, w: number, h: number, g: Game, hover: number | null) {
+function drawDaily(ctx: CanvasRenderingContext2D, w: number, h: number, g: Game, hover: number | null, second: Second | null) {
   const up = css('--up');
   const down = css('--down');
   const gold = css('--gold');
@@ -294,7 +317,7 @@ function drawDaily(ctx: CanvasRenderingContext2D, w: number, h: number, g: Game,
     bars[today] = { tick: g.dayIndex, o: b[0].o, h: Math.max(...b.map((x) => x.h)), l: Math.min(...b.map((x) => x.l)), c: b[b.length - 1].c, v: b.reduce((a, x) => a + x.v, 0), hist: b[b.length - 1].hist };
   }
   const shown = bars.filter(Boolean) as Bar[];
-  const vals = shown.flatMap((b) => [b.h, b.l, b.hist]);
+  const vals = shown.flatMap((b) => [b.h, b.l, b.hist, second ? b.c + second.offset : b.c]);
   if (!vals.length) vals.push(g.market.last);
   let lo = Math.min(...vals);
   let hi = Math.max(...vals);

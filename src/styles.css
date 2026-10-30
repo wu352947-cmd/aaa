@@ -505,6 +505,20 @@ textarea {
 .legend-line.hist {
   border-top: 2px dashed var(--gold);
 }
+.arb-pill {
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  border: 1px solid var(--gold);
+  color: var(--gold);
+  font-size: 11px;
+  white-space: nowrap;
+}
+/* 现券线：点线，和期货主线之间的缝就是基差 */
+.legend-line.spot {
+  border-top: 2px dotted var(--gold);
+  opacity: 0.75;
+}
 .prov {
   border: 1px solid var(--gold-dim);
   color: var(--gold);
