@@ -495,6 +495,12 @@ export interface Scenario {
    * 两条线之间的缝就是基差，玩家一眼能看出张得多开、收得多窄。
    */
   secondLine?(g: Game): { label: string; offset: Fen } | null;
+  /**
+   * 此刻有没有值得玩家停下来看的事？返回一句白话，界面会显示成「焦点」，
+   * 自动档也会据此放慢——别让一个交易日 4 秒就跑完，玩家还没反应过来。
+   * 没有就返回 null，让时间照常快进。
+   */
+  focus?(g: Game): string | null;
   setup(g: Game): void;
   onDayStart(g: Game): void;
   onTick(g: Game): void;

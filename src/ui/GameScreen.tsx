@@ -28,7 +28,7 @@ const SPEED_LABEL = ['慢', '中', '快', '极快', '自动'];
 /** 自动档：没有新消息就快进，一有动静（消息、决策、成交放量）就放慢；决战日最后一刻钟按最慢的档走 */
 const AUTO = 4;
 const AUTO_SPEED = {
-  layout: { quiet: 8, busy: 120 },
+  layout: { quiet: 18, busy: 120 },
   battle: { quiet: 200, busy: 600, final: 1500 },
 };
 
@@ -45,6 +45,8 @@ export function GameScreen({ game, llm, ui, onSettings, onEnd, onReplace }: { ga
   const [speed, setSpeed] = useState(AUTO);
   // 自动档：到第几个 tick 之前保持慢速
   const busyUntil = useRef(0);
+  // 上一次的焦点：只在焦点变化的那一刻放慢，避免整天被按在慢速
+  const focusRef = useRef<string | null>(null);
   const [drawer, setDrawer] = useState<Drawer>(null);
   const [limitPick, setLimitPick] = useState<number | null>(null);
   const [ruleCard, setRuleCard] = useState<{ id: string; detail?: string } | null>(null);
@@ -178,6 +180,12 @@ export function GameScreen({ game, llm, ui, onSettings, onEnd, onReplace }: { ga
           halt = true;
           break;
         }
+        // 焦点换了一句话（基差走到能套利、保证金吃紧、顶到限额）：放慢，让人看见
+        const f = game.phase === 'trading' ? (game.scenario.focus?.(game) ?? null) : null;
+        if (f !== focusRef.current) {
+          focusRef.current = f;
+          if (f) busyUntil.current = Math.max(busyUntil.current, game.market.ex.tick + 20);
+        }
         // 快进中撞上动静，立刻按慢速走
         if (speed === AUTO && pace() > ms) break;
       }
@@ -240,6 +248,7 @@ export function GameScreen({ game, llm, ui, onSettings, onEnd, onReplace }: { ga
   const latest = game.intel.find((i) => showMentor || i.kind !== 'mentor');
   const ruleDef = ruleCard && game.scenario.ruleCards.find((c) => c.id === ruleCard.id);
   const second = game.scenario.secondLine?.(game) ?? null;
+  const focus = game.phase === 'trading' ? (game.scenario.focus?.(game) ?? null) : null;
 
   const open = (d: Drawer) => {
     setDrawer(drawer === d ? null : d);
@@ -360,6 +369,14 @@ export function GameScreen({ game, llm, ui, onSettings, onEnd, onReplace }: { ga
         </div>
       )}
       </div>
+
+      {focus && (
+        <div className="focus-strip" title="这是眼下最值得注意的一件事。自动档遇到它会放慢，给你时间决定。">
+          <span className="focus-dot" />
+          <b>焦点</b>
+          <span>{focus}</span>
+        </div>
+      )}
 
       {ui.scenes !== false && <SceneStrip game={game} paused={paused} redUp={ui.colors === 'cn'} />}
 
