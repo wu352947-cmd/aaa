@@ -7,8 +7,8 @@ import type { Bar, Fen, OrderReq, RuleHit, Trade } from './types';
 export interface DayDef {
   date: string;
   label: string;
-  /** layout 布局期；battle 决战日；aftermath 余波（不开盘，只有夜晚） */
-  kind: 'layout' | 'battle' | 'aftermath';
+  /** layout 布局期；battle 决战日；aftermath 余波（不开盘，只有夜晚）；halt 停牌（剧本中途不开盘的日子，只有夜晚） */
+  kind: 'layout' | 'battle' | 'aftermath' | 'halt';
   /** 每分钟真实历史价（分），长度 = 交易分钟数 */
   hist: Fen[];
   /** 做市商的估值中枢（“历史引力”指向的位置）；为空时等于 hist */
@@ -203,9 +203,15 @@ export class Market {
     return this.params.kappa * this.scale() * Math.sign(this.flow) * Math.sqrt(Math.abs(this.flow) / this.day.vDay);
   }
 
-  /** 做市商当前的估值中枢（分）：历史价格 + 累计流量的永久冲击 + 盘口倾斜 */
+  /**
+   * 市场共识偏离历史的部分（分）：剧本按这一局的局面设定——消息、政策、各方的判断变了，
+   * 大家心里的“值多少”就跟着变，不再钉在历史价格上
+   */
+  shift = 0;
+
+  /** 做市商当前的估值中枢（分）：历史价格 + 共识偏离 + 累计流量的永久冲击 + 盘口倾斜 */
   get reference(): number {
-    return this.base() + this.dev + 0.12 * this.lean * this.scale();
+    return this.base() + this.shift + this.dev + 0.12 * this.lean * this.scale();
   }
 
   /**
@@ -244,7 +250,7 @@ export class Market {
 
   /** 要让中枢到达 target（分），累计净流量还需要再加多少（口，买为正） */
   flowToReach(target: Fen): number {
-    const d = target - this.base();
+    const d = target - this.base() - this.shift;
     const need = Math.sign(d) * this.day.vDay * Math.pow(d / (this.params.kappa * this.scale()), 2);
     return need - this.flow;
   }
@@ -301,7 +307,7 @@ export class Market {
     if (this.bars.length < 6) return [];
     const p = this.params;
     const dayVol = this.day.sigma * this.reference;
-    const devRatio = (this.last - this.base()) / dayVol;
+    const devRatio = (this.last - this.base() - this.shift) / dayVol;
     const mom = this.last - this.bars[this.bars.length - 6].o;
     if (Math.abs(devRatio) < p.trendThreshold || Math.sign(mom) !== Math.sign(devRatio)) return [];
     const strength = Math.min(2, Math.abs(devRatio) - p.trendThreshold);

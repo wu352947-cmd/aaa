@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Decision, RuleCardDef } from '../engine/game';
 import { speak } from '../llm/director';
 import { ERA_1995_SH } from '../llm/era';
@@ -34,7 +34,9 @@ export function RuleCardModal({ card, detail, onClose }: { card: RuleCardDef; de
   );
 }
 
-export function DecisionModal({ d, onChoose }: { d: Decision; onChoose: (id: string) => void }) {
+export function DecisionModal({ d: raw, onChoose, scale = 1 }: { d: Decision; onChoose: (id: string) => void; scale?: number }) {
+  // 难度改倒计时的长短
+  const d = useMemo(() => (raw.countdown ? { ...raw, countdown: Math.max(5, Math.round(raw.countdown * scale)) } : raw), [raw, scale]);
   const [left, setLeft] = useState(d.countdown ?? 0);
   const fired = useRef(false);
   const choose = (id: string) => {
@@ -56,7 +58,7 @@ export function DecisionModal({ d, onChoose }: { d: Decision; onChoose: (id: str
       <div className="modal decision">
         <div style={{ fontSize: 12, color: 'var(--seal)', letterSpacing: '0.2em', fontWeight: 700 }}>关 键 时 刻</div>
         <h3>{d.title}</h3>
-        <p style={{ margin: '6px 0 4px' }}>{d.body}</p>
+        <p style={{ margin: '6px 0 4px', whiteSpace: 'pre-line' }}>{d.body}</p>
         {d.choices.map((c) => (
           <button key={c.id} className={cls('choice', c.danger && 'danger')} onClick={() => choose(c.id)}>
             <b>{c.label}</b>

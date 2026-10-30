@@ -45,7 +45,17 @@ export const ERA_2021_NY: EraPack = {
   safeNumbers: [2021, 2020],
 };
 
+export const ERA_2015_SZ: EraPack = {
+  id: '2015-shenzhen',
+  place: '2015 到 2016 年的深圳，一家地产公司的会议室，外面是一场险资举牌的控制权之争',
+  lexicon: ['举牌', '险资', '万能险', '资管计划', '一致行动人', '停牌', '复牌', '重组', '定增', '白衣骑士', '第一大股东', '临时股东大会', '董事会', '财务投资者', '野蛮人', '杠杆', '平仓线', '劣后', '优先级', '朋友圈', '微信'],
+  anachronisms: ['注册制', '科创板', '北交所', 'ChatGPT', '元宇宙', '疫情'],
+  foreknowledge: ['妖精', '害人精', '野蛮人讲话', '市场禁入', '十年禁入', '董事会换届', '退休', '2017', '转让给'],
+  safeNumbers: [2015, 2016],
+};
+
 ERAS[ERA_1995_SH.id] = ERA_1995_SH;
+ERAS[ERA_2015_SZ.id] = ERA_2015_SZ;
 ERAS[ERA_2021_NY.id] = ERA_2021_NY;
 ERAS[ERA_1637_HAARLEM.id] = ERA_1637_HAARLEM;
 

@@ -246,6 +246,7 @@ export function mmDecide(g: Game, id: string, choice: string): boolean {
     case 'mm-quote:pull':
       setQuoting(g, 'pulled');
       g.flags.mmQuote = 'pull';
+      g.darkDeed('pull-quotes', '撤掉报价');
       g.reputation -= 8;
       g.addHeat(10, '在最需要流动性的时候撤掉报价');
       return true;

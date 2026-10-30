@@ -68,8 +68,9 @@ describe('散户起义：玩家真的能改变历史', { timeout: 60000 }, () =>
     expect(g.player.pos).toBe(before - 10);
   });
 
-  it('做空基金：不接受注资、一直扛着，会在决战日被强平；接受注资并在跳空日回补，能活下来', () => {
-    expect(play('short').bankrupt).toBe(true);
+  it('做空基金：不接受注资、一直扛着，会被主经纪商盘中强平（或者穿仓）；接受注资并在跳空日回补，能活下来', () => {
+    const held = play('short');
+    expect(held.bankrupt || !!held.flags.pbLiquidated).toBe(true);
     const saved = play('short', { 'gap-open': 'cover-all' }, 'gme', (g) => {
       if (g.dayIndex === 1) g.act({ type: 'social', verb: 'exchange', npc: 'stone', option: 'bailout' });
     });

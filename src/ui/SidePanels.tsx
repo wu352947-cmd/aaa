@@ -164,7 +164,7 @@ function MyOrders({ game }: { game: Game }) {
   );
 }
 
-export function PositionCard({ game }: { game: Game }) {
+export function PositionCard({ game, layer = 5 }: { game: Game; layer?: number }) {
   const ex = game.market.ex;
   const p = game.player;
   const eq = ex.equity(p);
@@ -216,13 +216,41 @@ export function PositionCard({ game }: { game: Game }) {
         <div style={{ width: `${Math.min(100, use * 100)}%` }} />
       </div>
       {game.marginCall && <div className="danger-box">追加保证金通知：明早开盘前补足，否则强制平仓。</div>}
-      {!game.faction.observer && <Leverage game={game} />}
-      <MyOrders game={game} />
+      {!game.faction.observer && layer >= 4 && <Leverage game={game} />}
+      {layer >= 3 && <MyOrders game={game} />}
     </div>
   );
 }
 
 /** 交易所官员的监管台：看得到每家会员的持仓与保证金（这是交易者看不到的） */
+/** 股东名册：控制权之争里，谁手里有多少票。刻度是 5% 一条的举牌线 */
+export function HoldersCard({ game }: { game: Game }) {
+  const rows = game.scenario.holders?.(game) ?? [];
+  return (
+    <div className="card">
+      <h4>
+        <span>股东名册</span>
+        <span className="faint">每 5% 一条举牌线</span>
+      </h4>
+      {rows.map((r) => (
+        <div key={r.id} style={{ marginBottom: 7 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
+            <span>
+              {r.name}
+              {r.you && <span className="faint">（你）</span>}
+            </span>
+            <span className="num">{(r.pct * 100).toFixed(2)}%</span>
+          </div>
+          <div className="bar-track holders">
+            <div style={{ width: `${Math.min(100, (r.pct / 0.3) * 100)}%` }} />
+          </div>
+          {r.note && <div className="warn-box" style={{ marginTop: 3, padding: '1px 8px', fontSize: 12 }}>{r.note}</div>}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export function MembersCard({ game }: { game: Game }) {
   const ex = game.market.ex;
   const members = (game.scenario.members ?? []).filter((id) => ex.accounts.has(id)).map((id) => ex.acct(id));

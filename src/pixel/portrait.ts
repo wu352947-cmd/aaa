@@ -51,6 +51,16 @@ export const LOOKS: Record<string, Look> = {
   shen: { era: '1995', skin: 0, hair: hex('#2a2624'), hairStyle: 'side', outfit: hex('#22262c'), collar: 'tie', accent: hex('#6a2020'), face: 'narrow' },
   lu: { era: '1995', skin: 1, hair: BLACK, hairStyle: 'short', glasses: true, outfit: hex('#3a3e44'), collar: 'tie', accent: hex('#2a3a5a') },
   yan: { era: '1995', skin: 2, hair: hex('#4a4644'), hairStyle: 'crop', outfit: hex('#2a2c30'), collar: 'tie', accent: hex('#5a2a2a'), old: true, face: 'narrow' },
+  // ── 2015 深圳 ──
+  ye: { era: '2015', skin: 2, hair: BLACK, hairStyle: 'crop', outfit: hex('#1e2a30'), collar: 'shirt', face: 'round' },
+  wang: { era: '2015', skin: 1, hair: GREY, hairStyle: 'side', outfit: hex('#2a3a30'), collar: 'shirt', old: true, face: 'narrow' },
+  yu: { era: '2015', skin: 0, hair: BLACK, hairStyle: 'short', glasses: true, outfit: hex('#26323a'), collar: 'tie', accent: hex('#3b6470') },
+  fu: { era: '2015', skin: 1, hair: hex('#3a3634'), hairStyle: 'side', outfit: hex('#202428'), collar: 'tie', accent: hex('#7a2a24'), old: true },
+  wu: { era: '2015', skin: 0, hair: BLACK, hairStyle: 'side', outfit: hex('#3a3026'), collar: 'tie', accent: hex('#c9a24a'), face: 'round' },
+  lin: { era: '2015', skin: 2, hair: GREY, hairStyle: 'crop', glasses: true, outfit: hex('#2a2e36'), collar: 'tie', accent: hex('#2a5a8a'), old: true },
+  chang: { era: '2015', skin: 1, hair: hex('#4a4644'), hairStyle: 'short', outfit: hex('#1e2226'), collar: 'tie', accent: hex('#5a2a2a'), old: true, face: 'narrow' },
+  xu: { era: '2015', skin: 0, hair: BLACK, hairStyle: 'long', outfit: hex('#c8b89a'), collar: 'blouse', face: 'narrow' },
+  zhong: { era: '2015', skin: 2, hair: WHITE, hairStyle: 'side', glasses: true, outfit: hex('#5a5a4a'), collar: 'shirt', old: true },
   // ── 2021 纽约 ──
   cat: { era: '2021', skin: 0, hair: hex('#5a3a22'), hairStyle: 'short', hat: 'headband', beard: 'stubble', outfit: hex('#3a3a44'), collar: 'tee', accent: hex('#d8322a') },
   jack: { era: '2021', skin: 0, hair: BLOND, hairStyle: 'messy', hat: 'headphones', outfit: hex('#5b2bb0'), collar: 'hoodie', accent: hex('#ffe23d'), face: 'round' },

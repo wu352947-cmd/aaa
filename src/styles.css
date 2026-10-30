@@ -1087,6 +1087,7 @@ textarea {
   margin: 2px 0;
 }
 .intel .body {
+  white-space: pre-line;
   font-size: 13px;
   color: var(--muted);
 }
@@ -2423,3 +2424,224 @@ textarea {
 .opt-pos button {
   grid-column: 1 / -1;
 }
+
+/* ───────── 新手教学 ───────── */
+.tutor-strip {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  flex-wrap: wrap;
+  padding: 4px 14px;
+  font-size: 12px;
+  border-bottom: 1px solid var(--line);
+  background: #161a12;
+  color: #e6dfcc;
+}
+.tutor-strip .tutor-step {
+  color: var(--gold);
+  font-weight: 600;
+  letter-spacing: 0.05em;
+}
+.cred {
+  font-size: 10px;
+  padding: 0 5px;
+  border-radius: 2px;
+  border: 1px solid var(--line);
+}
+.cred.hi {
+  color: #86efac;
+  border-color: #1f4d2c;
+}
+.cred.mid {
+  color: var(--warn);
+  border-color: #5a3d12;
+}
+.cred.lo {
+  color: #ff8a80;
+  border-color: #5a2323;
+}
+
+/* ───────── 受害者视角 ───────── */
+.tag.victim {
+  color: #f5d0a9;
+  border-color: #6b3f1d;
+}
+.victim-letter {
+  margin-top: 12px;
+  padding: 14px 18px;
+  border-left: 3px solid var(--seal);
+  font-family: var(--serif);
+  font-size: 14px;
+  white-space: pre-line;
+}
+.victim-letter .victim-from {
+  font-weight: 700;
+  color: var(--seal);
+  margin-bottom: 6px;
+}
+.victim-letter p {
+  margin: 0;
+}
+.victim-letter .victim-sign {
+  text-align: right;
+  margin-top: 8px;
+  color: var(--ink-soft);
+}
+.victim-list {
+  margin-top: 14px;
+  border-top: 1px dashed var(--ink-soft);
+  padding-top: 8px;
+}
+.victim-list p {
+  font-size: 13px;
+  text-indent: 0;
+}
+.spun-note {
+  font-size: 12px;
+  color: var(--seal);
+  margin-top: 4px;
+}
+
+/* ───────── 生涯 ───────── */
+.career-steps {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+  font-size: 12px;
+}
+.career-steps span {
+  padding: 3px 10px;
+  border: 1px solid var(--ink-soft);
+  color: var(--ink-soft);
+}
+.career-steps span.past {
+  opacity: 0.55;
+}
+.career-steps span.now {
+  border-color: var(--seal);
+  color: var(--seal);
+  font-weight: 700;
+}
+.career-sheet {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+  gap: 8px;
+  padding: 10px 0;
+  border-top: 1px solid var(--ink-soft);
+  border-bottom: 1px solid var(--ink-soft);
+  font-size: 12px;
+  color: var(--ink-soft);
+}
+.career-sheet b {
+  display: block;
+  font-family: var(--mono);
+  font-size: 16px;
+  color: var(--ink);
+}
+.career-panel {
+  margin: 18px 0;
+}
+.career-panel h2 {
+  margin: 8px 0;
+}
+.career-year {
+  font-family: var(--serif);
+  font-size: 44px;
+  font-weight: 900;
+  color: var(--seal);
+  line-height: 1;
+}
+.career-choices {
+  display: grid;
+  gap: 8px;
+  margin: 12px 0;
+}
+.career .choice {
+  background: rgba(255, 255, 255, 0.35);
+  color: var(--ink);
+  border-color: var(--ink-soft);
+}
+.career .choice small {
+  color: var(--ink-soft);
+}
+.choice.grey {
+  border-left: 3px solid #8a8f98;
+}
+.career-log p {
+  font-size: 13px;
+  margin: 4px 0;
+}
+.wealth-curve {
+  width: 100%;
+  height: auto;
+}
+.wealth-curve .line {
+  stroke: var(--seal);
+  stroke-width: 2;
+}
+.wealth-curve .dot {
+  fill: var(--seal);
+}
+.wealth-curve .base {
+  stroke: var(--ink-soft);
+  stroke-dasharray: 3 3;
+}
+.wealth-curve .lbl {
+  font-size: 9px;
+  fill: var(--ink-soft);
+}
+.wealth-curve .val {
+  font-size: 11px;
+  fill: var(--ink);
+  font-weight: 700;
+}
+/* 股东名册：每 5% 一条刻度（满格是 30%） */
+.bar-track.holders {
+  background-image: repeating-linear-gradient(90deg, transparent 0, transparent calc(16.666% - 1px), rgba(255, 255, 255, 0.18) calc(16.666% - 1px), rgba(255, 255, 255, 0.18) 16.666%);
+}
+
+/* ───────── 分章 ───────── */
+.chapter-tag {
+  font-size: 12px;
+  color: var(--gold);
+  border: 1px solid var(--gold-dim);
+  padding: 0 6px;
+  border-radius: 2px;
+}
+.chapter-end {
+  margin-top: 12px;
+  padding: 14px 18px;
+  border: 2px double var(--ink-soft);
+  font-family: var(--serif);
+}
+.chapter-end .chapter-kicker {
+  font-size: 12px;
+  letter-spacing: 0.3em;
+  color: var(--seal);
+}
+.chapter-end h3 {
+  margin: 4px 0 8px;
+}
+.chapter-end .kv {
+  margin: 0;
+}
+.chapter-end .chapter-next {
+  margin: 10px 0 0;
+  font-size: 13px;
+}
+
+/* 夜里的推理 */
+.puzzle-table-wrap { overflow-x: auto; margin: 8px 0; }
+.puzzle-table { border-collapse: collapse; font-size: 12px; width: 100%; }
+.puzzle-table th, .puzzle-table td { padding: 3px 8px; border-bottom: 1px solid var(--line, rgba(255,255,255,0.08)); text-align: right; white-space: nowrap; }
+.puzzle-table th:first-child, .puzzle-table td:first-child { text-align: left; }
+.puzzle-q { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 6px 0; font-size: 13px; }
+.puzzle-q > span { min-width: 90px; }
+
+/* 多轮谈判 */
+.nego-log { margin: 8px 0; font-size: 13px; display: flex; flex-direction: column; gap: 4px; }
+.nego-line.you { color: var(--ink-soft, #aab); }
+.nego-term { display: grid; grid-template-columns: 110px 1fr 110px; gap: 8px; align-items: center; font-size: 13px; margin: 6px 0; }
+.nego-term input { width: 100%; }
+@media (max-width: 600px) { .nego-term { grid-template-columns: 1fr; } }

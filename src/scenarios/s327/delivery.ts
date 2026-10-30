@@ -1,4 +1,5 @@
 import { fmtYi } from '../../engine/exchange';
+import { sd } from './common';
 import type { CardDef, CardResult, Game } from '../../engine/game';
 import { BATTLE } from './data';
 
@@ -92,7 +93,7 @@ export function deliveryCards(g: Game): CardDef[] {
       blocked: s.choice === 'deliver' ? '已经申请交割：现券要用来交割' : undefined,
     });
   // 余波：327 停牌清算，持仓怎么了结
-  if (g.dayIndex > BATTLE && p.pos !== 0) {
+  if (sd(g) > BATTLE && p.pos !== 0) {
     const long = p.pos > 0;
     out.push(
       {

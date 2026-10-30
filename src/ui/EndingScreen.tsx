@@ -1,3 +1,4 @@
+import { difficultyName } from './tutorial';
 import { PixelScene } from './Pixel';
 import type { Game, Intel } from '../engine/game';
 import { Chart } from './Chart';
@@ -11,7 +12,8 @@ const QUAD: [string, string][] = [
   ['流星', '快 · 越线'],
 ];
 
-export function EndingScreen({ game, onAgain, onTitle }: { game: Game; onAgain: () => void; onTitle: () => void }) {
+export function EndingScreen({ game, onAgain, onTitle, againLabel }: { game: Game; onAgain: () => void; onTitle: () => void; againLabel?: string }) {
+  const letters = game.intel.filter((i) => i.kind === 'victim').reverse();
   const e = game.ending!;
   return (
     <div className="ending" style={{ background: '#0b0c10' }}>
@@ -20,6 +22,8 @@ export function EndingScreen({ game, onAgain, onTitle }: { game: Game; onAgain: 
           <div className="scene-frame">
             {game.scenario.id === 'gme2021' ? (
               <PixelScene scene="room" state={{ heat: 0.2, faded: 0.5, restricted: !!game.flags.restrictActive }} label="散场之后" />
+            ) : game.scenario.id === 'takeover2015' ? (
+              <PixelScene scene="board" state={{ heat: 0.1, faded: 0.5, night: true, who: ['fu', 'yu'] }} label="散会之后的会议室" />
             ) : (
               <PixelScene scene="floor" state={{ heat: 0.05, halted: true, faded: 0.5 }} label="散场之后的交易大厅" />
             )}
@@ -53,7 +57,25 @@ export function EndingScreen({ game, onAgain, onTitle }: { game: Game; onAgain: 
                     <b>{v}</b>
                   </div>
                 ))}
+                <div>
+                  难度
+                  <b>
+                    {difficultyName(game.difficulty)}
+                    {game.undos ? `（撤回 ${game.undos} 天）` : ''}
+                  </b>
+                </div>
               </div>
+              {letters.length > 0 && (
+                <div className="victim-list">
+                  <h4>这一局，对面的人（{letters.length} 封信）</h4>
+                  {letters.map((l) => (
+                    <p key={l.id}>
+                      <b>{l.title}</b>
+                      <span className="faint">（{game.scenario.days[l.day]?.date.slice(5)}）</span>：{l.body.split('\n\n')[1] ?? l.body}
+                    </p>
+                  ))}
+                </div>
+              )}
             </div>
             <div className="history-col">
               <h4>历史上的这一天</h4>
@@ -143,7 +165,7 @@ export function EndingScreen({ game, onAgain, onTitle }: { game: Game; onAgain: 
             回到标题
           </button>
           <button className="btn primary" onClick={onAgain}>
-            换个座位再来一局
+            {againLabel ?? '换个座位再来一局'}
           </button>
         </div>
         <p className="faint" style={{ textAlign: 'center', fontSize: 12, marginTop: 18 }}>

@@ -19,10 +19,12 @@ import {
   spendCap,
   st,
   usage,
-  wan,
+  wan, sd
 } from './common';
 import { BATTLE } from './data';
 import { breakDirective } from './plans';
+import { lobbyMof, mofScore, sway, verdictOf } from './world';
+import { openGaoFee, openMediation } from './deals';
 
 const R = (ok: boolean, title: string, effects: string[], reply?: CardResult['reply']): CardResult => ({ ok, title, effects, reply });
 const rel = (g: Game, npc: string, d: number, memory?: string) => {
@@ -83,7 +85,7 @@ export function regMeters(g: Game): Meter[] {
 
 export function regCards(g: Game): CardDef[] {
   const s = st(g);
-  const d = g.dayIndex;
+  const d = sd(g);
   const ex = g.market.ex;
   const m = g.market;
   const pre = d < BATTLE;
@@ -226,6 +228,16 @@ export function regCards(g: Game): CardDef[] {
         blocked: flag(g, 'mofPublic') ? '财政部已经答应' : s.used.has('mof-fail') ? '财政部已经回绝' : need(2),
       },
       {
+        id: 'mof-cool',
+        name: '向财政部反映市场过热',
+        group: '政策协调',
+        color: 'white',
+        does: '把 327 的持仓和成交报给财政部：“这个品种已经被投机绑架了。”部里会更谨慎，贴息可能打折，甚至不贴。',
+        cost: '1 点政治资本；多方会恨你。',
+        when: 'night',
+        blocked: s.world.verdict ? '财政部已经定案' : s.used.has('mof-cool') ? '已经反映过' : need(1),
+      },
+      {
         id: 'mediate',
         name: '召集多空协议平仓',
         group: '政策协调',
@@ -355,7 +367,7 @@ export function regPlay(g: Game, id: string, target?: string): CardResult {
   const s = st(g);
   const m = g.market;
   const ex = m.ex;
-  const d = g.dayIndex;
+  const d = sd(g);
   const tName = target ? memberName(g, target) : '';
   const tNpc = target ? MEMBER_NPC[target] : '';
   switch (id) {
@@ -485,6 +497,15 @@ export function regPlay(g: Game, id: string, target?: string): CardResult {
       return R(true, '财政部同意：23 日开盘前公告', ['政治资本 −2', '秩序 +10：没人能靠提前知道赚钱', rel(g, 'lu', -10, '交易所催公告'), rel(g, 'wei', -10)].filter(Boolean), {
         who: lu.name,
         text: '行吧，既然市场已经这样了，开盘前发出去。但下不为例。',
+      });
+    }
+    case 'mof-cool': {
+      spendCap(g, 1);
+      s.used.add('mof-cool');
+      lobbyMof(g, '交易所反映市场过热', -0.12);
+      return R(true, '材料送到了财政部', ['政治资本 −1', '财政部的倾向往“不贴”挪了一点', rel(g, 'wei', -10, '交易所去财政部说三道四'), rel(g, 'lu', 3)].filter(Boolean), {
+        who: g.npc('lu')!.name,
+        text: '情况我们掌握了。方案会统筹考虑市场的承受能力。',
       });
     }
     case 'mediate': {
@@ -628,7 +649,7 @@ const HIDE_POS_ABS = (g: Game) => Math.abs(g.market.ex.acct(HIDE).pos);
 
 export function traderCards(g: Game): CardDef[] {
   const s = st(g);
-  const d = g.dayIndex;
+  const d = sd(g);
   const pre = d < BATTLE;
   const after = g.isAftermath;
   const f = g.factionId;
@@ -685,21 +706,31 @@ export function traderCards(g: Game): CardDef[] {
         name: '接受采访：兑付价就是 132 元',
         group: '舆论',
         color: 'grey',
-        does: '公开喊话。明早散户情绪偏空。如果最后贴息兑现，你会被打脸。',
+        does: '公开喊话，明早上头条。散户情绪偏空；读报的人各按各的风格解读。如果最后贴息兑现，你会被打脸。',
         cost: '1 点精力。',
         when: 'night',
         blocked: used(`interview-${d}`) ? '今晚已经接受过采访' : energy,
       },
       lobby,
       {
+        id: 'mof-against',
+        name: '托人给财政部递材料',
+        group: '舆论',
+        color: 'grey',
+        does: '托北京的关系递一份材料：“327 早被炒过了头，再贴息就是拿财政的钱给投机者送礼。”部里的倾向会往不贴息那边挪一点；递得越多，效果越小。22 日晚部里定案，之后就没用了。',
+        cost: '2000 万元“活动经费”+ 1 点精力；监管热度 +6。',
+        when: 'night',
+        blocked: st(g).world.verdict ? '财政部已经定案' : used(`mofno-${d}`) ? '今晚已经递过' : energy,
+      },
+      {
         id: 'mediate-req',
         name: '请交易所协调协议平仓',
         group: '仓位',
         color: 'white',
-        does: '按收盘价加 0.6 元，从中财手里买回 80 万口空单，不经过订单簿。中财愿不愿意，看关系和日子。',
+        does: '坐下来和魏国梁谈：买回多少空单、比收盘价高多少，几轮出价。他的要价看他对贴息有几分把握——风向对他不利时，他比你还急。',
         cost: '1 点精力；谈不成也认。',
         when: 'night',
-        blocked: !pre ? '已经过了谈的时候' : d < 2 ? '20 日起才有得谈' : used('mediated') ? '已经谈成' : energy,
+        blocked: !pre ? '已经过了谈的时候' : d < 2 ? '20 日起才有得谈' : used('mediated') ? '已经谈成' : used(`medtry-${d}`) ? '今晚已经谈过' : energy,
       },
     );
   }
@@ -710,17 +741,17 @@ export function traderCards(g: Game): CardDef[] {
         name: '给辽北递话：倒戈有好处',
         group: '拉拢',
         color: 'grey',
-        does: '许高振宇一笔“咨询费”，让他更早、更坚决地空翻多。',
-        cost: '3000 万元 + 1 点精力；监管热度 +6。',
+        does: '约高振宇谈一笔“咨询费”，让他更早、更坚决地空翻多。给得越多，他越坚决；他要多少，看违约金、贴息的把握和交情。',
+        cost: '1 点精力；谈成后付钱，监管热度 +6。',
         when: 'night',
-        blocked: !pre ? '来不及了' : used('tip-gao') ? '已经递过话' : energy,
+        blocked: !pre ? '来不及了' : used('tip-gao') ? '已经递过话' : used(`gaotry-${d}`) ? '今晚已经谈过' : energy,
       },
       {
         id: 'press',
         name: '媒体吹风：贴息在即',
         group: '舆论',
         color: 'grey',
-        does: '找相熟的记者写一篇“政策面将有变化”。明早散户情绪偏多。',
+        does: '找相熟的记者写一篇“政策面将有变化”，明早上头条。散户情绪偏多；消息驱动的人会跟，逆向的人会更硬。',
         cost: '1 点精力；声望 −1。',
         when: 'night',
         blocked: used(`press-${d}`) ? '今晚已经找过' : energy,
@@ -755,6 +786,16 @@ export function traderCards(g: Game): CardDef[] {
         cost: '声望 −2。',
         when: 'night',
         blocked: used('reserve') ? '已经申请过' : undefined,
+      },
+      {
+        id: 'mof-for',
+        name: '加紧游说财政部',
+        group: '拉拢',
+        color: 'grey',
+        does: '让魏国梁再跑几趟北京：“保值贴补关系到国债的信誉，今年的新券还要发。”部里的倾向会往贴息那边挪一点；跑得越多，效果越小。被查出与部里有关联，反而坏事。',
+        cost: '2000 万元 + 1 点精力；监管热度 +5。',
+        when: 'night',
+        blocked: st(g).world.verdict ? '财政部已经定案' : used(`mofyes-${d}`) ? '今晚已经跑过' : energy,
       },
       lobby,
     );
@@ -855,8 +896,7 @@ export function traderPlay(g: Game, id: string, target?: string): CardResult {
   const s = st(g);
   const ex = g.market.ex;
   const p = g.player;
-  const d = g.dayIndex;
-  const close = ex.last;
+  const d = sd(g);
   switch (id) {
     case 'lobby': {
       s.used.add(`lobby-${d}`);
@@ -864,14 +904,43 @@ export function traderPlay(g: Game, id: string, target?: string): CardResult {
       p.cash -= 5_000_000;
       g.addHeat(5, '托关系打听政策');
       if (d >= 3) {
-        rumor(g, `lobby-${d}`, '贴息定了，23 日前后公布', '北京的关系压低声音：“方案已经报上去了，兑付价比 132 高得多。就这几天。”', '北京的关系', 0.9, [
-          { who: '财政部', said: '贴息方案已上报' },
-          { who: '北京的关系', said: '定了，就这几天' },
+        // 问到的是部里眼下真实的倾向（还没定案时，之后还会变）
+        const v = verdictOf(st(g).world.score ?? mofScore(g));
+        if (v === 'full') {
+          rumor(g, `lobby-${d}`, '贴息定了，23 日前后公布', '北京的关系压低声音：“方案已经报上去了，兑付价比 132 高得多。就这几天。”', '北京的关系', 0.9, [
+            { who: '财政部', said: '贴息方案已上报' },
+            { who: '北京的关系', said: '定了，就这几天' },
+          ]);
+          return R(true, '北京来了准信', ['支付 500 万元', '监管热度 +5', '获得情报：贴息定了'], { who: '北京的关系', text: '就这几天。别说是我讲的。' });
+        }
+        rumor(g, `lobby-${d}`, v === 'partial' ? '贴息可能打折扣' : '部里倾向不贴息', v === 'partial' ? '北京的关系说：“部里有人嫌市场太热，方案可能要打个折扣，兑付价未必有大家想的那么高。”' : '北京的关系说：“风向变了，部里现在多数意见是不另行贴息。”', '北京的关系', 0.8, [
+          { who: '财政部', said: v === 'partial' ? '方案有分歧' : '多数意见不贴' },
+          { who: '北京的关系', said: v === 'partial' ? '可能打折' : '风向变了' },
         ]);
-        return R(true, '北京来了准信', ['支付 500 万元', '监管热度 +5', '获得情报：贴息定了'], { who: '北京的关系', text: '就这几天。别说是我讲的。' });
+        return R(true, v === 'partial' ? '部里有分歧' : '风向变了', ['支付 500 万元', '监管热度 +5', `获得情报：${v === 'partial' ? '贴息可能打折' : '可能不贴息'}`], { who: '北京的关系', text: '还没最后定，但大概是这个意思。' });
       }
       rumor(g, `lobby-${d}`, '贴息还在讨论，没定', '北京的关系说：“部里还在吵，什么时候定说不好。”', '北京的关系', 0.7, [{ who: '北京的关系', said: '还在讨论' }]);
       return R(true, '口风还不明朗', ['支付 500 万元', '监管热度 +5'], { who: '北京的关系', text: '还在吵，过两天再问。' });
+    }
+    case 'mof-against': {
+      s.used.add(`mofno-${d}`);
+      g.energy--;
+      p.cash -= 20_000_000;
+      g.addHeat(6, '托关系影响政策');
+      const lu = g.npc('lu')!;
+      const eff = lobbyMof(g, '申江托人递材料', -0.12 * (lu.relation >= 0 ? 1 : 0.6));
+      return R(true, '材料递上去了', ['支付 2000 万元', '监管热度 +6', `财政部的倾向 ${eff.toFixed(2)}`], { who: '北京的关系', text: '东西我放到处长桌上了。部里本来就有人嫌这个品种太热。' });
+    }
+    case 'mof-for': {
+      s.used.add(`mofyes-${d}`);
+      g.energy--;
+      p.cash -= 20_000_000;
+      g.addHeat(5, '游说财政部');
+      const eff = lobbyMof(g, '中财加紧游说', s.evidence.has('wei') ? -0.04 : 0.1);
+      return R(eff > 0, eff > 0 ? '部里的人松了口' : '部里在避嫌，越跑越坏事', ['支付 2000 万元', '监管热度 +5', `财政部的倾向 ${eff >= 0 ? '+' : ''}${eff.toFixed(2)}`], {
+        who: g.npc('lu')!.name,
+        text: eff > 0 ? '你们的意见我们会考虑。国债的信誉，部里比谁都在乎。' : '这个时候你们还往部里跑？让人怎么看？',
+      });
     }
     case 'split':
       p.limit = 4_000_000;
@@ -895,44 +964,36 @@ export function traderPlay(g: Game, id: string, target?: string): CardResult {
       ]);
       if (g.phase === 'trading') addCrowdFlow(g, 'sell', 600_000, 20);
       else g.flags.vetoNext = true;
+      sway(g, -25);
       g.market.sentiment = Math.max(-1, g.market.sentiment - 0.5);
       return R(true, '谣言放出去了', ['散户将在 20 分钟内抛出约 60 万口', '监管热度 +15', '声望 −5'], { who: '钱有福', text: '老板放心，半个钟头整个大户室都晓得。' });
     }
     case 'interview':
       s.used.add(`interview-${d}`);
       g.energy--;
-      g.flags.sentNext = ((g.flags.sentNext as number) || 0) - 0.35;
+      g.spin(-0.9, '申江证券总经理：327 兑付价就是 132 元', '申江证券');
       g.flags.interviewed = true;
+      sway(g, -15);
       g.relate('su', 5);
-      return R(true, '采访见报：“兑付价就是 132 元”', ['明早散户情绪偏空', '苏晓 关系 +5'], { who: '苏晓', text: '你确定要我原话照登？好。' });
+      return R(true, '采访见报：“兑付价就是 132 元”', ['明早的头条', '散户情绪偏空；跟着报纸走的人会更看空，逆向的人反而看多', '苏晓 关系 +5'], { who: '苏晓', text: '你确定要我原话照登？好。' });
     case 'mediate-req': {
       g.energy--;
-      const wei = g.npc('wei')!;
-      const prob = Math.min(0.85, 0.25 + 0.15 * (d - 2) + wei.relation / 200);
-      if (!g.rngSocial.chance(prob)) {
-        g.relate('wei', -2);
-        return R(false, '中财不肯谈', [`成功率约 ${Math.round(prob * 100)}%`], { who: wei.name, text: '现在谈这个？早了点。要讲政策，看大局。' });
-      }
-      const price = close + 60;
-      const q = agreedClose(g, p.id, LONG, 800_000, price);
-      s.used.add('mediated');
-      g.flags.mediated = true;
-      return R(true, `协议平仓 ${wan(q)}，价格 ${p2(price)} 元`, [`空单降到 ${wan(-p.pos)}`], { who: wei.name, text: '看在交易所的面子上。' });
+      s.used.add(`medtry-${d}`);
+      openMediation(g);
+      return R(true, '坐上了谈判桌', ['去“谈判”页出价：魏国梁的要价看他心里的账'], { who: g.npc('wei')!.name, text: '交易所的面子要给。价钱嘛，慢慢谈。' });
     }
     case 'tip-gao':
-      s.used.add('tip-gao');
       g.energy--;
-      p.cash -= 30_000_000;
-      g.addHeat(6, '利益输送');
-      g.flags.gaoBribed = true;
-      g.relate('gao', 15);
-      return R(true, '话递到了', ['支付 3000 万元', '监管热度 +6', '高振宇 关系 +15'], { who: '高振宇', text: '兄弟够意思。到时候看我的。' });
+      s.used.add(`gaotry-${d}`);
+      openGaoFee(g);
+      return R(true, '约好了茶室', ['去“谈判”页出价：高振宇要多少，看违约金、贴息的把握和交情'], { who: '高振宇', text: '魏总说个数吧。' });
     case 'press':
       s.used.add(`press-${d}`);
       g.energy--;
       g.reputation -= 1;
-      g.flags.sentNext = ((g.flags.sentNext as number) || 0) + 0.4;
-      return R(true, '明早见报：“政策面将有变化”', ['明早散户情绪偏多', '声望 −1']);
+      g.spin(1, '接近多方人士：政策面将有变化，327 贴息呼之欲出', '中财信托');
+      sway(g, 15);
+      return R(true, '明早见报：“政策面将有变化”', ['明早的头条', '散户情绪偏多；跟着报纸走的人（辽北的高振宇）更看多，逆向的沈立行反而更硬', '声望 −1']);
     case 'wash':
       s.used.add(`wash-${d}`);
       g.addHeat(15, '对倒拉抬');

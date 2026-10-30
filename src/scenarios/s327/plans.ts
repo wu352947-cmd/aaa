@@ -1,4 +1,6 @@
 import type { CardResult, Clock, Directive, DocSheet, Game } from '../../engine/game';
+import { mofScore, verdictOf, VERDICTS } from './world';
+import { bribeWeight } from './deals';
 import {
   addDeter,
   addOrder,
@@ -19,7 +21,7 @@ import {
   shenPlan,
   st,
   usage,
-  wan,
+  wan, sd
 } from './common';
 import { BATTLE } from './data';
 
@@ -33,8 +35,8 @@ function gaoTemptation(g: Game): number {
   const gao = g.npc('gao');
   const rel = gao?.relation ?? 30;
   const lock = g.alliances.find((a) => a.id === 'lock' && !a.brokenBy);
-  const d = Math.max(3, g.dayIndex);
-  const belief = 0.55 + 0.05 * d + (flag(g, 'gaoBribed') ? 0.3 : 0);
+  const d = Math.max(3, sd(g));
+  const belief = 0.55 + 0.05 * d + bribeWeight(g) + 0.15 * (gao?.view ?? 0);
   const loyalty = (Math.max(0, rel) / 100) * 0.5 + ((lock?.penalty ?? 0) / 3e8) * 0.35 + (flag(g, 'gaoShared') ? 0.1 : 0);
   return belief - loyalty;
 }
@@ -49,7 +51,7 @@ const PLAN_NOW: Record<ReturnType<typeof shenPlan>, string> = {
 
 export function s327Clocks(g: Game): Clock[] {
   const out: Clock[] = [];
-  const d = g.dayIndex;
+  const d = sd(g);
   const f = g.factionId;
   const battleOver = d > BATTLE || (d === BATTLE && g.phase !== 'trading');
   const afterNews = d > BATTLE || (d === BATTLE && (g.phase !== 'trading' || g.market.t >= newsMinute(g)));
@@ -122,7 +124,7 @@ export function s327Clocks(g: Game): Clock[] {
       filled: fired ? 5 : clamp(d, 0, 5),
       known: knows(g, 'wei'),
       then: '消息一出，席位 102 用到持仓限额，把价格托在 148 元以上，尾盘护着往 151 元走。',
-      now: flag(g, 'zcBust') ? '它被强平了。' : flag(g, 'zcCurbed') ? '被点名之后，它只敢用一半弹药。' : flag(g, 'mofPublic') ? '公告提前了：它失去先手，9:35 才跟着入场。' : '它比所有人先知道消息。',
+      now: flag(g, 'zcBust') ? '它被强平了。' : st(g).world.verdict && st(g).world.verdict !== 'full' ? '部里的方案对它不利：它不会再托盘，而是想办法把多单卖掉。' : flag(g, 'zcCurbed') ? '被点名之后，它只敢用一半弹药。' : flag(g, 'mofPublic') ? '公告提前了：它失去先手，9:35 才跟着入场。' : '它比所有人先知道消息。',
       counter: isOfficial(g)
         ? '吹风会点名中财，它的托盘力度减半；请财政部提前公告，就没有人能抢跑。'
         : f === 'short'
@@ -144,9 +146,15 @@ export function s327Clocks(g: Game): Clock[] {
       segs: 5,
       filled: fired ? 5 : clamp(d, 0, 5),
       known,
-      then: '方案公布：327 按远高于 132 元的价格兑付。',
-      now: flag(g, 'mofPublic') ? '已经答应 23 日开盘前公告：所有人同时知道。' : '23 日上午消息会先从多方那里流出来。',
-      counter: isOfficial(g) ? '请财政部提前公告，消息就没人能抢跑。' : f === 'long' ? '你比市场早知道——但不能让人知道。' : '托关系去北京打听，越临近 23 日，问到的越准。',
+      then: '方案公布：327 按 148.50 元兑付，远高于 132 元。这一局部里会看局面再定：22 日晚定案。',
+      now: `${known ? `部里眼下的倾向：${VERDICTS[st(g).world.verdict ?? verdictOf(mofScore(g))].name}${st(g).world.verdict ? '（已定案）' : '（22 日晚定案）'}。` : ''}${flag(g, 'mofPublic') ? '已经答应 23 日开盘前公告：所有人同时知道。' : '23 日上午消息会先从多方那里流出来。'}`,
+      counter: isOfficial(g)
+        ? '请财政部提前公告，消息就没人能抢跑；向部里反映市场过热，贴息可能打折。'
+        : f === 'long'
+          ? '你比市场早知道——但不能让人知道。加紧游说能稳住部里；被查出关联就坏事了。'
+          : f === 'short'
+            ? '托人给部里递材料，能把倾向往“不贴”那边挪；价格炒得越高，部里也越不想替投机者兑现。'
+            : '托关系去北京打听，越临近 23 日，问到的越准。',
       tone: f === 'short' ? 'threat' : f === 'long' ? 'friend' : 'neutral',
       state: fired ? 'fired' : 'running',
     });
@@ -264,9 +272,9 @@ export function directivesMorning(g: Game): void {
   const s = st(g);
   for (const dir of s.dirs) {
     const spec = SPECS.find((x) => x.id === dir.id)!;
-    if (dir.status === 'open' && spec.at === 'morning' && dir.day < g.dayIndex) settle(g, dir, spec.check(g));
+    if (dir.status === 'open' && spec.at === 'morning' && dir.day < sd(g)) settle(g, dir, spec.check(g));
   }
-  for (const spec of SPECS.filter((x) => x.day === g.dayIndex)) {
+  for (const spec of SPECS.filter((x) => x.day === sd(g))) {
     if (s.dirs.some((x) => x.id === spec.id)) continue;
     s.dirs.push({ id: spec.id, day: spec.day, from: spec.from, text: spec.text, stakes: spec.stakes, status: 'open' });
     g.push({ kind: 'intel', text: `${FROM_NAME[spec.from]}：${spec.text}` });
@@ -277,7 +285,7 @@ export function directivesAt(g: Game, at: 'close' | 'night'): void {
   if (!isOfficial(g)) return;
   for (const dir of st(g).dirs) {
     const spec = SPECS.find((x) => x.id === dir.id)!;
-    if (dir.status === 'open' && spec.at === at && dir.day === g.dayIndex) settle(g, dir, spec.check(g));
+    if (dir.status === 'open' && spec.at === at && dir.day === sd(g)) settle(g, dir, spec.check(g));
   }
 }
 
@@ -304,7 +312,7 @@ function settle(g: Game, dir: Directive, ok: boolean, why?: string): void {
 
 export function s327Directives(g: Game): Directive[] {
   if (!isOfficial(g)) return [];
-  const d = g.dayIndex;
+  const d = sd(g);
   // 今天下的、还没见分晓的，以及昨天刚见分晓的
   return st(g).dirs.filter((x) => x.day === d || x.status === 'open' || x.day === d - 1);
 }
@@ -326,9 +334,9 @@ const MARKS = [
 
 /** 收盘后生成当晚的日报：每家会员自己申报，买卖两列来自结算部 */
 export function makeAudit(g: Game): void {
-  if (!isOfficial(g) || g.dayIndex >= BATTLE) return;
+  if (!isOfficial(g) || sd(g) >= BATTLE) return;
   const s = st(g);
-  const d = g.dayIndex;
+  const d = sd(g);
   const ex = g.market.ex;
   const w = (q: number) => Math.round(q / 1000) / 10;
   const sgn = (x: number) => (x > 0 ? '+' : x < 0 ? '−' : '') + Math.abs(x).toFixed(1);
@@ -381,13 +389,13 @@ export function makeAudit(g: Game): void {
 }
 
 export function s327Docs(g: Game): DocSheet[] {
-  const au = st(g).audits.get(g.dayIndex);
+  const au = st(g).audits.get(sd(g));
   return au && g.phase === 'night' ? [au.sheet] : [];
 }
 
 export function fileAudit(g: Game, id: string, marks: Record<string, string>): CardResult {
   const s = st(g);
-  const d = g.dayIndex;
+  const d = sd(g);
   const au = s.audits.get(d);
   if (!au || au.sheet.id !== id || au.sheet.filed) return { ok: false, title: '没有可签的日报', effects: [] };
   const fx: string[] = [];

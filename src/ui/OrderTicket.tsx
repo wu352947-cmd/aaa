@@ -13,8 +13,11 @@ export function OrderTicket({
   side: side0,
   limitPrice,
   onClose,
+  layer = 5,
 }: {
   game: Game;
+  /** 新手档解锁到第几层：第 3 层前只有市价单，第 5 层前没有期权与现券 */
+  layer?: number;
   side: Side;
   limitPrice: number | null;
   onClose: () => void;
@@ -31,8 +34,8 @@ export function OrderTicket({
   const [show, setShow] = useState<number>(0);
   const [ttl, setTtl] = useState<number>(0);
   const [washAt, setWashAt] = useState<'ask' | 'bid'>('ask');
-  const hasOptions = !!game.scenario.options?.(game);
-  const hasSpot = game.scenario.id === 's327' && !game.faction.observer;
+  const hasOptions = layer >= 5 && !!game.scenario.options?.(game);
+  const hasSpot = layer >= 5 && game.scenario.id === 's327' && !game.faction.observer;
   const [tab, setTab] = useState<'stock' | 'options' | 'spot'>('stock');
 
   useEffect(() => {
@@ -132,6 +135,7 @@ export function OrderTicket({
             </button>
           </div>
         </div>
+        {layer >= 3 && (
         <div className="field">
           <label>委托方式</label>
           <div className="seg">
@@ -149,6 +153,7 @@ export function OrderTicket({
             </button>
           </div>
         </div>
+        )}
         {wash && (
           <div className="field">
             <label>对敲的价位</label>

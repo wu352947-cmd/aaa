@@ -65,6 +65,8 @@ export interface NpcDef {
 
 export interface Npc extends NpcDef {
   memory: string[];
+  /** 读报读出来的看法：+1 看多、−1 看空。按 style 解读同一张报纸（见 STYLE_READ） */
+  view?: number;
   /** 今晚已经交谈过的次数 */
   unreachable?: boolean;
 }
@@ -78,12 +80,89 @@ export interface Intel {
   source: string;
   /** 隐藏可信度 0–1，玩家看不到 */
   credibility: number;
-  kind: 'news' | 'rumor' | 'evidence' | 'clue' | 'mentor' | 'system';
+  kind: 'news' | 'rumor' | 'evidence' | 'clue' | 'mentor' | 'system' | 'victim';
   /** 可用于“告发”的证据所指向的 NPC */
   against?: string;
   /** 消息树：这条消息从源头到你经过的每一环；altered 表示在这一环被改动或编造 */
   chain?: { who: string; said: string; altered?: boolean }[];
   read?: boolean;
+}
+
+/**
+ * 开局条件。生涯模式里，上一章的钱、声望和监管档案带进下一章。
+ * 和种子一起进存档与重放：同样的 opts + 同样的种子 + 同样的操作 = 同一局。
+ */
+export interface GameOpts {
+  /** 玩家的起始现金（剧本货币）；只有剧本支持的座位生效 */
+  cash?: number;
+  reputation?: number;
+  /** 监管档案：开局热度，也是热度降不下去的底 */
+  heat?: number;
+  /** 这一局是生涯里的一章 */
+  career?: boolean;
+  /** 从第几天开始（跳过前面的章节）；剧本在 setup 里据此调整开局 */
+  startDay?: number;
+}
+
+export interface Chapter {
+  id: string;
+  title: string;
+  sub: string;
+  /** 这一章最后一天在 days 里的下标 */
+  until: number;
+}
+
+/** 一章开始时的账面：章末小结拿它比 */
+export interface ChapterMark {
+  eq: number;
+  heat: number;
+  rep: number;
+  lines: number;
+  letters: number;
+}
+
+/** 一期报纸。tone：这期报纸整体有多看多（+1）或看空（−1）；spun：塞稿的人 */
+export interface Paper {
+  day: number;
+  headline: string;
+  sub: string;
+  facts: string[];
+  tone?: number;
+  spun?: string[];
+}
+
+/**
+ * 不同风格的人怎么读同一张报纸：1 跟着报纸走，−1 反着报纸走，0 不看报纸。
+ * 剧本里没列出的风格一律当作不看报纸。
+ */
+export const STYLE_READ: Record<string, number> = {
+  消息驱动: 1,
+  机会主义: 1,
+  动员: 1,
+  消息贩子: 1,
+  增长: 0.5,
+  经验: 0.3,
+  逆向: -1,
+  基本面做空: -1,
+};
+
+/** 一次黑色操作：黑牌、违规成交、被监察抓到的对倒与虚假申报、剧本里危险的抉择 */
+/** 引擎自己认得的轻一档的黑色操作；剧本自定的原因都算重的 */
+export const MINOR_DEEDS = ['overdraw', 'wash-trade', 'spoofing', 'marking-close'];
+
+export interface DarkDeed {
+  /** 'card' | 'overdraw' | 'wash-trade' | 'spoofing' | 'marking-close' | 剧本自定的 id */
+  cause: string;
+  /** 给玩家看的名字，例如牌名 */
+  label: string;
+  day: number;
+}
+
+/** 受害者视角：一封信、一条爆仓消息 */
+export interface Victim {
+  from: string;
+  title: string;
+  body: string;
 }
 
 export interface Alliance {
@@ -276,7 +355,83 @@ export interface Ending {
   ruled: string;
 }
 
+/**
+ * 夜里的推理：对着证据（比如各席位逐日的净买卖）回答几个问题。
+ * 每试一次花 1 点精力，只告诉你对了几个，不告诉你哪几个对了。
+ */
+export interface Puzzle {
+  id: string;
+  title: string;
+  intro: string;
+  /** 证据表：表头 + 每行 */
+  evidence: { head: string[]; rows: string[][]; note?: string };
+  questions: { id: string; label: string; options: { id: string; label: string }[] }[];
+  /** 解开之后能拿到什么 */
+  reward: string;
+  solved: boolean;
+}
+
+export interface PuzzleResult {
+  right: number;
+  total: number;
+  solved: boolean;
+  text: string[];
+}
+
+/** 谈判里的一个条款：数量、价格、好处费……玩家在 min 到 max 之间出价 */
+export interface NegTerm {
+  id: string;
+  label: string;
+  min: number;
+  max: number;
+  step: number;
+  /** 显示：元（分为单位的价格差）、口/股、亿元…… */
+  unit: 'fen' | 'lots' | 'yuan';
+}
+
+/**
+ * 多轮谈判：你出价，对方按自己的底价接受、还价或者走人。
+ * 底价由剧本按这一局的局面算（对方的仓位、判断、和你的关系），每一轮对方的耐心都在减少。
+ */
+export interface Negotiation {
+  id: string;
+  npc: string;
+  title: string;
+  intro: string;
+  terms: NegTerm[];
+  rounds: number;
+  maxRounds: number;
+  history: { who: 'you' | 'them'; offer?: Record<string, number>; say: string }[];
+  status: 'open' | 'deal' | 'walked';
+  deal?: Record<string, number>;
+  /** 对方最近一次还的价：界面拿它当默认值 */
+  ask?: Record<string, number>;
+}
+
+export interface NegReply {
+  accept: boolean;
+  walk?: boolean;
+  counter?: Record<string, number>;
+  say: string;
+}
+
 export interface Scenario {
+  /** 对方怎么回你的出价 */
+  negotiate?(g: Game, n: Negotiation, offer: Record<string, number>): NegReply;
+  /** 成交：剧本兑现条款，返回效果说明 */
+  closeDeal?(g: Game, n: Negotiation, terms: Record<string, number>): string[];
+  /** 夜里可以做的推理（没有就是 null） */
+  puzzle?(g: Game): Puzzle | null;
+  /** 交卷：返回对了几个；解开时由剧本发放奖励 */
+  solvePuzzle?(g: Game, id: string, answers: Record<string, string>): PuzzleResult;
+  /** 分章：每章到哪一天（真实下标）为止。章末那一晚有一张小结 */
+  chapters?: Chapter[];
+  /** 股东名册：控制权之争里谁手里有多少票（持股比例 0–1） */
+  holders?(g: Game): { id: string; name: string; pct: number; note?: string; you?: boolean }[];
+  /** 今晚过后是第几天（默认明天）；只能往后跳 */
+  nextDay?(g: Game): number | undefined;
+  /** 受害者视角：每次黑色操作之后，那一头是谁、丢了什么（设计文档 6.4） */
+  victim?(g: Game, deed: DarkDeed): Victim | null;
   id: string;
   title: string;
   subtitle: string;
@@ -386,8 +541,10 @@ export interface CreditLine {
 /** 剧本提供的配资条件 */
 export interface CreditOffer {
   lender: string;
-  /** 最多借自有资金的几倍 */
+  /** 最多借自有资金的几倍：自有资金按当天开盘前的净值算，盘中赚的不算 */
   multiple: number;
+  /** 借款总额的上限（出借方自己的额度） */
+  cap?: number;
   line: number;
   rate: number;
   color: CardColor;
@@ -408,6 +565,8 @@ export type PlayerAction =
   | { type: 'credit'; op: 'take' | 'repay'; amount: number }
   | { type: 'option'; side: 'buy' | 'sell'; kind: OptKind; strike: Fen; expiry: string; qty: number }
   | { type: 'doc'; id: string; marks: Record<string, string> }
+  | { type: 'puzzle'; id: string; answers: Record<string, string> }
+  | { type: 'negotiate'; id: string; offer?: Record<string, number>; walk?: boolean }
   | { type: 'end-night' };
 
 export interface LoggedAction {
@@ -453,6 +612,10 @@ export class Game {
   private planSeq = 1;
   pending: OrderReq[] = [];
   log: LoggedAction[] = [];
+  /** 难度只改界面与节奏，不进 stateHash：同一种子在任何难度下都是同一个市场 */
+  difficulty = 'standard';
+  /** 新手档撤回过几天 */
+  undos = 0;
   events: GameEvent[] = [];
   decision: Decision | null = null;
   recaps: DayRecap[] = [];
@@ -467,11 +630,21 @@ export class Game {
   /** 收盘时的权益曲线（元） */
   equityCurve: number[] = [];
   marginCall = false;
+  /** 进行中和谈完的谈判 */
+  negotiations: Negotiation[] = [];
+  /** 每个推理题交过的卷（界面显示“对了几个”） */
+  puzzleTries: Record<string, PuzzleResult[]> = {};
   bankrupt = false;
   tape: { day: number; time: string; seat: string; side: Side; qty: number; price: Fen }[] = [];
   /** 每晚的报纸头条（引擎给事实，台词层负责措辞） */
-  papers: { day: number; headline: string; sub: string; facts: string[] }[] = [];
+  papers: Paper[] = [];
+  /** 今晚有人往明早的报纸里塞的稿子 */
+  private spins: { tone: number; headline: string; by: string }[] = [];
   /** 打过的行动卡与结算结果 */
+  /** 所有黑色操作，按发生顺序 */
+  darkDeeds: DarkDeed[] = [];
+  /** 已经回过音的黑色操作 */
+  private lettered = new Set<string>();
   cardLog: { day: number; time: string; id: string; name: string; target?: string; result: CardResult }[] = [];
   /** 手牌：每晚选来的一次性卡 */
   hand: string[] = [];
@@ -483,6 +656,10 @@ export class Game {
   private readonly rngDraft: Rng;
   /** 场外配资（没有借就是 null） */
   credit: CreditLine | null = null;
+  /** 每章开始时的账面（章 id → 账面） */
+  chapterMarks: Record<string, ChapterMark> = {};
+  /** 今天开盘前的净值：场外配资按它算能借多少 */
+  creditBase = 0;
   /** 买入的期权 */
   opts: OptPosition[] = [];
   /** 做市商为玩家的期权持有的对冲股数 */
@@ -493,6 +670,7 @@ export class Game {
     readonly seed: string,
     readonly factionId: FactionId,
     readonly principleId: string,
+    readonly setupOpts: GameOpts = {},
   ) {
     this.rng = new Rng(`${scenario.id}:${seed}`);
     this.rngSocial = this.rng.fork('social');
@@ -502,7 +680,11 @@ export class Game {
     setUnits(scenario.units ?? { qty: '口', cur: '元' });
     this.market = new Market({ ...scenario.deck }, scenario.params, `${scenario.id}:${seed}:market`, scenario.startPrice, scenario.session ?? SSE_1995);
     for (const d of scenario.npcs) if (d.factionId !== factionId) this.npcs.set(d.id, { ...d, memory: [] });
+    this.dayIndex = Math.max(0, Math.min(scenario.days.length - 1, setupOpts.startDay ?? 0));
     scenario.setup(this);
+    if (setupOpts.reputation != null) this.reputation = setupOpts.reputation;
+    // 旧账带进来：热度只降不清零
+    if (setupOpts.heat) this.heat = this.heatPeak = setupOpts.heat;
     this.startDay();
   }
 
@@ -533,6 +715,10 @@ export class Game {
   /** 余波：决战之后不再开盘的日子，只有夜晚 */
   get isAftermath(): boolean {
     return this.day.kind === 'aftermath';
+  }
+  /** 停牌：剧本中途不开盘的日子，只有夜晚（谈判、董事会、股东大会） */
+  get isHalted(): boolean {
+    return this.day.kind === 'halt';
   }
 
   /** 当前能打出的行动卡（含被挡住的，供界面显示原因） */
@@ -655,6 +841,40 @@ export class Game {
       case 'plan-remove':
         this.plans = this.plans.filter((p) => p.id !== action.id);
         return null;
+      case 'negotiate': {
+        const n = this.negotiations.find((x) => x.id === action.id && x.status === 'open');
+        if (!n || !this.scenario.negotiate) return null;
+        if (action.walk || !action.offer) {
+          n.status = 'walked';
+          n.history.push({ who: 'you', say: '你起身告辞。' });
+          return null;
+        }
+        const offer: Record<string, number> = {};
+        for (const t of n.terms) offer[t.id] = Math.max(t.min, Math.min(t.max, Math.round((action.offer[t.id] ?? t.min) / t.step) * t.step));
+        n.rounds++;
+        n.history.push({ who: 'you', offer, say: '' });
+        const r = this.scenario.negotiate(this, n, offer);
+        n.history.push({ who: 'them', offer: r.counter, say: r.say });
+        if (r.accept) {
+          n.status = 'deal';
+          n.deal = offer;
+          const fx = this.scenario.closeDeal?.(this, n, offer) ?? [];
+          this.push({ kind: 'intel', text: `谈成了：${n.title}${fx.length ? `——${fx.join('；')}` : ''}` });
+        } else if (r.walk || n.rounds >= n.maxRounds) {
+          n.status = 'walked';
+          this.push({ kind: 'intel', text: `没谈成：${n.title}` });
+        } else n.ask = r.counter;
+        return null;
+      }
+      case 'puzzle': {
+        const pz = this.scenario.puzzle?.(this);
+        if (this.phase !== 'night' || this.energy <= 0 || !pz || pz.id !== action.id || pz.solved || !this.scenario.solvePuzzle) return null;
+        this.energy--;
+        const r = this.scenario.solvePuzzle(this, action.id, action.answers);
+        this.puzzleTries[action.id] = [...(this.puzzleTries[action.id] ?? []), r];
+        this.push({ kind: 'intel', text: r.solved ? `推理：${pz.title}——全对` : `推理：${pz.title}——对了 ${r.right} / ${r.total}` });
+        return null;
+      }
       case 'social': {
         if (this.energy <= 0) return null;
         this.energy--;
@@ -675,6 +895,7 @@ export class Game {
         const result = this.scenario.playCard(this, action.id, action.target);
         this.hand = this.hand.filter((x) => x !== action.id);
         this.logCard(card, result, action.target);
+        if (card.color === 'black' && result.ok) this.darkDeed('card', card.name);
         this.markOptions();
         return null;
       }
@@ -709,8 +930,9 @@ export class Game {
         if (!offer || this.ending) return null;
         const p = this.player;
         if (action.op === 'take') {
-          const own = this.netEquity();
-          const room = Math.max(0, own * offer.multiple - (this.credit?.loan ?? 0));
+          // 出借方按开盘前的账看你的本钱：盘中的浮盈不算，不然越赚越能借、越借越能赚
+          const own = Math.min(this.netEquity(), this.creditBase);
+          const room = Math.max(0, Math.min(own * offer.multiple, offer.cap ?? Infinity) - (this.credit?.loan ?? 0));
           const amt = Math.min(Math.max(0, action.amount), room);
           if (amt <= 0) return null;
           p.cash += amt;
@@ -731,6 +953,11 @@ export class Game {
         this.tradeOption(action);
         return null;
       case 'end-night':
+        // 没谈完的，天一亮就不了了之
+        for (const n of this.negotiations) if (n.status === 'open') {
+          n.status = 'walked';
+          n.history.push({ who: 'them', say: '天亮了，这事就搁下了。' });
+        }
         this.endNight();
         return null;
     }
@@ -833,6 +1060,7 @@ export class Game {
       if (h.owner !== this.player.id) continue;
       this.push({ kind: 'rule', rule: h.blocked ? h.rule : 'overdraw', blocked: h.blocked, text: (h.blocked ? '委托被挡下：' : '违规成交：') + h.detail });
       if (!h.blocked) {
+        this.darkDeed('overdraw', '超额透支下单');
         if (h.rule === 'margin') this.addHeat(6, '超额透支下单');
         if (h.rule === 'position-limit') this.addHeat(5, '超出持仓限额');
         if (this.principleId === 'no-violation' && !this.flags['line-violation-' + this.dayIndex]) {
@@ -847,7 +1075,8 @@ export class Game {
 
   private startDay(): void {
     this.energy = this.maxEnergy;
-    if (this.isAftermath) {
+    this.markChapter();
+    if (this.isAftermath || this.isHalted) {
       // 余波：市场不再开盘，直接进入夜晚
       this.phase = 'night';
       this.scenario.onDayStart(this);
@@ -859,6 +1088,9 @@ export class Game {
     this.phase = 'trading';
     this.market.beginDay(this.day, this.dayIndex);
     this.scenario.onDayStart(this);
+    this.readPaper();
+    // 出借方按开盘时的账看你的本钱
+    this.creditBase = this.netEquity();
     this.cureOrLiquidate();
     this.push({ kind: 'phase', text: `${this.day.date} ${this.day.label} 开盘` });
   }
@@ -1034,6 +1266,8 @@ export class Game {
       parts: [...groups.entries()].map(([who, v]) => ({ who, ...v })).sort((a, b) => Math.abs(b.move) - Math.abs(a.move)),
       notes: [],
     });
+    // 今天的黑色操作，对面是谁：最后一天也要写，结局页会列出来
+    this.writeLetters();
 
     const ex = m.ex;
     // 借来的钱按天计息：券商的融资、场外的配资
@@ -1069,6 +1303,7 @@ export class Game {
     this.energy = this.maxEnergy;
     this.heat = Math.max(this.heatPeak * 0.3, this.heat - 1);
     this.scenario.onNight(this);
+    this.finishPaper();
     this.dealOffer();
   }
 
@@ -1102,11 +1337,118 @@ export class Game {
       this.addHeat(f.heat, f.why);
       this.flags[`surveil-${f.rule}`] = ((this.flags[`surveil-${f.rule}`] as number) || 0) + 1;
       this.push({ kind: 'rule', rule: f.rule, blocked: false, text: f.text });
+      this.darkDeed(f.rule, f.why);
       if (this.principleId === 'no-violation' && !this.flags[`line-${f.rule}-${this.dayIndex}`]) {
         this.flags[`line-${f.rule}-${this.dayIndex}`] = true;
         this.crossLine(f.why);
       }
     }
+  }
+
+  /**
+   * 记下一次黑色操作。盘中的攒到收盘一起写信；夜里打出的黑牌当晚就有回音。
+   * 同一天同一种原因只记一次。
+   */
+  darkDeed(cause: string, label: string): void {
+    if (this.faction.observer && cause === 'overdraw') return;
+    if (this.darkDeeds.some((d) => d.day === this.dayIndex && d.cause === cause && d.label === label)) return;
+    this.darkDeeds.push({ cause, label, day: this.dayIndex });
+    if (this.phase === 'night') this.writeLetters();
+  }
+
+  /**
+   * 把还没回音的黑色操作写成受害者的信。同一种操作一局只回音一次（不同的黑牌各算一种），
+   * 每天最多两封；剧本找不到新的人（每个人一局只出现一次）就不写。
+   */
+  private writeLetters(): void {
+    const key = (d: DarkDeed) => (d.cause === 'card' ? `card:${d.label}` : d.cause);
+    let sent = this.intel.filter((i) => i.kind === 'victim' && i.day === this.dayIndex).length;
+    // 重的先写：剧本里的危险抉择（砸盘、内幕加仓……）在前，黑牌其次，普通的违规成交最后
+    const weight = (d: DarkDeed) => (MINOR_DEEDS.includes(d.cause) ? 2 : d.cause === 'card' ? 1 : 0);
+    for (const d of [...this.darkDeeds].sort((a, b) => weight(a) - weight(b))) {
+      if (sent >= 2) break;
+      if (d.day !== this.dayIndex || this.lettered.has(key(d))) continue;
+      this.lettered.add(key(d));
+      const v = this.scenario.victim?.(this, d);
+      if (!v) continue;
+      this.addIntel({ id: `victim-${this.dayIndex}-${sent++}`, title: v.title, body: v.body, source: v.from, credibility: 1, kind: 'victim' });
+    }
+  }
+
+  /**
+   * 往明早的报纸里塞一篇稿子：明早它就是头条，散户和各方都会读到。
+   * tone 是这篇稿子有多看多（+）或看空（−）。
+   */
+  spin(tone: number, headline: string, by: string): void {
+    // 夜里塞稿：今晚这期还没印完，直接改；盘中塞稿：等收盘付印
+    const paper = this.papers[this.papers.length - 1];
+    if (this.phase === 'night' && paper?.day === this.dayIndex) this.plant(paper, [{ tone, headline, by }]);
+    else this.spins.push({ tone, headline, by });
+  }
+
+  private plant(paper: Paper, spins: { tone: number; headline: string; by: string }[]): void {
+    paper.tone = Math.max(-1, Math.min(1, (paper.tone ?? 0) + spins.reduce((a, x) => a + x.tone, 0)));
+    const top = [...spins].sort((a, b) => Math.abs(b.tone) - Math.abs(a.tone))[0];
+    if (!paper.spun) paper.sub = paper.headline;
+    paper.headline = top.headline;
+    paper.spun = [...(paper.spun ?? []), ...spins.map((x) => x.by)];
+  }
+
+  /** 今晚的报纸付印：算出整体基调；有人塞了稿，头条就换成那篇稿子 */
+  private finishPaper(): void {
+    const paper = this.papers[this.papers.length - 1];
+    if (!paper || paper.day !== this.dayIndex) return;
+    const rc = this.recaps[this.recaps.length - 1];
+    const prev = this.recaps.length > 1 ? this.recaps[this.recaps.length - 2].close : rc ? rc.open : this.market.last;
+    // 当天的涨跌本身就是一种基调：涨了一个标准波动，报纸就偏多三成
+    const organic = rc ? 0.3 * Math.tanh((rc.close - prev) / Math.max(1, this.day.sigma * rc.close)) : 0;
+    paper.tone ??= organic;
+    if (this.spins.length) this.plant(paper, this.spins);
+    this.spins = [];
+  }
+
+  /**
+   * 早上开盘：散户和各方读昨晚的报纸。散户情绪跟着基调走；每个人按自己的风格解读，
+   * 看法攒在 npc.view 里，剧本里的对手用它决定怎么出手。
+   */
+  private readPaper(): void {
+    const paper = this.papers.find((x) => x.day === this.dayIndex - 1);
+    if (!paper?.tone || Math.abs(paper.tone) < 0.05) return;
+    const tone = paper.tone;
+    this.market.sentiment = Math.max(-1, Math.min(1, this.market.sentiment + 0.4 * tone));
+    const lines: string[] = [];
+    const word = tone > 0 ? '看多' : '看空';
+    for (const n of [...this.npcs.values()].sort((a, b) => a.id.localeCompare(b.id))) {
+      const k = STYLE_READ[n.style] ?? 0;
+      if (!k) continue;
+      n.view = Math.max(-1, Math.min(1, 0.5 * (n.view ?? 0) + k * tone));
+      if (Math.abs(k * tone) < 0.15) continue;
+      lines.push(
+        k > 0
+          ? `${n.name}（${n.style}）读完更笃定了：报纸${word}，他也${word}。`
+          : `${n.name}（${n.style}）冷笑：报纸越是一边倒地${word}，他越要站到另一边。`,
+      );
+    }
+    this.addIntel({
+      id: `paper-read-${this.dayIndex}`,
+      title: `早报「${paper.headline.slice(0, 16)}${paper.headline.length > 16 ? '…' : ''}」${word}`,
+      body: [`大户室里人手一份。散户情绪跟着${word}。`, ...lines].join('\n'),
+      source: '早报',
+      credibility: 1,
+      kind: 'news',
+    });
+  }
+
+  /** 今天属于哪一章 */
+  get chapter(): Chapter | undefined {
+    return this.scenario.chapters?.find((c) => this.dayIndex <= c.until);
+  }
+
+  /** 新的一章第一天：记下账面 */
+  private markChapter(): void {
+    const c = this.chapter;
+    if (!c || this.chapterMarks[c.id]) return;
+    this.chapterMarks[c.id] = { eq: this.netEquity(), heat: this.heat, rep: this.reputation, lines: this.linesCrossed, letters: this.intel.filter((i) => i.kind === 'victim').length };
   }
 
   private endNight(): void {
@@ -1118,7 +1460,8 @@ export class Game {
     }
     // 没选的牌不留到明天
     this.offer = null;
-    this.dayIndex++;
+    // 剧本可以跳过一些日子（例如公司停牌，后面几个交易日就不开盘了）
+    this.dayIndex = Math.max(this.dayIndex + 1, Math.min(this.scenario.days.length - 1, this.scenario.nextDay?.(this) ?? this.dayIndex + 1));
     this.startDay();
   }
 
@@ -1133,7 +1476,7 @@ export class Game {
     const ex = this.market.ex;
     const parts: (string | number)[] = [this.dayIndex, this.market.t, ex.last, ex.trades.length, this.heat.toFixed(4), this.reputation];
     for (const a of [...ex.accounts.values()].sort((x, y) => x.id.localeCompare(y.id))) parts.push(a.id, a.pos, a.cash.toFixed(2));
-    for (const n of [...this.npcs.values()].sort((x, y) => x.id.localeCompare(y.id))) parts.push(n.id, n.relation);
+    for (const n of [...this.npcs.values()].sort((x, y) => x.id.localeCompare(y.id))) parts.push(n.id, n.relation, Math.round((n.view ?? 0) * 1000));
     parts.push(...this.market.closePrices, ...this.hand, ...this.opts.map((o) => `${optKey(o)}x${o.qty}`), this.dealerHedge);
     let h = 2166136261 >>> 0;
     const s = parts.join('|');
@@ -1143,8 +1486,8 @@ export class Game {
 }
 
 /** 按动作日志重放一局：服务端校验排行榜、每日挑战与录像都靠它 */
-export function replay(scenario: Scenario, seed: string, faction: FactionId, principle: string, log: LoggedAction[], untilTick = Infinity): Game {
-  const g = new Game(scenario, seed, faction, principle);
+export function replay(scenario: Scenario, seed: string, faction: FactionId, principle: string, log: LoggedAction[], untilTick = Infinity, opts: GameOpts = {}): Game {
+  const g = new Game(scenario, seed, faction, principle, opts);
   let i = 0;
   const flush = () => {
     while (i < log.length && log[i].at <= g.globalTick) g.act(log[i++].action);

@@ -1,3 +1,4 @@
+import { victimGme } from './victims';
 import { fmtYi, newAccount } from '../../engine/exchange';
 import { addCrowdFlow, crowdFlowOrders } from '../../engine/flows';
 import type { CardDef, CardResult, DialogueIntent, Ending, ExchangeOffer, Game, Meter, Scenario, SocialOutcome } from '../../engine/game';
@@ -5,14 +6,13 @@ import { holdReturn, traderArchetype } from '../../engine/game';
 import type { Actor, Market } from '../../engine/market';
 import { isMm, mmBriefing, mmCards, mmClock, mmDayStart, mmDecide, mmEnding, mmHedgeActor, mmMeters, mmPlay, mmSetup, mmTick } from './mm';
 import { DRAFT_GME, gmeClocks, gmeDraftPlay } from './plans';
+import { greywolfActor, GW, GW_POS, gwNeedsBailout, npcBrokerChoice, nsccBase, squeezeShift } from './world';
 import { BATTLE_2021, DAYS_2021, OPTIONS_2021, DECK_2021, FACTIONS_2021, NPCS_2021, NYSE, PARAMS_2021, PRINCIPLES_2021, PROLOGUE_2021, RULES_2021, SOURCES_2021, START_2021 } from './data';
 
 const YOU = 'you';
-const GW = 'greywolf';
 const FT = 'fortress';
 const FEATHER = 'feather';
 const PANIC = 'panic';
-const GW_POS = 10_000_000;
 
 const mi = NYSE.index;
 const usd = (c: number) => `${(c / 100).toFixed(2)} 美元`;
@@ -40,20 +40,6 @@ function hedgerActor(g: Game): Actor {
       const scale = flag(g, 'optionsOff') ? 0.4 : 1;
       const q = Math.round((m.day.vDay / NYSE.minutes) * 0.15 * scale * Math.min(2, mom / (last * 0.02)));
       return [...extra, { owner: FT, side: 'buy', qty: q, type: 'market' }];
-    },
-  };
-}
-
-/** 做空基金（玩家不扮演时）：26 日下午开始回补，27 日开盘半小时内平完 */
-function greywolfActor(g: Game): Actor {
-  return {
-    id: GW,
-    onTick(m: Market) {
-      const a = m.ex.acct(GW);
-      if (a.pos >= 0) return [];
-      if (g.dayIndex === 2 && m.t >= mi('14:00') && a.pos < -7_000_000) return [{ owner: GW, side: 'buy', qty: 100_000, type: 'market' }];
-      if (g.dayIndex === 3 && m.t < mi('10:00')) return [{ owner: GW, side: 'buy', qty: Math.min(-a.pos, 250_000), type: 'market' }];
-      return [];
     },
   };
 }
@@ -102,6 +88,7 @@ export const GME: Scenario = {
   lotPresets: [1_000_000, 5_000_000],
   groupName: (g, who) => groupName(g, who),
   cards: (g) => gmeCards(g),
+  victim: victimGme,
   playCard: (g, id, target) => (id.startsWith('x-') ? gmeDraftPlay(g, id) : id.startsWith('mm-') ? mmPlay(g, id, target)! : gmePlay(g, id, target)),
   meters: (g) => (g.factionId === 'broker' ? brokerMeters(g) : isMm(g) ? mmMeters(g) : undefined),
   clocks: (g) => (isMm(g) ? [mmClock(g), ...gmeClocks(g, requirement)] : gmeClocks(g, requirement)),
@@ -116,7 +103,8 @@ export const GME: Scenario = {
     ex.add(newAccount({ id: GW, name: '灰狼资本', seat: 'GW', group: grp(GW), cash: 4_000_000_000, pos: -GW_POS, avg: 4000, borrowLimit: 11_000_000 }));
     ex.add(newAccount({ id: FT, name: '堡垒集团', seat: 'FT', group: grp(FT), cash: 50_000_000_000 }));
     ex.add(newAccount({ id: PANIC, name: '被限制的散户', group: 'crowd', exempt: true }));
-    if (g.factionId === 'retail') ex.add(newAccount({ id: YOU, name: '你', group: 'player', cash: 5000, pos: 50, avg: 1800, borrowLimit: 0 }));
+    // 生涯模式带进来的钱：开局那 50 股照旧，其余是现金
+    if (g.factionId === 'retail') ex.add(newAccount({ id: YOU, name: '你', group: 'player', cash: Math.max(5000, (g.setupOpts.cash ?? 5900) - 900), pos: 50, avg: 1800, borrowLimit: 0 }));
     if (g.factionId === 'broker') ex.add(newAccount({ id: FEATHER, name: '羽毛证券', group: 'player', exempt: true }));
     g.market.actors.push(hedgerActor(g));
     if (isMm(g)) {
@@ -176,7 +164,14 @@ export const GME: Scenario = {
           ],
         };
       } else {
-        g.flags.restrict = true;
+        // 电脑扮演的券商：按这一局的押金缺口决定
+        const c = npcBrokerChoice(requirement(g));
+        g.flags.brokerChoice = c;
+        if (c === 'restrict') g.flags.restrict = true;
+        else if (c === 'cap') {
+          g.flags.capped = true;
+          g.market.crowdBuyScale = 0.6;
+        }
       }
       mentor(g, '今天是星期四。不管发生什么，先想清楚：你是在交易，还是在赌一口气。');
     }
@@ -187,6 +182,14 @@ export const GME: Scenario = {
     const t = m.t - 1;
     const d = g.dayIndex;
     checkLines(g);
+    squeezeShift(g);
+    // 主经纪商盘中盯着空头的维持保证金：跌破就不等收盘，直接替你买回
+    const p = g.player;
+    if (g.factionId === 'short' && p.pos < 0 && !flag(g, 'pbLiquidated') && m.ex.equity(p) < m.ex.maintReq(p.pos)) {
+      g.flags.pbLiquidated = true;
+      g.addPlanFromScript({ label: '主经纪商强制回补', cond: 'now', price: 0, side: 'buy', qty: -p.pos, spread: 10, closeOnly: true });
+      g.push({ kind: 'liquidation', rule: 'forced-liquidation', text: `权益跌破维持保证金：主经纪商盘中强制回补全部 ${shares(-p.pos)} 空单` });
+    }
     if (flag(g, 'switchAt') != null && m.t >= (g.flags.switchAt as number) && g.player.closeOnly) {
       g.player.closeOnly = false;
       g.push({ kind: 'intel', text: '转户完成：你又能买了' });
@@ -260,7 +263,11 @@ export const GME: Scenario = {
     }
     if (d === 1) {
       if (g.factionId === 'short') rumor(g, 'bailout-offer', '堡垒集团愿意注资', '斯通的人打来电话：他们和另一家基金可以一共拿出 27.5 亿美元，条件是分走灰狼资本未来的一部分收益。', '堡垒集团', 1);
-      else news(g, 'bailout', '两家大型基金向灰狼资本注资 27.5 亿美元', '市场解读：空头的子弹又多了。论坛上的回应是：“那就让他们再亏一次。”', 0.95);
+      else if (gwNeedsBailout(g)) {
+        g.market.ex.acct(GW).cash += 2_750_000_000;
+        g.flags.npcBailout = true;
+        news(g, 'bailout', '两家大型基金向灰狼资本注资 27.5 亿美元', '市场解读：空头的子弹又多了。论坛上的回应是：“那就让他们再亏一次。”', 0.95);
+      } else news(g, 'no-bailout', '灰狼资本：我们不需要外部资金', '传言中的注资没有发生。灰狼资本表示，头寸“完全可控”。', 0.8);
     }
     if (d === 2) news(g, 'tweet', '一位科技富豪在收盘后发推：“Gamestonk!!”', '盘后交易里，股价应声暴涨。明天开盘会在哪里，没人说得准。', 0.95);
     if (d === 3) {
@@ -591,7 +598,8 @@ function reckon(g: Game): Ending {
       ruled: restricted ? '多家券商当日限制买入' : '券商未限制买入',
       history: MM_HISTORY,
       deviation: [
-        `券商限制买入：历史上发生了；这一局${restricted ? '也发生了' : '没有发生'}`,
+        `券商限制买入：历史上发生了；这一局${restricted ? '也发生了' : flag(g, 'capped') ? '只是限购' : '没有发生'}（清算所押金 ${fmtYi(requirement(g))}，历史上 37 亿美元）`,
+        `灰狼接受注资：历史上发生了；这一局${flag(g, 'bailout') || flag(g, 'npcBailout') ? '也发生了' : '没有发生'}`,
         `当日最高价：历史 483.00 美元，这一局 ${usd(high)}`,
         `当日最低价：历史 112.25 美元，这一局 ${usd(low)}`,
         `收盘价：历史 193.60 美元，这一局 ${usd(close)}`,
@@ -684,7 +692,8 @@ function reckon(g: Game): Ending {
       '次日股价收于 325 美元，2 月 2 日收于 90 美元。同年 10 月，证交会员工报告认为，暴涨主要来自看多买盘，空头回补只占一小部分。',
     ],
     deviation: [
-      `券商限制买入：历史上发生了；这一局${restricted ? '也发生了' : '没有发生'}`,
+      `券商限制买入：历史上发生了；这一局${restricted ? '也发生了' : flag(g, 'capped') ? '只是限购' : '没有发生'}（清算所押金 ${fmtYi(requirement(g))}，历史上 37 亿美元）`,
+        `灰狼接受注资：历史上发生了；这一局${flag(g, 'bailout') || flag(g, 'npcBailout') ? '也发生了' : '没有发生'}`,
       `当日最高价：历史 483.00 美元，这一局 ${usd(high)}`,
       `当日最低价：历史 112.25 美元，这一局 ${usd(low)}`,
       `收盘价：历史 193.60 美元，这一局 ${usd(close)}`,
@@ -712,7 +721,7 @@ function reckon(g: Game): Ending {
 
 /** 凌晨五点清算所要的押金：你前几天做的每一件降风险的事，都会让它小一点 */
 function requirement(g: Game): number {
-  let req = 3_700_000_000;
+  let req = nsccBase(g);
   if (flag(g, 'marginFull')) req -= 800_000_000;
   if (flag(g, 'optionsOff')) req -= 500_000_000;
   if (flag(g, 'waiver')) req -= 1_600_000_000;
@@ -927,10 +936,10 @@ function gmePlay(g: Game, id: string, _target?: string): CardResult {
       return R('公告发出', [flag(g, 'restrict') || flag(g, 'capped') ? '用户信任 +10' : '用户信任 +2：没出事的时候没人在意']);
     case 'tv':
       mark(`tv-${d}`);
-      g.flags.sentNext = ((g.flags.sentNext as number) || 0) - 0.3;
+      g.spin(-0.75, '券商 CEO：限制交易是为了保护散户', '零佣金券商');
       g.reputation -= 5;
       g.relate('susan', 5);
-      return R('上了财经频道', ['明早散户情绪偏空', '声望 −5'], { who: '苏珊', text: '论坛已经把你的截图做成表情包了。' });
+      return R('上了财经频道', ['明早的头条', '散户情绪偏空；做空基金的罗文反着读报，觉得该收手了，回补得更快', '声望 −5'], { who: '苏珊', text: '论坛已经把你的截图做成表情包了。' });
     case 'calls': {
       const premium = g.factionId === 'short' ? 200_000_000 : 1000;
       p.cash -= premium;

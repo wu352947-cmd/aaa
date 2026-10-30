@@ -1,4 +1,5 @@
 import type { Game, Intel } from '../engine/game';
+import { credLabel } from './tutorial';
 
 const KIND: Record<Intel['kind'], [string, string]> = {
   news: ['报道', ''],
@@ -7,6 +8,7 @@ const KIND: Record<Intel['kind'], [string, string]> = {
   clue: ['线索', 'clue'],
   mentor: ['老周', 'mentor'],
   system: ['笔记', ''],
+  victim: ['来信', 'victim'],
 };
 
 export function IntelList({ game, showMentor }: { game: Game; showMentor: boolean }) {
@@ -15,7 +17,9 @@ export function IntelList({ game, showMentor }: { game: Game; showMentor: boolea
   return (
     <div>
       <p className="muted" style={{ marginTop: 0, fontSize: 13 }}>
-        每条情报都有来源和时间，但可信度藏在背后——你看到的永远只是“听说”。标为“证据”的可以拿去告发。
+        {game.difficulty === 'novice'
+          ? '新手档替你标出了每条情报的可信度。换到标准档，这一栏就藏起来了——你看到的永远只是“听说”。标为“证据”的可以拿去告发。'
+          : '每条情报都有来源和时间，但可信度藏在背后——你看到的永远只是“听说”。标为“证据”的可以拿去告发。'}
       </p>
       {items.map((i, k) => (
         <div key={i.id + k} className="intel">
@@ -25,6 +29,7 @@ export function IntelList({ game, showMentor }: { game: Game; showMentor: boolea
             <span>
               {days[i.day]?.date.slice(5)} {i.time}
             </span>
+            {game.difficulty === 'novice' && i.kind !== 'system' && <span className={`cred ${credLabel(i.credibility)[1]}`}>{credLabel(i.credibility)[0]}</span>}
           </div>
           <div className="title">{i.title}</div>
           <div className="body">{i.body}</div>

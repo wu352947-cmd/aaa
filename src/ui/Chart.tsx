@@ -284,11 +284,14 @@ function drawDaily(ctx: CanvasRenderingContext2D, w: number, h: number, g: Game,
   const line = css('--line');
   const muted = css('--muted');
   ctx.clearRect(0, 0, w, h);
-  const days = g.scenario.days.filter((d) => d.kind !== 'aftermath');
+  // 只有开盘的日子才有日线；停牌和余波的日子跳过
+  const open = g.scenario.days.map((d, i) => ({ d, i })).filter(({ d }) => d.kind !== 'aftermath' && d.kind !== 'halt');
+  const days = open.map(({ d }) => d);
   const bars: (Bar | null)[] = days.map((_, i) => g.market.dailyBars[i] ?? null);
-  if (g.phase === 'trading' && g.market.bars.length) {
+  const today = open.findIndex(({ i }) => i === g.dayIndex);
+  if (g.phase === 'trading' && g.market.bars.length && today >= 0) {
     const b = g.market.bars;
-    bars[g.dayIndex] = { tick: g.dayIndex, o: b[0].o, h: Math.max(...b.map((x) => x.h)), l: Math.min(...b.map((x) => x.l)), c: b[b.length - 1].c, v: b.reduce((a, x) => a + x.v, 0), hist: b[b.length - 1].hist };
+    bars[today] = { tick: g.dayIndex, o: b[0].o, h: Math.max(...b.map((x) => x.h)), l: Math.min(...b.map((x) => x.l)), c: b[b.length - 1].c, v: b.reduce((a, x) => a + x.v, 0), hist: b[b.length - 1].hist };
   }
   const shown = bars.filter(Boolean) as Bar[];
   const vals = shown.flatMap((b) => [b.h, b.l, b.hist]);

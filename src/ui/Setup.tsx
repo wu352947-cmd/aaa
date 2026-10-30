@@ -2,10 +2,32 @@ import { useState } from 'react';
 import type { Scenario } from '../engine/game';
 import { cls } from './format';
 import { PixelScene } from './Pixel';
+import { DIFFICULTIES, type Difficulty } from './tutorial';
 
-export function Setup({ scenario, onBegin, onBack }: { scenario: Scenario; onBegin: (faction: string, principle: string, seed: string) => void; onBack: () => void }) {
+const PLAYED = 'chouma.played';
+export function markPlayed(): void {
+  try {
+    localStorage.setItem(PLAYED, '1');
+  } catch {
+    /* 忽略 */
+  }
+}
+function playedBefore(): boolean {
+  try {
+    return !!localStorage.getItem(PLAYED);
+  } catch {
+    return false;
+  }
+}
+
+export function Setup({ scenario, onBegin, onBack }: { scenario: Scenario; onBegin: (faction: string, principle: string, seed: string, difficulty: Difficulty, startDay?: number) => void; onBack: () => void }) {
   const [faction, setFaction] = useState(() => scenario.factions.find((x) => !x.locked)!.id);
   const [principle, setPrinciple] = useState(scenario.principles[0].id);
+  // 第一次玩默认新手：界面逐层解锁
+  const [startDay, setStartDay] = useState(0);
+  // 可以从哪几章开始：最后一章（决战）不单独开放
+  const starts = (scenario.chapters ?? []).slice(0, -1).map((c, i, all) => ({ ...c, from: i ? all[i - 1].until + 1 : 0 }));
+  const [difficulty, setDifficulty] = useState<Difficulty>(() => (playedBefore() ? 'standard' : 'novice'));
   const [seed, setSeed] = useState(() => Math.random().toString(36).slice(2, 8));
   const cards = (scenario.setupRules ?? []).map((id) => scenario.ruleCards.find((r) => r.id === id)).filter((c) => !!c);
   const f = scenario.factions.find((x) => x.id === faction)!;
@@ -13,7 +35,13 @@ export function Setup({ scenario, onBegin, onBack }: { scenario: Scenario; onBeg
     <div className="setup paper">
       <div className="setup-inner">
         <div className="scene-frame">
-          {scenario.id === 'gme2021' ? <PixelScene scene="room" state={{ heat: 0.5 }} label="2021 年，纽约" /> : <PixelScene scene="floor" state={{ heat: 0.5 }} label="1995 年，上海" />}
+          {scenario.id === 'gme2021' ? (
+            <PixelScene scene="room" state={{ heat: 0.5 }} label="2021 年，纽约" />
+          ) : scenario.id === 'takeover2015' ? (
+            <PixelScene scene="board" state={{ heat: 0.4, who: ['ye', 'fu', 'wang', 'yu'] }} label="2015 年，深圳" />
+          ) : (
+            <PixelScene scene="floor" state={{ heat: 0.5 }} label="1995 年，上海" />
+          )}
         </div>
         <div className="muted" style={{ color: 'var(--ink-soft)', letterSpacing: '0.3em', fontSize: 12 }}>
           序 幕
@@ -59,6 +87,31 @@ export function Setup({ scenario, onBegin, onBack }: { scenario: Scenario; onBeg
           ))}
         </div>
 
+        <div className="section-label">难度</div>
+        <p style={{ marginTop: -4, fontSize: 13, color: 'var(--ink-soft)' }}>难度只改界面和节奏，市场本身不变：同一个种子，在哪一档都是同一局。</p>
+        <div className="principles">
+          {DIFFICULTIES.map((d) => (
+            <button key={d.id} className={cls('principle', difficulty === d.id && 'selected')} onClick={() => setDifficulty(d.id)}>
+              <b style={{ fontFamily: 'var(--serif)' }}>{d.name}</b>
+              <div style={{ fontSize: 12 }}>{d.desc}</div>
+            </button>
+          ))}
+        </div>
+
+        {starts.length > 1 && (
+          <>
+            <div className="section-label">从哪一章开始</div>
+            <div className="principles">
+              {starts.map((c) => (
+                <button key={c.id} className={cls('principle', startDay === c.from && 'selected')} onClick={() => setStartDay(c.from)}>
+                  <b style={{ fontFamily: 'var(--serif)' }}>{c.title}</b>
+                  <div style={{ fontSize: 12 }}>{c.sub}</div>
+                </button>
+              ))}
+            </div>
+          </>
+        )}
+
         <div className="setup-footer">
           <button className="btn" onClick={onBack}>
             ← 返回
@@ -68,7 +121,7 @@ export function Setup({ scenario, onBegin, onBack }: { scenario: Scenario; onBeg
             <input value={seed} onChange={(e) => setSeed(e.target.value)} style={{ width: 90, background: 'transparent', border: '1px solid var(--ink-soft)', padding: '2px 6px' }} />
             （同一种子 + 同样的操作 = 同一局）
           </span>
-          <button className="btn primary" onClick={() => onBegin(faction, principle, seed || 'chouma')}>
+          <button className="btn primary" onClick={() => onBegin(faction, principle, seed || 'chouma', difficulty, startDay || undefined)}>
             以「{f.name}」入场 →
           </button>
         </div>

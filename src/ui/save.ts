@@ -1,4 +1,4 @@
-import { replay, type Game, type LoggedAction, type Scenario } from '../engine/game';
+import { replay, type Game, type GameOpts, type LoggedAction, type Scenario } from '../engine/game';
 import { EVENINGS } from '../scenarios/tulip/data';
 import { replayTulip, type TulipAction, type TulipFaction, type TulipGame } from '../scenarios/tulip/game';
 
@@ -16,6 +16,9 @@ export interface SaveData {
   at: number;
   label: string;
   savedAt: number;
+  difficulty?: string;
+  undos?: number;
+  opts?: GameOpts;
 }
 
 const KEY = 'chouma.save';
@@ -35,6 +38,9 @@ export function saveGame(g: Game): void {
     at: g.globalTick,
     label: `${g.faction.name} · ${g.day.date} ${g.phase === 'night' ? '夜' : g.time}`,
     savedAt: Date.now(),
+    difficulty: g.difficulty,
+    undos: g.undos,
+    opts: g.setupOpts,
   };
   try {
     localStorage.setItem(KEY, JSON.stringify(data));
@@ -63,7 +69,10 @@ export function clearSave(): void {
 }
 
 export function restore(scenario: Scenario, d: SaveData): Game {
-  return replay(scenario, d.seed, d.faction, d.principle, d.log as LoggedAction[], d.at);
+  const g = replay(scenario, d.seed, d.faction, d.principle, d.log as LoggedAction[], d.at, d.opts ?? {});
+  g.difficulty = d.difficulty ?? 'standard';
+  g.undos = d.undos ?? 0;
+  return g;
 }
 
 const TULIP_SEAT: Record<TulipFaction, string> = { speculator: '酒馆投机客', grower: '球茎种植者', council: '行会议员' };

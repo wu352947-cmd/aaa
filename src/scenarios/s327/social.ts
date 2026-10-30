@@ -1,9 +1,9 @@
 import { fmtYi } from '../../engine/exchange';
 import type { DialogueIntent, ExchangeOffer, Game, Intel, SocialOutcome } from '../../engine/game';
-import { addDeter, evidence, flag, HIDE, rumor, st } from './common';
+import { addDeter, evidence, flag, HIDE, rumor, st, sd } from './common';
 
 export function offers(g: Game, npcId: string): ExchangeOffer[] {
-  const d = g.dayIndex;
+  const d = sd(g);
   const used = st(g).usedOffers;
   const out: ExchangeOffer[] = [];
   const add = (id: string, label: string, cost: string) => {
@@ -40,7 +40,7 @@ export function breakLock(g: Game, why: string) {
   const lock = g.alliances.find((a) => a.id === 'lock' && !a.brokenBy);
   if (!lock) return;
   lock.brokenBy = 'player';
-  lock.brokenDay = g.dayIndex;
+  lock.brokenDay = sd(g);
   g.relate(lock.npc, -40, why);
   g.reputation -= 15;
   if (lock.npc === 'gao') g.flags.gaoFlip = true;
@@ -78,7 +78,7 @@ export function stance(g: Game, npcId: string, pub: boolean): { convey: string[]
         ? { convey: ['按规则办', '你们最近的单子，我们都看得到'], tone: 'cold', numbers: [], truthful: true }
         : { convey: ['按规则办', '持仓限额和保证金，一分都不能少'], tone: 'neutral', numbers: [], truthful: true };
     case 'su':
-      return g.dayIndex >= 2
+      return sd(g) >= 2
         ? { convey: ['她在查一家多方机构和财政部门的关系', '还差第二个信源'], tone: 'neutral', numbers: [], truthful: true }
         : { convey: ['最近 327 的成交量太不正常了', '她想知道是谁在加码'], tone: 'neutral', numbers: [], truthful: true };
     case 'zhou':
@@ -106,9 +106,9 @@ export function stance(g: Game, npcId: string, pub: boolean): { convey: string[]
 
 export function probe(g: Game, npcId: string, out: Out): SocialOutcome {
   const n = g.npc(npcId)!;
-  if (npcId === 'gao' && flag(g, 'gaoFlip') && g.dayIndex >= 3 && g.factionId === 'short' && g.rngSocial.chance(0.6)) {
+  if (npcId === 'gao' && flag(g, 'gaoFlip') && sd(g) >= 3 && g.factionId === 'short' && g.rngSocial.chance(0.6)) {
     n.unreachable = true;
-    g.addIntel({ id: `gao-silent-${g.dayIndex}`, title: '高振宇不回传呼', body: '传呼打过去三次，高振宇都没有回电。以前他从不这样。', source: '你的观察', credibility: 1, kind: 'clue' });
+    g.addIntel({ id: `gao-silent-${sd(g)}`, title: '高振宇不回传呼', body: '传呼打过去三次，高振宇都没有回电。以前他从不这样。', source: '你的观察', credibility: 1, kind: 'clue' });
     return out(false, ['对方没有回电'], { playerMove: '打传呼约他聊聊锁仓的事', convey: ['（传呼打过去三次，他都没有回电。）'], tone: 'evasive' });
   }
   const s = stance(g, npcId, false);
@@ -126,7 +126,7 @@ export function probe(g: Game, npcId: string, out: Out): SocialOutcome {
     g.flags.seatsKnown = true;
     g.addIntel({ id: 'seats', title: '席位对照：102 中财、217 辽北、011 申江', body: '老周告诉你：逐笔里的 102 是中财信托，217 是辽北发展，011 是申江证券。', source: '老周', credibility: 0.95, kind: 'clue' });
     effects.push('获得情报：席位对照表');
-  } else if (npcId === 'zhou' && g.dayIndex >= 2 && g.market.ex.accounts.has(HIDE) && !g.intel.some((i) => i.id === 'ev-split')) {
+  } else if (npcId === 'zhou' && sd(g) >= 2 && g.market.ex.accounts.has(HIDE) && !g.intel.some((i) => i.id === 'ev-split')) {
     evidence(g, 'ev-split', '席位 305 跟着 011 同进同出', '老周：“305 浦江实业，交易员是申江的人。011 卖，305 也卖，一口不差。侬想想，申江的空单到底有多少？”', '老周', 'shen');
     effects.push('获得证据：申江借壳分仓');
     return out(true, effects, { playerMove: '问老周最近盘面上有什么怪事', convey: ['305 浦江实业的交易员是申江的人', '011 卖，305 也卖，一口不差'], tone: 'warm', numbers: [305, 11] });
@@ -136,7 +136,7 @@ export function probe(g: Game, npcId: string, out: Out): SocialOutcome {
 
 export function exchange(g: Game, npcId: string, option: string | undefined, out: Out): SocialOutcome {
   const n = g.npc(npcId)!;
-  const key = `${npcId}:${option}:${g.dayIndex}`;
+  const key = `${npcId}:${option}:${sd(g)}`;
   const s = st(g);
   if (!option || !offers(g, npcId).some((o) => o.id === option)) {
     return out(false, ['对方现在没什么可换的'], { playerMove: '想做个交换', convey: ['现在没什么好换的'], tone: 'neutral' });
@@ -146,10 +146,10 @@ export function exchange(g: Game, npcId: string, option: string | undefined, out
   switch (`${npcId}:${option}`) {
     case 'qian:buy-rumor': {
       p.cash -= 200_000;
-      const good = g.dayIndex >= 3;
+      const good = sd(g) >= 3;
       rumor(
         g,
-        `qian-rumor-${g.dayIndex}`,
+        `qian-rumor-${sd(g)}`,
         good ? '财政部内部已经定了：327 贴息' : '下个月才会公布贴息方案',
         good ? '钱有福：“老板，这条是北京的朋友亲口讲的，23 号前后就出来。”' : '钱有福：“不急，下个月才公布，老板还有时间。”',
         '钱有福',
@@ -186,7 +186,7 @@ export function exchange(g: Game, npcId: string, option: string | undefined, out
     case 'wei:swap': {
       g.relate('wei', 10, '你告诉了他你的成本');
       const hint = g.npc('wei')!.relation > 40;
-      if (hint) g.addIntel({ id: `wei-hint-${g.dayIndex}`, title: '多方的子弹不少', body: '魏国梁吃饭时随口一句：“空头要是以为我们没钱，那就错了。”', source: '魏国梁', credibility: 0.8, kind: 'rumor' });
+      if (hint) g.addIntel({ id: `wei-hint-${sd(g)}`, title: '多方的子弹不少', body: '魏国梁吃饭时随口一句：“空头要是以为我们没钱，那就错了。”', source: '魏国梁', credibility: 0.8, kind: 'rumor' });
       return out(true, [`${n.name} 关系 +10`, hint ? '获得一条暗示' : '他什么也没说'], {
         playerMove: '把自己的建仓成本告诉他，换他一句实话',
         convey: hint ? ['空头要是以为我们没钱，那就错了'] : ['我们只是正常套期保值', '要讲政策，看大局'],

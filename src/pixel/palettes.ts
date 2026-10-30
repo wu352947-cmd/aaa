@@ -1,7 +1,7 @@
 import { hex, type RGB } from './pix';
 
 /** 设计文档 11.1：每个年代一套调色板 */
-export type Era = '1637' | '1995' | '2021';
+export type Era = '1637' | '1995' | '2015' | '2021';
 
 export interface Palette {
   ink: RGB;
@@ -43,6 +43,19 @@ export const PALETTES: Record<Era, Palette> = {
     glow: hex('#f2e2a8'),
     skin: [hex('#e3b48f'), hex('#d4a07a'), hex('#c58e68')],
   },
+  // 深圳的玻璃幕墙、会议室的胡桃木、地产商的烫金：青灰、暗金、A 股的红
+  '2015': {
+    ink: hex('#0c1315'),
+    deep: hex('#132228'),
+    dark: hex('#1f3740'),
+    mid: hex('#3b6470'),
+    light: hex('#7ea6ae'),
+    paper: hex('#e6e1d4'),
+    accent: hex('#c9a24a'),
+    accent2: hex('#d6453a'),
+    glow: hex('#f3dc9a'),
+    skin: [hex('#e6b892'), hex('#d4a07a'), hex('#c28c66')],
+  },
   // 手机屏幕、表情包、论坛截图：高饱和紫、霓虹黄
   '2021': {
     ink: hex('#0b0614'),
@@ -59,5 +72,5 @@ export const PALETTES: Record<Era, Palette> = {
 };
 
 export function eraOfScenario(id: string): Era {
-  return id === 'tulip' ? '1637' : id === 'gme2021' ? '2021' : '1995';
+  return id === 'tulip' ? '1637' : id === 'gme2021' ? '2021' : id === 'takeover2015' ? '2015' : '1995';
 }

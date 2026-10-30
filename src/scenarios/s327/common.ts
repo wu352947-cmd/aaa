@@ -1,13 +1,20 @@
 import type { Account } from '../../engine/exchange';
-import type { Directive, DocSheet, Game, Intel } from '../../engine/game';
+import type { CreditLine, Directive, DocSheet, Game, Intel } from '../../engine/game';
 import { minuteIndex as mi } from '../../engine/market';
+import { PRE } from './data';
+
+/** 剧本日：二月十六日是第 0 天，一月份是负数（见 data.ts） */
+export const sd = (g: Game) => g.dayIndex - PRE;
 import type { Fen } from '../../engine/types';
+import type { World } from './world';
 
 // ───────────── 剧本私有状态（随 Game 实例存在，参与确定性） ─────────────
 
 export interface Snap {
   accounts: Map<string, Account>;
   last: Fen;
+  /** 那一刻场外配资的借款（撤销成交时一起退回） */
+  credit?: CreditLine | null;
 }
 
 export interface State {
@@ -49,6 +56,8 @@ export interface State {
   memberStart: Record<string, number>;
   /** 借来的钱：结局时要还（元） */
   debt: number;
+  /** 这一局的世界：财政部的倾向、市场共识的偏离（见 world.ts） */
+  world: World;
 }
 
 export const knows = (g: Game, npc: string) => {
@@ -68,7 +77,8 @@ export function shenPlan(g: Game): 'blocked' | 'hold' | 'cover' | 'small' | 'dum
   const a = ex.acct(SHORT);
   if (a.closeOnly) return 'blocked';
   if (ex.equity(a) >= ex.marginReq(a.pos)) return 'hold';
-  const d = deter(g, SHORT);
+  // 沈立行是逆向的：报纸越一边倒地看多，他越觉得市场疯了、越不肯认输，交易所的警告也听不进去
+  const d = deter(g, SHORT) + 1.5 * Math.min(0, g.npc('shen')?.view ?? 0);
   if (d >= 4) return 'cover';
   if (d >= 2) return 'small';
   return 'dump';
@@ -186,7 +196,7 @@ export function rumor(g: Game, id: string, title: string, body: string, source: 
 }
 export function mentor(g: Game, text: string) {
   if (!g.npc('zhou')) return;
-  g.addIntel({ id: `mentor-${g.dayIndex}-${g.intel.length}`, title: text.slice(0, 22) + (text.length > 22 ? '…' : ''), body: text, source: '老周', credibility: 0.75, kind: 'mentor' });
+  g.addIntel({ id: `mentor-${sd(g)}-${g.intel.length}`, title: text.slice(0, 22) + (text.length > 22 ? '…' : ''), body: text, source: '老周', credibility: 0.75, kind: 'mentor' });
 }
 export function evidence(g: Game, id: string, title: string, body: string, source: string, against: string) {
   if (g.intel.some((i) => i.id === id)) return;
