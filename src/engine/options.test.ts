@@ -25,6 +25,20 @@ describe('期权链', { timeout: 60000 }, () => {
     expect(price('call', 7000, 6000, 0, 2).value).toBe(10);
   });
 
+  it('波动率为 0 或非法时退回内在价值，不产生 NaN', () => {
+    const T = 5 / 252;
+    // 平值：以前 d1 = log(1) / 0 = NaN，期权价值与玩家权益一起变成 NaN
+    expect(price('call', 6000, 6000, T, 0)).toEqual({ value: 0, delta: 0 });
+    expect(price('put', 6000, 6000, T, 0)).toEqual({ value: 0, delta: 0 });
+    // 实值 / 虚值：只剩内在价值
+    expect(price('call', 7000, 6000, T, 0).value).toBeCloseTo(10, 6);
+    expect(price('put', 5000, 6000, T, 0).value).toBeCloseTo(10, 6);
+    expect(price('call', 5000, 6000, T, 0).value).toBe(0);
+    // 负的 iv、NaN 的到期时间同样不能漏出 NaN
+    expect(Number.isNaN(price('call', 6000, 6000, T, -1).value)).toBe(false);
+    expect(Number.isNaN(price('call', 6000, 6000, Number.NaN, 2).value)).toBe(false);
+  });
+
   it('散户买看涨期权：按卖价付现金，按中间价计入权益', () => {
     const g = new Game(GME, 'opt', 'retail', 'no-violation');
     to(g, 0, 10);

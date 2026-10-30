@@ -48,11 +48,14 @@ function ncdf(x: number): number {
 export function price(kind: OptKind, s: Fen, k: Fen, T: number, iv: number): { value: number; delta: number } {
   const S = s / 100;
   const K = k / 100;
-  if (T <= 0) {
+  // 到期（T=0）、波动率为 0（剧本给了一个完全没波动的行情）或 iv 非法时，
+  // 期权只剩内在价值。这里必须显式短路：否则 v=0 时 d1 = log(S/K) / 0，
+  // 平值合约（S === K）算出 0/0 = NaN，一路污染 optValue 与玩家权益。
+  const v = T > 0 && iv > 0 ? iv * Math.sqrt(T) : 0;
+  if (!(v > 0)) {
     const intr = kind === 'call' ? Math.max(0, S - K) : Math.max(0, K - S);
     return { value: intr, delta: kind === 'call' ? (S > K ? 1 : 0) : S < K ? -1 : 0 };
   }
-  const v = iv * Math.sqrt(T);
   const d1 = (Math.log(S / K) + 0.5 * v * v) / v;
   const d2 = d1 - v;
   if (kind === 'call') return { value: S * ncdf(d1) - K * ncdf(d2), delta: ncdf(d1) };
