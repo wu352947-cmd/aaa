@@ -4,7 +4,7 @@ import type { Side } from '../engine/types';
 import { UNITS } from '../engine/exchange';
 import { cls, money, price, qty as fq } from './format';
 import { OptionsTicket } from './OptionsTicket';
-import { FLOAT, spot, spotPrice } from '../scenarios/s327/delivery';
+import { basis, daysToDelivery, FLOAT, fundingRate, spot, spotPrice, theoreticalBasis } from '../scenarios/s327/delivery';
 import { Term } from './Term';
 
 /** 下单面板：在提交之前就把规则检查、保证金占用与预计冲击算给玩家看 */
@@ -295,13 +295,39 @@ function SpotTicket({ game }: { game: Game }) {
   const s = spot(game);
   const buy = game.cards().find((c) => c.id === 'dlv-buy');
   const sell = game.cards().find((c) => c.id === 'dlv-sell');
+  const arb = game.cards().find((c) => c.id === 'dlv-arb');
+  const unwind = game.cards().find((c) => c.id === 'dlv-unwind');
   const px = spotPrice(game);
+  const b = basis(game);
+  const theo = theoreticalBasis(game);
+  const fund = fundingRate(game);
+  const days = daysToDelivery(game);
+  // 市场给的基差之外的，就是自己买出来的那部分
+  const mine = b - theo;
   return (
     <div>
       <div className="preview">
         <dl className="kv" style={{ margin: 0 }}>
-          <dt>现券报价</dt>
-          <dd>{price(px)} 元（期货 {price(game.market.last)}）</dd>
+          <dt>期货 327</dt>
+          <dd className="num">{price(game.market.last)} 元</dd>
+          <dt>现券 92(3)</dt>
+          <dd className="num">{price(px)} 元</dd>
+          <dt title="现券价 − 期货价。每 1 分基差 = 每口 2 元">基差</dt>
+          <dd className={cls('num', b >= 0 ? 'up' : 'down')}>
+            {b >= 0 ? '+' : '−'}
+            {(Math.abs(b) / 100).toFixed(2)} 元
+            <span className="faint" style={{ fontSize: 11 }}>
+              {' '}｜市场给的 {(theo / 100).toFixed(2)}
+              {mine ? `，你推出来的 ${(mine / 100).toFixed(2)}` : ''}
+            </span>
+          </dd>
+          <dt title="票息 + 保值贴补 减去 拆借资金成本，按剩余天数折算">持有成本</dt>
+          <dd className="num">
+            {price(theo)} 元
+            <span className="faint" style={{ fontSize: 11 }}> ｜资金 {(fund * 100).toFixed(1)}%</span>
+          </dd>
+          <dt title="离交割还有几个交易日：交割日基差必须收敛到零">到交割</dt>
+          <dd className="num">{days} 个交易日</dd>
           <dt title="每口对应面值 2 万元，全额付款">每口</dt>
           <dd>{money(px * 2)}</dd>
           <dt>市面上流通</dt>
@@ -313,9 +339,24 @@ function SpotTicket({ game }: { game: Game }) {
         </dl>
       </div>
       <p className="faint" style={{ fontSize: 12 }}>
-        {buy?.does} 囤到流通量的三成以上，坚持交割时交易所会认定逼仓。
+        基差是负的（现券比期货便宜），买现券、卖期货，到交割日按结算价交券，就能锁住这 ${(Math.abs(b) / 100).toFixed(2)} 元的价差。
+        资金一紧，carry 转负，基差就往负走。
       </p>
-      <div className="quick">
+      {arb && (
+        <div className="quick" style={{ marginTop: 6 }}>
+          {arb.targets?.map((t) => (
+            <button key={t.id} className="btn small" disabled={!!arb.blocked} onClick={() => act({ type: 'card', id: 'dlv-arb', target: t.id })}>
+              套利 {t.label}
+            </button>
+          ))}
+          {unwind && (
+            <button className="btn small" disabled={!!unwind.blocked} onClick={() => act({ type: 'card', id: 'dlv-unwind' })}>
+              平掉组合
+            </button>
+          )}
+        </div>
+      )}
+      <div className="quick" style={{ marginTop: 6 }}>
         {buy?.targets?.map((t) => (
           <button key={t.id} className="btn small" disabled={!!buy.blocked} onClick={() => act({ type: 'card', id: 'dlv-buy', target: t.id })}>
             {t.label}
@@ -328,6 +369,7 @@ function SpotTicket({ game }: { game: Game }) {
         )}
       </div>
       {buy?.blocked && <p className="muted" style={{ fontSize: 12 }}>{buy.blocked}</p>}
+      {arb?.blocked && <p className="muted" style={{ fontSize: 12 }}>{arb.blocked}</p>}
     </div>
   );
 }
