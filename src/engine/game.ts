@@ -1213,15 +1213,25 @@ export class Game {
       this.flags.otcLiquidated = ((this.flags.otcLiquidated as number) || 0) + 1;
     }
     for (const a of ex.accounts.values()) {
-      if (a.exempt || a.pos === 0) continue;
-      if (ex.equity(a, mark) < 0) {
-        const r = ex.liquidate(a.id);
-        if (a.id === this.player.id) {
+      if (a.exempt) continue;
+      if (ex.equity(a, mark) >= 0) continue;
+      // 没有仓位也可能穿仓：佣金、利息、配资的借款都能把现金打到负数。
+      // 以前这里 pos === 0 直接跳过，权益已经是负的却不算破产，还能一路跑到收盘。
+      if (a.pos === 0) {
+        if (a.id === this.player.id && !this.bankrupt) {
           this.bankrupt = true;
-          this.push({ kind: 'liquidation', rule: 'forced-liquidation', text: `权益跌穿零，交易所强制平仓 ${r?.filled.toLocaleString()} 口` });
-        } else {
+          this.push({ kind: 'liquidation', rule: 'forced-liquidation', text: `权益跌穿零：没有仓位可平，账上还欠 ${fmtYi(-ex.equity(a, mark))}` });
+        } else if (a.id !== this.player.id) {
           this.flags[`bust-${a.id}`] = this.time;
         }
+        continue;
+      }
+      const r = ex.liquidate(a.id);
+      if (a.id === this.player.id) {
+        this.bankrupt = true;
+        this.push({ kind: 'liquidation', rule: 'forced-liquidation', text: `权益跌穿零，交易所强制平仓 ${r?.filled.toLocaleString()} 口` });
+      } else {
+        this.flags[`bust-${a.id}`] = this.time;
       }
     }
   }
