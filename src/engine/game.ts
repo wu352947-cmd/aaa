@@ -522,8 +522,14 @@ export interface Plan {
   /** 执行中：剩余数量与每分钟数量 */
   remaining?: number;
   perTick?: number;
+  /** 本分钟已经报出去、还没等到成交回报的数量 */
+  pending?: number;
   done?: boolean;
 }
+
+/** 计划单在撮合回报里的标记：用来把成交结果回填给对应的那张计划 */
+export const PLAN_TAG = 'plan:';
+export const planTag = (id: number) => `${PLAN_TAG}${id}`;
 
 /** 场外配资 / 营业部垫资：钱借给你，平仓线由出借方说了算 */
 export interface CreditLine {
@@ -1125,6 +1131,7 @@ export class Game {
     if (!halted) orders.push(...this.runPlans(), ...this.dealerOrders());
     const rep = this.market.step(orders);
     this.onRuleHits(rep.hits);
+    this.settlePlans(rep.tagFills);
     if (rep.luld) {
       const l = this.market.deck.luld!;
       this.push({ kind: 'rule', rule: 'luld', blocked: true, text: `${l.window} 分钟内价格波动超过 ${l.band * 100}%，交易暂停 ${l.pause} 分钟` });
@@ -1192,11 +1199,28 @@ export class Game {
           continue;
         }
       }
-      out.push({ owner: this.player.id, side: p.side, qty: q, type: 'market', overdraw: p.overdraw });
-      p.remaining -= q;
-      if (p.remaining <= 0) p.done = true;
+      out.push({ owner: this.player.id, side: p.side, qty: q, type: 'market', overdraw: p.overdraw, tag: planTag(p.id) });
+      // 剩余量不在下单时扣：要等成交回来再算。以前这里先扣后成交，
+      // 计划单被保证金或持仓限额挡下时照样把剩余量扣光，计划一声不响地“执行完了”，
+      // 实际一口都没成交。
+      p.pending = q;
     }
     return out;
+  }
+
+  /** 计划单的成交回填：成交多少扣多少，被挡下的计划当场停下并告诉玩家 */
+  private settlePlans(fills: { tag: string; filled: number; rejected: boolean }[]): void {
+    for (const f of fills) {
+      const id = Number(f.tag.slice(PLAN_TAG.length));
+      const p = this.plans.find((x) => x.id === id);
+      if (!p || p.pending == null) continue;
+      p.pending = undefined;
+      p.remaining = Math.max(0, p.remaining! - f.filled);
+      if (f.filled === 0 && f.rejected) {
+        p.done = true;
+        this.push({ kind: 'intel', text: `计划书「${p.label}」被规则挡下，已停止执行` });
+      } else if (p.remaining! <= 0) p.done = true;
+    }
   }
 
   /** 盘中风控：按做市中枢估值（避免被单笔跳价误伤），权益跌穿零即穿仓，交易所立即强平 */
