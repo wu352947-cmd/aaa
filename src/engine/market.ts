@@ -286,9 +286,15 @@ export class Market {
     }
   }
 
+  /** 只有布局日走 U 形：决战日的走势是逐分钟校准过的，不要改动 */
+  private intradayShape(): boolean {
+    return !!this.deck.intradayShape && this.day.kind === 'layout';
+  }
+
   private crowdOrders(): OrderReq[] {
     const r = this.rngCrowd;
-    const perTick = (this.day.crowdShare * this.day.vDay) / this.session.minutes;
+    const shape = this.intradayShape() ? activityAt(this.t, this.session.minutes) : 1;
+    const perTick = ((this.day.crowdShare * this.day.vDay) / this.session.minutes) * shape;
     const n = 4 + r.int(0, 4);
     const out: OrderReq[] = [];
     const bias = 0.18 * this.sentiment + 0.12 * this.lean;
@@ -325,14 +331,18 @@ export class Market {
   private chaserOrders(): OrderReq[] {
     const n = 5;
     if (this.bars.length < n + 10) return [];
+    // 盘中有 U 形节奏时，成交量要按「这个时段本该有多少」归一，
+    // 否则上午自然回落会被当成冷清、尾盘自然放量会被当成有人在扫货
+    const norm = (b: Bar) => (this.intradayShape() ? activityAt(b.tick, this.session.minutes) : 1);
     const recent = this.bars.slice(-n);
     const before = this.bars.slice(-n - 30, -n).filter((b) => b.v > 0);
     if (!before.length) return [];
-    const base = before.reduce((a, b) => a + b.v, 0) / before.length;
-    const ratio = recent.reduce((a, b) => a + b.v, 0) / n / Math.max(1, base);
+    const base = before.reduce((a, b) => a + b.v / norm(b), 0) / before.length;
+    const ratio = recent.reduce((a, b) => a + b.v / norm(b), 0) / n / Math.max(1, base);
     const move = recent[n - 1].c - recent[0].o;
     if (ratio < 1.8 || Math.abs(move) < 0.08 * this.scale()) return [];
-    const perTick = this.day.vDay / this.session.minutes;
+    const shape = this.intradayShape() ? activityAt(this.t, this.session.minutes) : 1;
+    const perTick = (this.day.vDay / this.session.minutes) * shape;
     const qty = Math.round(perTick * 0.2 * Math.min(2, ratio - 1.8));
     return qty > 0 ? [{ owner: TREND, side: move > 0 ? 'buy' : 'sell', qty, type: 'market' }] : [];
   }
@@ -445,6 +455,18 @@ export class Market {
     this.ex.settle(settlePrice);
     return bar;
   }
+}
+
+/**
+ * 盘中活跃度：真实市场的成交量是 U 形——开盘和尾盘放量，中午清淡。
+ * 返回一个围绕 1 的系数（全天平均约 0.97），让每个交易日有自己的起伏，
+ * 而不是从开盘到收盘一条直线。
+ */
+export function activityAt(t: number, minutes: number): number {
+  const x = minutes > 1 ? Math.min(1, Math.max(0, t / (minutes - 1))) : 0;
+  const u = 2 * x - 1;
+  // 两端约 2.1 倍、正午约 0.4 倍
+  return 0.4 + 1.7 * u * u;
 }
 
 export function clamp(x: number, lo: number, hi: number): number {

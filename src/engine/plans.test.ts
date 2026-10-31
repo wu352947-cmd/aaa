@@ -100,7 +100,8 @@ describe('每晚选卡：三选一，打出或换算', () => {
   });
 });
 
-describe('对手动向：进度钟', () => {
+// 全剧本重放，并发跑满时会超过默认的 5 秒
+describe('对手动向：进度钟', { timeout: 60_000 }, () => {
   it('当面聊过才摸得清；辽北倒戈后钟走满', () => {
     const g = toNight(new Game(S327, 'clock', 'short', 'no-violation', FEB), 0);
     const gao = () => g.scenario.clocks!(g).find((c) => c.id === 'gao-flip')!;
@@ -117,7 +118,8 @@ describe('对手动向：进度钟', () => {
   });
 });
 
-describe('会员日报：监管座位每晚的案头工作', () => {
+// 全剧本重放，并发跑满时会超过默认的 5 秒
+describe('会员日报：监管座位每晚的案头工作', { timeout: 60_000 }, () => {
   it('诚实的行：昨日 + 买入 − 卖出 = 申报；浦江的委托从申江的交易室报进来', () => {
     const g = toNight(new Game(S327, 'audit', 'official', 'no-violation', FEB), 1);
     const doc = g.scenario.docs!(g)[0];
@@ -156,7 +158,8 @@ describe('会员日报：监管座位每晚的案头工作', () => {
   });
 });
 
-describe('上级指示', () => {
+// 全剧本重放，并发跑满时会超过默认的 5 秒
+describe('上级指示', { timeout: 60_000 }, () => {
   it('什么都不做：上面交代的事大半办砸，仕途受影响', () => {
     const idle = finish(new Game(S327, 'dirs', 'official', 'no-violation', FEB));
     const dirs = st(idle).dirs;

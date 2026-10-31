@@ -75,9 +75,11 @@ describe('盘口博弈：操纵手法真的推得动价格，也真的会被抓'
     run(b, 10);
     expect(a.player.pos).toBe(pos);
     expect(a.market.ex.trades.filter((t) => t.wash).length).toBe(12);
-    // 跟风盘与散户情绪跟着放量上涨的盘面
-    const trendBought = (g: Game) => g.market.ex.trades.filter((t) => t.buyer === 'trend').reduce((s, t) => s + t.qty, 0);
-    expect(trendBought(a)).toBeGreaterThan(trendBought(b));
+    // 跟风盘被做出来的量吸进来。这里只看「参与度」不看方向：
+    // 那十分钟的历史路径本身在往下走，跟风盘跟着做空也是跟风，
+    // 断言方向会把测试绑死在当天那段重建路径的斜率为正上。
+    const trendVolume = (g: Game) => g.market.ex.trades.filter((t) => t.buyer === 'trend' || t.seller === 'trend').reduce((s, t) => s + t.qty, 0);
+    expect(trendVolume(a)).toBeGreaterThan(trendVolume(b));
     to(a, 1, 0);
     expect(a.flags['surveil-wash-trade']).toBe(1);
     expect(a.linesCrossed).toBeGreaterThan(0);

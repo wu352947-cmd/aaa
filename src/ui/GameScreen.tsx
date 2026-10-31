@@ -3,6 +3,7 @@ import type { Game, GameEvent } from '../engine/game';
 import type { LlmSettings } from '../llm/settings';
 import { CardsDrawer } from './Cards';
 import { Chart } from './Chart';
+import { spread319 } from '../scenarios/s327/calendar';
 import { PixelScene } from './Pixel';
 import type { SceneId, SceneState } from '../pixel/scenes';
 import { Contacts, useDialogues } from './Contacts';
@@ -28,7 +29,7 @@ const SPEED_LABEL = ['慢', '中', '快', '极快', '自动'];
 /** 自动档：没有新消息就快进，一有动静（消息、决策、成交放量）就放慢；决战日最后一刻钟按最慢的档走 */
 const AUTO = 4;
 const AUTO_SPEED = {
-  layout: { quiet: 8, busy: 120 },
+  layout: { quiet: 18, busy: 120 },
   battle: { quiet: 200, busy: 600, final: 1500 },
 };
 
@@ -45,6 +46,8 @@ export function GameScreen({ game, llm, ui, onSettings, onEnd, onReplace }: { ga
   const [speed, setSpeed] = useState(AUTO);
   // 自动档：到第几个 tick 之前保持慢速
   const busyUntil = useRef(0);
+  // 上一次的焦点：只在焦点变化的那一刻放慢，避免整天被按在慢速
+  const focusRef = useRef<string | null>(null);
   const [drawer, setDrawer] = useState<Drawer>(null);
   const [limitPick, setLimitPick] = useState<number | null>(null);
   const [ruleCard, setRuleCard] = useState<{ id: string; detail?: string } | null>(null);
@@ -178,6 +181,12 @@ export function GameScreen({ game, llm, ui, onSettings, onEnd, onReplace }: { ga
           halt = true;
           break;
         }
+        // 焦点换了一句话（基差走到能套利、保证金吃紧、顶到限额）：放慢，让人看见
+        const f = game.phase === 'trading' ? (game.scenario.focus?.(game) ?? null) : null;
+        if (f !== focusRef.current) {
+          focusRef.current = f;
+          if (f) busyUntil.current = Math.max(busyUntil.current, game.market.ex.tick + 20);
+        }
         // 快进中撞上动静，立刻按慢速走
         if (speed === AUTO && pace() > ms) break;
       }
@@ -239,6 +248,12 @@ export function GameScreen({ game, llm, ui, onSettings, onEnd, onReplace }: { ga
   const unread = Math.max(0, intelCount - intelSeen);
   const latest = game.intel.find((i) => showMentor || i.kind !== 'mentor');
   const ruleDef = ruleCard && game.scenario.ruleCards.find((c) => c.id === ruleCard.id);
+  const second = game.scenario.secondLine?.(game) ?? null;
+  // 327 的跨期价差只在交易座位上显示
+  const calSpread = game.scenario.id === 's327' && !observer ? spread319(game) : null;
+  // 图表上的额外价格线：现券（基差）与 319（跨期价差）
+  const extraLines = [...(second ? [second] : []), ...(calSpread != null ? [{ label: '319 远月', offset: calSpread }] : [])];
+  const focus = game.phase === 'trading' ? (game.scenario.focus?.(game) ?? null) : null;
 
   const open = (d: Drawer) => {
     setDrawer(drawer === d ? null : d);
@@ -360,6 +375,14 @@ export function GameScreen({ game, llm, ui, onSettings, onEnd, onReplace }: { ga
       )}
       </div>
 
+      {focus && (
+        <div className="focus-strip" title="这是眼下最值得注意的一件事。自动档遇到它会放慢，给你时间决定。">
+          <span className="focus-dot" />
+          <b>焦点</b>
+          <span>{focus}</span>
+        </div>
+      )}
+
       {ui.scenes !== false && <SceneStrip game={game} paused={paused} redUp={ui.colors === 'cn'} />}
 
       <div className="main">
@@ -382,6 +405,30 @@ export function GameScreen({ game, llm, ui, onSettings, onEnd, onReplace }: { ga
                 <i className="legend-line hist" />
                 真实历史
               </span>
+              {second && (
+                <span title="现券是 327 要交割的那只国库券。两条线之间的缝就是基差：缝张开时做期现套利划算，交割日必须收拢。">
+                  <i className="legend-line spot" />
+                  {second.label}
+                  <b className={cls('num', second.offset >= 0 ? 'up' : 'down')} style={{ marginLeft: 4 }}>
+                    基差 {second.offset >= 0 ? '+' : '−'}
+                    {(Math.abs(second.offset) / 100).toFixed(2)}
+                  </b>
+                  {second.offset < -1 && (
+                    <span className="arb-pill" title="现券比期货便宜：买现券、同时在 327 上卖出，到交割日按结算价交券，这口价差就锁住了。下单面板 → 现券。">
+                      可套利 {(-second.offset / 100).toFixed(2)} 元/口
+                    </span>
+                  )}
+                </span>
+              )}
+              {calSpread != null && (
+                <span title="319 − 327：两个交割月之间的持有成本。做多价差赌它张开，做空价差赌它收拢。">
+                  跨期价差
+                  <b className={cls('num', calSpread >= 0 ? 'up' : 'down')} style={{ marginLeft: 4 }}>
+                    {calSpread >= 0 ? '+' : '−'}
+                    {(Math.abs(calSpread) / 100).toFixed(2)}
+                  </b>
+                </span>
+              )}
               <span className="prov" title={game.scenario.sources.find((s) => s.id === 'reconstruction')?.body}>
                 {day.provenance === 'measured' ? '实测' : '重建'}
               </span>
@@ -390,6 +437,7 @@ export function GameScreen({ game, llm, ui, onSettings, onEnd, onReplace }: { ga
           <Chart
             game={game}
             rev={rev}
+            extra={extraLines}
             mode={layer >= 2 ? chartMode : 'intraday'}
             onPickPrice={
               observer || layer < 3
@@ -499,8 +547,10 @@ function SceneStrip({ game, paused, redUp }: { game: Game; paused: boolean; redU
   const dir: SceneState['dir'] = Math.abs(move) < m.last * 0.0005 ? 0 : move > 0 ? 1 : -1;
   const gme = game.scenario.id === 'gme2021';
   const board = game.scenario.id === 'takeover2015';
-  // 做市商和做空基金坐在交易台前，散户和券商 CEO 在自己的房间里；举牌之争在会议室里
-  const desk = gme && (game.factionId === 'mm' || game.factionId === 'short');
+  const hk = game.scenario.id === 'hk1998';
+  // 做市商和做空基金坐在交易台前，散户和券商 CEO 在自己的房间里；举牌之争在会议室里；
+  // 金管局的交易室和炒家的交易台，都在“台前”
+  const desk = (gme && (game.factionId === 'mm' || game.factionId === 'short')) || hk;
   const scene: SceneId = board ? 'board' : desk ? 'desk' : gme ? 'room' : 'floor';
   // 走势的形状：只取 24 个点，不带数字
   const step = Math.max(1, Math.floor(bars.length / 24));

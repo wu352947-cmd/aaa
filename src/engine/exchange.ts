@@ -29,6 +29,8 @@ export interface RuleDeck {
   maintRate?: number;
   /** 融资年利率：股票账户里超出自有资金的那部分持仓按它计息（不设表示不计息） */
   loanRate?: number;
+  /** 盘中有没有 U 形节奏（开盘尾盘放量、中午清淡）。不设表示全天均匀，避免打乱已校准的剧本 */
+  intradayShape?: boolean;
 }
 
 /** 数量与货币单位（只影响文字） */

@@ -4,7 +4,9 @@ import type { Side } from '../engine/types';
 import { UNITS } from '../engine/exchange';
 import { cls, money, price, qty as fq } from './format';
 import { OptionsTicket } from './OptionsTicket';
-import { FLOAT, spot, spotPrice } from '../scenarios/s327/delivery';
+import { basis, daysToDelivery, FLOAT, fundingRate, spot, spotPrice, theoreticalBasis } from '../scenarios/s327/delivery';
+import { cal, calCards, price319, spread319 } from '../scenarios/s327/calendar';
+import { repo, repoCards, repoDaysLeft, repoLimit } from '../scenarios/s327/repo';
 import { Term } from './Term';
 
 /** 下单面板：在提交之前就把规则检查、保证金占用与预计冲击算给玩家看 */
@@ -36,7 +38,8 @@ export function OrderTicket({
   const [washAt, setWashAt] = useState<'ask' | 'bid'>('ask');
   const hasOptions = layer >= 5 && !!game.scenario.options?.(game);
   const hasSpot = layer >= 5 && game.scenario.id === 's327' && !game.faction.observer;
-  const [tab, setTab] = useState<'stock' | 'options' | 'spot'>('stock');
+  const hasCalendar = layer >= 5 && game.scenario.id === 's327' && !game.faction.observer;
+  const [tab, setTab] = useState<'stock' | 'options' | 'spot' | 'calendar'>('stock');
 
   useEffect(() => {
     if (limitPrice != null) {
@@ -102,7 +105,7 @@ export function OrderTicket({
         </button>
       </div>
       <div className="drawer-body">
-        {(hasOptions || hasSpot) && (
+        {(hasOptions || hasSpot || hasCalendar) && (
           <div className="seg" style={{ marginBottom: 10 }}>
             <button className={cls(tab === 'stock' && 'on')} onClick={() => setTab('stock')}>
               {hasSpot ? '327 期货' : '股票'}
@@ -117,12 +120,19 @@ export function OrderTicket({
                 92(3) 现券
               </button>
             )}
+            {hasCalendar && (
+              <button className={cls(tab === 'calendar' && 'on')} onClick={() => setTab('calendar')}>
+                319 跨期
+              </button>
+            )}
           </div>
         )}
         {tab === 'options' ? (
           <OptionsTicket game={game} onDone={onClose} />
         ) : tab === 'spot' ? (
           <SpotTicket game={game} />
+        ) : tab === 'calendar' ? (
+          <CalendarTicket game={game} />
         ) : (
         <>
         <div className="field">
@@ -295,13 +305,39 @@ function SpotTicket({ game }: { game: Game }) {
   const s = spot(game);
   const buy = game.cards().find((c) => c.id === 'dlv-buy');
   const sell = game.cards().find((c) => c.id === 'dlv-sell');
+  const arb = game.cards().find((c) => c.id === 'dlv-arb');
+  const unwind = game.cards().find((c) => c.id === 'dlv-unwind');
   const px = spotPrice(game);
+  const b = basis(game);
+  const theo = theoreticalBasis(game);
+  const fund = fundingRate(game);
+  const days = daysToDelivery(game);
+  // 市场给的基差之外的，就是自己买出来的那部分
+  const mine = b - theo;
   return (
     <div>
       <div className="preview">
         <dl className="kv" style={{ margin: 0 }}>
-          <dt>现券报价</dt>
-          <dd>{price(px)} 元（期货 {price(game.market.last)}）</dd>
+          <dt>期货 327</dt>
+          <dd className="num">{price(game.market.last)} 元</dd>
+          <dt>现券 92(3)</dt>
+          <dd className="num">{price(px)} 元</dd>
+          <dt title="现券价 − 期货价。每 1 分基差 = 每口 2 元">基差</dt>
+          <dd className={cls('num', b >= 0 ? 'up' : 'down')}>
+            {b >= 0 ? '+' : '−'}
+            {(Math.abs(b) / 100).toFixed(2)} 元
+            <span className="faint" style={{ fontSize: 11 }}>
+              {' '}｜市场给的 {(theo / 100).toFixed(2)}
+              {mine ? `，你推出来的 ${(mine / 100).toFixed(2)}` : ''}
+            </span>
+          </dd>
+          <dt title="票息 + 保值贴补 减去 拆借资金成本，按剩余天数折算">持有成本</dt>
+          <dd className="num">
+            {price(theo)} 元
+            <span className="faint" style={{ fontSize: 11 }}> ｜资金 {(fund * 100).toFixed(1)}%</span>
+          </dd>
+          <dt title="离交割还有几个交易日：交割日基差必须收敛到零">到交割</dt>
+          <dd className="num">{days} 个交易日</dd>
           <dt title="每口对应面值 2 万元，全额付款">每口</dt>
           <dd>{money(px * 2)}</dd>
           <dt>市面上流通</dt>
@@ -313,9 +349,24 @@ function SpotTicket({ game }: { game: Game }) {
         </dl>
       </div>
       <p className="faint" style={{ fontSize: 12 }}>
-        {buy?.does} 囤到流通量的三成以上，坚持交割时交易所会认定逼仓。
+        基差是负的（现券比期货便宜），买现券、卖期货，到交割日按结算价交券，就能锁住这 ${(Math.abs(b) / 100).toFixed(2)} 元的价差。
+        资金一紧，carry 转负，基差就往负走。
       </p>
-      <div className="quick">
+      {arb && (
+        <div className="quick" style={{ marginTop: 6 }}>
+          {arb.targets?.map((t) => (
+            <button key={t.id} className="btn small" disabled={!!arb.blocked} onClick={() => act({ type: 'card', id: 'dlv-arb', target: t.id })}>
+              套利 {t.label}
+            </button>
+          ))}
+          {unwind && (
+            <button className="btn small" disabled={!!unwind.blocked} onClick={() => act({ type: 'card', id: 'dlv-unwind' })}>
+              平掉组合
+            </button>
+          )}
+        </div>
+      )}
+      <div className="quick" style={{ marginTop: 6 }}>
         {buy?.targets?.map((t) => (
           <button key={t.id} className="btn small" disabled={!!buy.blocked} onClick={() => act({ type: 'card', id: 'dlv-buy', target: t.id })}>
             {t.label}
@@ -327,7 +378,110 @@ function SpotTicket({ game }: { game: Game }) {
           </button>
         )}
       </div>
+      <RepoBlock game={game} />
       {buy?.blocked && <p className="muted" style={{ fontSize: 12 }}>{buy.blocked}</p>}
+      {arb?.blocked && <p className="muted" style={{ fontSize: 12 }}>{arb.blocked}</p>}
+    </div>
+  );
+}
+
+/** 319 跨期：远月合约与价差。做的是「两个月份之间的关系」，不是方向 */
+function CalendarTicket({ game }: { game: Game }) {
+  const [, redraw] = useState(0);
+  const act = (a: Parameters<Game['act']>[0]) => (game.act(a), redraw((n) => n + 1));
+  const cards = calCards(game);
+  const c = cal(game);
+  const px = price319(game);
+  const sp = spread319(game);
+  const buy = cards.find((x) => x.id === 'cal-buy');
+  const sell = cards.find((x) => x.id === 'cal-sell');
+  const long = cards.find((x) => x.id === 'cal-long-spread');
+  const short = cards.find((x) => x.id === 'cal-short-spread');
+  const flat = cards.find((x) => x.id === 'cal-flat');
+  return (
+    <div>
+      <div className="preview">
+        <dl className="kv" style={{ margin: 0 }}>
+          <dt>327（近月）</dt>
+          <dd className="num">{price(game.market.last)} 元</dd>
+          <dt>319（远月）</dt>
+          <dd className="num">{price(px)} 元</dd>
+          <dt title="319 − 327。两个交割月之间的持有成本：资金越紧，远月贴水越深">价差</dt>
+          <dd className={cls('num', sp >= 0 ? 'up' : 'down')}>
+            {sp >= 0 ? '+' : '−'}
+            {(Math.abs(sp) / 100).toFixed(2)} 元
+          </dd>
+          <dt>你持有 319</dt>
+          <dd className="num">
+            {c.qty === 0 ? '—' : `${fq(Math.abs(c.qty))} ${c.qty > 0 ? '多' : '空'}`}
+            {c.qty !== 0 && <span className="faint" style={{ fontSize: 11 }}> ｜均价 {price(c.avg)}</span>}
+          </dd>
+        </dl>
+      </div>
+      <p className="faint" style={{ fontSize: 12 }}>
+        做多价差是赌两个月份张开，做空价差是赌它收拢。跟 327 涨不涨没关系——只看资金松紧和贴息预期。
+      </p>
+      <div className="quick" style={{ marginTop: 6 }}>
+        {long?.targets?.map((t) => (
+          <button key={t.id} className="btn small" disabled={!!long.blocked} onClick={() => act({ type: 'card', id: 'cal-long-spread', target: t.id })}>
+            做多价差 {t.label}
+          </button>
+        ))}
+        {short?.targets?.map((t) => (
+          <button key={t.id} className="btn small" disabled={!!short.blocked} onClick={() => act({ type: 'card', id: 'cal-short-spread', target: t.id })}>
+            做空价差 {t.label}
+          </button>
+        ))}
+      </div>
+      <div className="quick" style={{ marginTop: 6 }}>
+        {buy?.targets?.map((t) => (
+          <button key={t.id} className="btn small" disabled={!!buy.blocked} onClick={() => act({ type: 'card', id: 'cal-buy', target: t.id })}>
+            {t.label}
+          </button>
+        ))}
+        {sell?.targets?.map((t) => (
+          <button key={t.id} className="btn small" disabled={!!sell.blocked} onClick={() => act({ type: 'card', id: 'cal-sell', target: t.id })}>
+            {t.label}
+          </button>
+        ))}
+        {flat && (
+          <button className="btn small" onClick={() => act({ type: 'card', id: 'cal-flat' })}>
+            平掉 319
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/** 回购：押现券借钱，比配资便宜但有期限 */
+function RepoBlock({ game }: { game: Game }) {
+  const [, redraw] = useState(0);
+  const act = (a: Parameters<Game['act']>[0]) => (game.act(a), redraw((n) => n + 1));
+  const cards = repoCards(game);
+  const take = cards.find((c) => c.id === 'repo-take');
+  const repay = cards.find((c) => c.id === 'repo-repay');
+  const r = repo(game);
+  const lim = repoLimit(game);
+  if (!take && !repay) return null;
+  return (
+    <div style={{ marginTop: 12, borderTop: '1px solid var(--line)', paddingTop: 10 }}>
+      <div className="faint" style={{ fontSize: 12, marginBottom: 6 }}>
+        回购 · {r.loan > 0 ? `已借 ${money(r.loan)}，${repoDaysLeft(game)} 个交易日后到期` : `押现券可借 ${money(lim)}`}
+      </div>
+      <div className="quick">
+        {take?.targets?.map((t) => (
+          <button key={t.id} className="btn small" disabled={!!take.blocked} onClick={() => act({ type: 'card', id: 'repo-take', target: t.id })}>
+            {t.label}
+          </button>
+        ))}
+        {repay && (
+          <button className="btn small" disabled={!!repay.blocked} onClick={() => act({ type: 'card', id: 'repo-repay' })}>
+            还回购
+          </button>
+        )}
+      </div>
+      {take?.blocked && <p className="muted" style={{ fontSize: 12 }}>{take.blocked}</p>}
     </div>
   );
 }

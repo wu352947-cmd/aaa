@@ -17,10 +17,65 @@ import { BATTLE } from './data';
 export const FLOAT = 150_000;
 /** 持有流通现券超过这个比例，交易所就认定是逼仓 */
 const CORNER = 0.3;
-/** 现券对期货的正常升水（分） */
-const BASIS = 20;
+/** 交割时抢券的挤兑溢价（分）：真到了交割，市面上没券的人只能认这个价 */
+const SCRAMBLE = 20;
 /** 每买进 1 万口，现券报价被推高几分 */
 const IMPACT = 3;
+
+// ───────────────────────── 基差 ─────────────────────────
+
+/**
+ * 期现价差（基差）= 现券价 − 期货价。它不是一个常数：持有现券能拿到票息和保值贴补，
+ * 但占用的资金要付拆借利息，两者的差按剩余期限折算，就是理论基差。
+ *
+ *   carry = (票息 − 资金成本) × 剩余天数 / 365 × 价格
+ *
+ * 再加上一部分「交割便利」升水——手上有券的人可以随时交割，这份便利临到交割日就没用了，
+ * 所以按剩余期限比例衰减到零。资金一紧（春节前、决战前），carry 转负，现券反而比期货便宜：
+ * 这就是当年做基差的人每天在算的东西。
+ */
+
+/** 92(3) 的持有收益：票面 13.96% 加保值贴补，按年化算 */
+const CARRY_YIELD = 0.125;
+/** 交割便利升水（分），随剩余期限线性收敛 */
+const CONVENIENCE = 12;
+/** 第一章到交割一共几个交易日：sd 从 −11 走到 +6 */
+const SPAN = 17;
+
+/** 距交割还有几个交易日（第三章余波里交割，sd = BATTLE + 1） */
+export function daysToDelivery(g: Game): number {
+  return Math.max(0, BATTLE + 1 - sd(g));
+}
+
+/** 当天的资金成本（年化）：春节前抽紧，节后松下来，决战前又紧 */
+export function fundingRate(g: Game): number {
+  const d = sd(g);
+  if (d <= -1) return 0.2;
+  if (d <= 2) return 0.1;
+  if (d <= 4) return 0.13;
+  return 0.17;
+}
+
+/** 理论基差（分）：持有收益减去资金成本，加上会衰减的便利升水 */
+export function theoreticalBasis(g: Game): number {
+  const days = daysToDelivery(g);
+  if (days <= 0) return 0;
+  const carry = (CARRY_YIELD - fundingRate(g)) * (days / 365) * g.market.last;
+  return carry + CONVENIENCE * (days / SPAN);
+}
+
+/** 当前基差（分）= 现券 − 期货，含被自己买出来的溢价与稀缺 */
+export function basis(g: Game): number {
+  return spotPrice(g) - g.market.last;
+}
+
+/** 扣掉自己推出来的那部分，还剩多少是市场给的 */
+export function marketBasis(g: Game): number {
+  return theoreticalBasis(g) + spot(g).premium + scarcity(g);
+}
+
+/** 每 1 口基差值多少钱（元）：一口对应面值 2 万元 */
+export const basisUnit = (fen: number) => fen * 2;
 
 interface Spot {
   /** 你手里的现券（口当量） */
@@ -45,9 +100,9 @@ function scarcity(g: Game): number {
   return 600 * Math.pow(spot(g).held / FLOAT, 2);
 }
 
-/** 现券报价（分） */
+/** 现券报价（分）= 期货价 + 基差 + 自己推出来的溢价 + 缺券的稀缺溢价 */
 export function spotPrice(g: Game): number {
-  return g.market.last + BASIS + spot(g).premium + scarcity(g);
+  return g.market.last + theoreticalBasis(g) + spot(g).premium + scarcity(g);
 }
 
 /** 现券市值（元），计入权益 */
@@ -60,6 +115,19 @@ export function spotNight(g: Game): void {
 }
 
 const lots = (q: number) => (q >= 10_000 ? `${(q / 10_000).toFixed(q % 10_000 ? 1 : 0)} 万口` : `${q} 口`);
+
+/** 期现套利能做的数量：现金要够买现券，期货那一腿还得过得了限仓与保证金 */
+function arbSizes(g: Game): number[] {
+  const p = g.player;
+  const ex = g.market.ex;
+  const px = spotPrice(g);
+  const sizes = g.factionId === 'retail' ? [1, 5] : [5_000, 20_000, 50_000];
+  return sizes.filter((q) => {
+    if (spot(g).held + q > FLOAT) return false;
+    if (q * px * 2 > Math.max(0, p.cash)) return false;
+    return ex.check({ owner: p.id, side: 'sell', qty: q, type: 'market' }, p).every((h) => !h.blocked);
+  });
+}
 
 export function deliveryCards(g: Game): CardDef[] {
   const s = spot(g);
@@ -92,6 +160,35 @@ export function deliveryCards(g: Game): CardDef[] {
       when: 'any',
       blocked: s.choice === 'deliver' ? '已经申请交割：现券要用来交割' : undefined,
     });
+  // 期现套利：两条腿一起做。基差是负的（现券比期货便宜）就有锁定利润
+  const arb = arbSizes(g);
+  if (arb.length && !s.choice) {
+    const q = arb[arb.length - 1];
+    const lock = -basis(g) * q * 2;
+    out.push({
+      id: 'dlv-arb',
+      name: '期现套利：买现券 + 卖期货',
+      group: '现券与交割',
+      color: 'white',
+      does: `买进 ${lots(q)} 现券，同时在 327 上卖出 ${lots(q)}。两条腿锁死，到交割日现券按结算价交出去——你赚的就是今天这 ${(basis(g) / 100).toFixed(2)} 元的基差，锁住 ${fmtYi(lock)}。基差是负的时候才划算。`,
+      cost: '现券要全额付现金，期货那一腿还要占保证金。基差在交割前还可能继续走，锁住的只是今天的价。',
+      when: 'trading',
+      targets: arb.map((n) => ({ id: String(n), label: `做 ${lots(n)}` })),
+      blocked: s.held + q > FLOAT ? '市面上的券不够' : undefined,
+    });
+  }
+  if (s.held > 0 && !s.choice) {
+    out.push({
+      id: 'dlv-unwind',
+      name: '平掉期现组合：卖现券 + 买期货',
+      group: '现券与交割',
+      color: 'white',
+      does: `把 ${lots(s.held)} 现券卖回市场，同时买回同样多的 327。基差已经收敛（现在 ${(basis(g) / 100).toFixed(2)} 元），再拿着不划算了。`,
+      cost: '卖现券会把价格压低，这部分的损耗自己承担。',
+      when: 'trading',
+      blocked: s.choice ? '合约已经了结' : undefined,
+    });
+  }
   // 余波：327 停牌清算，持仓怎么了结
   if (sd(g) > BATTLE && p.pos !== 0) {
     const long = p.pos > 0;
@@ -150,6 +247,34 @@ export function deliveryPlay(g: Game, id: string, target?: string): CardResult {
       s.cost = 0;
       return R(`卖掉 ${lots(q)} 现券`, [`均价 ${(avg / 100).toFixed(2)} 元，收回 ${fmtYi(got)}`]);
     }
+    case 'dlv-arb': {
+      const q = Number(target) || 0;
+      if (!q) return R('没有数量', []);
+      const px = spotPrice(g);
+      const cost = q * px * 2;
+      p.cash -= cost;
+      s.held += q;
+      s.cost += cost;
+      s.premium += (q / 10_000) * IMPACT;
+      // 期货那一腿本分钟就和市价成交：算期现套利，不是投机
+      g.pending.push({ owner: p.id, side: 'sell', qty: q, type: 'market', tag: 'arb' });
+      return R('期现套利建仓', [
+        `买进 ${lots(q)} 现券，均价 ${(px / 100).toFixed(2)} 元，付 ${fmtYi(cost)}`,
+        `327 卖出 ${lots(q)}，期货价 ${(g.market.last / 100).toFixed(2)} 元`,
+        `锁定价差 ${(basis(g) / 100).toFixed(2)} 元 / 口，合计 ${fmtYi(-basis(g) * q * 2)}`,
+      ]);
+    }
+    case 'dlv-unwind': {
+      const q = s.held;
+      s.premium -= (q / 10_000) * IMPACT;
+      const avg = spotPrice(g) + (q / 10_000) * IMPACT * 0.5;
+      const got = q * avg * 2;
+      p.cash += got;
+      s.held = 0;
+      s.cost = 0;
+      g.pending.push({ owner: p.id, side: 'buy', qty: q, type: 'market', tag: 'arb' });
+      return R('平掉期现组合', [`卖掉 ${lots(q)} 现券，收回 ${fmtYi(got)}`, `327 买回 ${lots(q)}`]);
+    }
     case 'dlv-agree':
       s.choice = 'agree';
       return R('同意协议平仓', ['按结算价了结，不走交割']);
@@ -179,8 +304,9 @@ export function deliverySettle(g: Game, settle: number): { pnl: number; lines: s
     const cornered = share > CORNER;
     const eff = cornered ? premium / 2 : premium;
     const fromYou = Math.min(s.held, delivered);
-    pnl += delivered * BASIS * 2;
-    pnl += fromYou * (settle + eff) * 2 + (s.held - fromYou) * (settle + BASIS) * 2 - marked;
+    pnl += delivered * SCRAMBLE * 2;
+    // 交割日现券就值结算价：基差已经收敛到零
+    pnl += fromYou * (settle + eff) * 2 + (s.held - fromYou) * settle * 2 - marked;
     if (cornered) {
       dirty = true;
       g.addHeat(25, '利用现券短缺逼仓');
@@ -198,19 +324,19 @@ export function deliverySettle(g: Game, settle: number): { pnl: number; lines: s
     const squeeze = Math.min(600, Math.max(0, 200 * (buy / FLOAT - 0.5)));
     // 自己的现券按结算价交出去；剩下的高价买；买不到的付违约金
     pnl += own * settle * 2 - own * spotPrice(g) * 2;
-    pnl -= got * (BASIS + squeeze) * 2;
+    pnl -= got * (SCRAMBLE + squeeze) * 2;
     pnl -= short * 1000 * 2;
-    pnl += (s.held - own) * (settle + BASIS) * 2 - (s.held - own) * spotPrice(g) * 2;
-    lines.push(`你要交出 ${lots(need)} 现券：自己有 ${lots(own)}，去市面上买了 ${lots(got)}，每百元多付 ${((BASIS + squeeze) / 100).toFixed(2)} 元。`);
+    pnl += (s.held - own) * settle * 2 - (s.held - own) * spotPrice(g) * 2;
+    lines.push(`你要交出 ${lots(need)} 现券：自己有 ${lots(own)}，去市面上买了 ${lots(got)}，每百元多付 ${((SCRAMBLE + squeeze) / 100).toFixed(2)} 元。`);
     if (short > 0) {
       dirty = true;
       g.addHeat(20, '交割违约');
       lines.push(`还有 ${lots(short)} 怎么也买不到：交割违约，按每百元面值 10 元付违约金。`);
     }
   } else {
-    // 协议平仓：逼仓的溢价随之消失，手里的现券回到正常升水
-    pnl += s.held * (settle + BASIS) * 2 - marked;
-    if (s.held) lines.push(`327 协议平仓，现券的逼仓溢价随之消失。你手里的 ${lots(s.held)} 现券按 ${((settle + BASIS) / 100).toFixed(2)} 元计。`);
+    // 协议平仓：逼仓的溢价随之消失，手里的现券回到结算价
+    pnl += s.held * settle * 2 - marked;
+    if (s.held) lines.push(`327 协议平仓，现券的逼仓溢价随之消失。你手里的 ${lots(s.held)} 现券按结算价 ${(settle / 100).toFixed(2)} 元计。`);
   }
   return { pnl, lines, dirty };
 }

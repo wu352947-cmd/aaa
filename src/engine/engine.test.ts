@@ -148,7 +148,8 @@ describe('剧本：玩家真的能改变历史', () => {
   });
 });
 
-describe('新座位：空翻多的盟友', () => {
+// 全剧本重放，并发跑满时会超过默认的 5 秒
+describe('新座位：空翻多的盟友', { timeout: 60_000 }, () => {
   function play(choice: string): Game {
     const g = new Game(S327, 'ally', 'ally', 'no-betrayal', FEB);
     for (let guard = 0; guard < 5000 && !g.ending; guard++) {

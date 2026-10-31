@@ -505,6 +505,47 @@ textarea {
 .legend-line.hist {
   border-top: 2px dashed var(--gold);
 }
+.focus-strip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 12px;
+  font-size: 13px;
+  color: var(--gold);
+  background: color-mix(in srgb, var(--gold) 10%, transparent);
+  border-bottom: 1px solid var(--gold-dim);
+}
+.focus-strip b {
+  font-weight: 600;
+  letter-spacing: 0.08em;
+}
+.focus-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--gold);
+  box-shadow: 0 0 0 0 var(--gold);
+  animation: focus-pulse 2.4s ease-out infinite;
+}
+@keyframes focus-pulse {
+  0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--gold) 55%, transparent); }
+  70% { box-shadow: 0 0 0 7px transparent; }
+  100% { box-shadow: 0 0 0 0 transparent; }
+}
+.arb-pill {
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  border: 1px solid var(--gold);
+  color: var(--gold);
+  font-size: 11px;
+  white-space: nowrap;
+}
+/* 现券线：点线，和期货主线之间的缝就是基差 */
+.legend-line.spot {
+  border-top: 2px dotted var(--gold);
+  opacity: 0.75;
+}
 .prov {
   border: 1px solid var(--gold-dim);
   color: var(--gold);
