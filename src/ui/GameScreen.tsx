@@ -249,9 +249,11 @@ export function GameScreen({ game, llm, ui, onSettings, onEnd, onReplace }: { ga
   const latest = game.intel.find((i) => showMentor || i.kind !== 'mentor');
   const ruleDef = ruleCard && game.scenario.ruleCards.find((c) => c.id === ruleCard.id);
   const second = game.scenario.secondLine?.(game) ?? null;
-  const focus = game.phase === 'trading' ? (game.scenario.focus?.(game) ?? null) : null;
   // 327 的跨期价差只在交易座位上显示
   const calSpread = game.scenario.id === 's327' && !observer ? spread319(game) : null;
+  // 图表上的额外价格线：现券（基差）与 319（跨期价差）
+  const extraLines = [...(second ? [second] : []), ...(calSpread != null ? [{ label: '319 远月', offset: calSpread }] : [])];
+  const focus = game.phase === 'trading' ? (game.scenario.focus?.(game) ?? null) : null;
 
   const open = (d: Drawer) => {
     setDrawer(drawer === d ? null : d);
@@ -435,7 +437,7 @@ export function GameScreen({ game, llm, ui, onSettings, onEnd, onReplace }: { ga
           <Chart
             game={game}
             rev={rev}
-            second={second}
+            extra={extraLines}
             mode={layer >= 2 ? chartMode : 'intraday'}
             onPickPrice={
               observer || layer < 3

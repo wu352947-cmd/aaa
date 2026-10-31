@@ -21,6 +21,8 @@ export default defineConfig(({ mode }) => {
           },
         }
       : undefined,
-    test: { environment: 'node' },
+    // 剧本长到 19 天之后，一个全剧本重放的用例在本机就要 2~4 秒；
+    // 并发跑满或 CI 的机器慢一点，默认的 5 秒会随机超时。统一放宽。
+    test: { environment: 'node', testTimeout: 60_000 },
   };
 });

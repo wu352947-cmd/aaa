@@ -35,6 +35,7 @@ import { BATTLE, CHAPTERS, DAYS, PRE, DECK_1995, FACTIONS, NPCS, OFFICIAL_CLOSE,
 import { draftPlay, DRAFT_327 } from './draft';
 import { basis, daysToDelivery, deliveryCards, deliveryPlay, deliverySettle, spot, spotNight, spotValue } from './delivery';
 import { cal, calCards, calPlay, calRisk, calValue, spread319 } from './calendar';
+import { repoCards, repoNight, repoPlay } from './repo';
 import { victim327 } from './victims';
 import { holidayNight, JAN_NET, januaryDecide, januaryNight, januaryTick } from './january';
 import { seatPuzzle, solveSeats } from './seats';
@@ -192,7 +193,7 @@ export const S327: Scenario = {
   members: [SHORT, LONG, ALLY, HIDE],
   lotPresets: [100_000, 500_000],
   groupName: (g, who) => groupName(g, who),
-  cards: (g) => (isOfficial(g) ? regCards(g) : [...traderCards(g), ...deliveryCards(g), ...calCards(g)]),
+  cards: (g) => (isOfficial(g) ? regCards(g) : [...traderCards(g), ...deliveryCards(g), ...calCards(g), ...repoCards(g)]),
   playCard: (g, id, target) =>
     id.startsWith('x-')
       ? draftPlay(g, id, target)
@@ -200,6 +201,8 @@ export const S327: Scenario = {
         ? deliveryPlay(g, id, target)
         : id.startsWith('cal-')
           ? calPlay(g, id, target)
+          : id.startsWith('repo-')
+            ? repoPlay(g, id, target)
           : isOfficial(g)
             ? regPlay(g, id, target)
             : traderPlay(g, id, target),
@@ -509,6 +512,7 @@ export const S327: Scenario = {
 
   onNight(g) {
     spotNight(g);
+    repoNight(g);
     night(g);
   },
 

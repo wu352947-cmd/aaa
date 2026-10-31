@@ -6,6 +6,7 @@ import { cls, money, price, qty as fq } from './format';
 import { OptionsTicket } from './OptionsTicket';
 import { basis, daysToDelivery, FLOAT, fundingRate, spot, spotPrice, theoreticalBasis } from '../scenarios/s327/delivery';
 import { cal, calCards, price319, spread319 } from '../scenarios/s327/calendar';
+import { repo, repoCards, repoDaysLeft, repoLimit } from '../scenarios/s327/repo';
 import { Term } from './Term';
 
 /** 下单面板：在提交之前就把规则检查、保证金占用与预计冲击算给玩家看 */
@@ -377,6 +378,7 @@ function SpotTicket({ game }: { game: Game }) {
           </button>
         )}
       </div>
+      <RepoBlock game={game} />
       {buy?.blocked && <p className="muted" style={{ fontSize: 12 }}>{buy.blocked}</p>}
       {arb?.blocked && <p className="muted" style={{ fontSize: 12 }}>{arb.blocked}</p>}
     </div>
@@ -448,6 +450,38 @@ function CalendarTicket({ game }: { game: Game }) {
           </button>
         )}
       </div>
+    </div>
+  );
+}
+
+/** 回购：押现券借钱，比配资便宜但有期限 */
+function RepoBlock({ game }: { game: Game }) {
+  const [, redraw] = useState(0);
+  const act = (a: Parameters<Game['act']>[0]) => (game.act(a), redraw((n) => n + 1));
+  const cards = repoCards(game);
+  const take = cards.find((c) => c.id === 'repo-take');
+  const repay = cards.find((c) => c.id === 'repo-repay');
+  const r = repo(game);
+  const lim = repoLimit(game);
+  if (!take && !repay) return null;
+  return (
+    <div style={{ marginTop: 12, borderTop: '1px solid var(--line)', paddingTop: 10 }}>
+      <div className="faint" style={{ fontSize: 12, marginBottom: 6 }}>
+        回购 · {r.loan > 0 ? `已借 ${money(r.loan)}，${repoDaysLeft(game)} 个交易日后到期` : `押现券可借 ${money(lim)}`}
+      </div>
+      <div className="quick">
+        {take?.targets?.map((t) => (
+          <button key={t.id} className="btn small" disabled={!!take.blocked} onClick={() => act({ type: 'card', id: 'repo-take', target: t.id })}>
+            {t.label}
+          </button>
+        ))}
+        {repay && (
+          <button className="btn small" disabled={!!repay.blocked} onClick={() => act({ type: 'card', id: 'repo-repay' })}>
+            还回购
+          </button>
+        )}
+      </div>
+      {take?.blocked && <p className="muted" style={{ fontSize: 12 }}>{take.blocked}</p>}
     </div>
   );
 }
