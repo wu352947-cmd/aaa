@@ -3,6 +3,7 @@ import type { Game, GameEvent } from '../engine/game';
 import type { LlmSettings } from '../llm/settings';
 import { CardsDrawer } from './Cards';
 import { Chart } from './Chart';
+import { spread319 } from '../scenarios/s327/calendar';
 import { PixelScene } from './Pixel';
 import type { SceneId, SceneState } from '../pixel/scenes';
 import { Contacts, useDialogues } from './Contacts';
@@ -249,6 +250,8 @@ export function GameScreen({ game, llm, ui, onSettings, onEnd, onReplace }: { ga
   const ruleDef = ruleCard && game.scenario.ruleCards.find((c) => c.id === ruleCard.id);
   const second = game.scenario.secondLine?.(game) ?? null;
   const focus = game.phase === 'trading' ? (game.scenario.focus?.(game) ?? null) : null;
+  // 327 的跨期价差只在交易座位上显示
+  const calSpread = game.scenario.id === 's327' && !observer ? spread319(game) : null;
 
   const open = (d: Drawer) => {
     setDrawer(drawer === d ? null : d);
@@ -413,6 +416,15 @@ export function GameScreen({ game, llm, ui, onSettings, onEnd, onReplace }: { ga
                       可套利 {(-second.offset / 100).toFixed(2)} 元/口
                     </span>
                   )}
+                </span>
+              )}
+              {calSpread != null && (
+                <span title="319 − 327：两个交割月之间的持有成本。做多价差赌它张开，做空价差赌它收拢。">
+                  跨期价差
+                  <b className={cls('num', calSpread >= 0 ? 'up' : 'down')} style={{ marginLeft: 4 }}>
+                    {calSpread >= 0 ? '+' : '−'}
+                    {(Math.abs(calSpread) / 100).toFixed(2)}
+                  </b>
                 </span>
               )}
               <span className="prov" title={game.scenario.sources.find((s) => s.id === 'reconstruction')?.body}>

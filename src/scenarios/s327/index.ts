@@ -34,6 +34,7 @@ import {
 import { BATTLE, CHAPTERS, DAYS, PRE, DECK_1995, FACTIONS, NPCS, OFFICIAL_CLOSE, PARAMS, PRINCIPLES, PROLOGUE, RULE_CARDS, SOURCES, START_PRICE } from './data';
 import { draftPlay, DRAFT_327 } from './draft';
 import { basis, daysToDelivery, deliveryCards, deliveryPlay, deliverySettle, spot, spotNight, spotValue } from './delivery';
+import { cal, calCards, calPlay, calRisk, calValue, spread319 } from './calendar';
 import { victim327 } from './victims';
 import { holidayNight, JAN_NET, januaryDecide, januaryNight, januaryTick } from './january';
 import { seatPuzzle, solveSeats } from './seats';
@@ -191,11 +192,19 @@ export const S327: Scenario = {
   members: [SHORT, LONG, ALLY, HIDE],
   lotPresets: [100_000, 500_000],
   groupName: (g, who) => groupName(g, who),
-  cards: (g) => (isOfficial(g) ? regCards(g) : [...traderCards(g), ...deliveryCards(g)]),
+  cards: (g) => (isOfficial(g) ? regCards(g) : [...traderCards(g), ...deliveryCards(g), ...calCards(g)]),
   playCard: (g, id, target) =>
-    id.startsWith('x-') ? draftPlay(g, id, target) : id.startsWith('dlv-') ? deliveryPlay(g, id, target) : isOfficial(g) ? regPlay(g, id, target) : traderPlay(g, id, target),
+    id.startsWith('x-')
+      ? draftPlay(g, id, target)
+      : id.startsWith('dlv-')
+        ? deliveryPlay(g, id, target)
+        : id.startsWith('cal-')
+          ? calPlay(g, id, target)
+          : isOfficial(g)
+            ? regPlay(g, id, target)
+            : traderPlay(g, id, target),
   // 交易座位手里的 92(3) 现券按市价计入权益
-  extraValue: (g) => (isOfficial(g) ? 0 : spotValue(g)),
+  extraValue: (g) => (isOfficial(g) ? 0 : spotValue(g) + calValue(g)),
   meters: (g) => (isOfficial(g) ? regMeters(g) : undefined),
   // 交易座位在图表上多画一条现券线：它和期货线之间的缝就是基差
   secondLine: (g) => (isOfficial(g) ? null : { label: '现券 92(3)', offset: basis(g) }),
@@ -341,6 +350,7 @@ export const S327: Scenario = {
   onTick(g) {
     const s = st(g);
     const m = g.market;
+    if (!isOfficial(g) && g.phase === 'trading') calRisk(g);
     const t = m.t - 1; // 刚刚走完的这一分钟
     const d = sd(g);
     if (g.isBattleDay) s.snaps.set(m.ex.tick + 1, { accounts: m.ex.snapshot(), last: m.ex.last, credit: g.credit && { ...g.credit } });
@@ -1218,6 +1228,14 @@ function s327Focus(g: Game): string | null {
   if (b < -2 && spot(g).held === 0) return `基差 −${yuan(b)} 元：现券比期货便宜，买现券卖期货能锁住这么多`;
   // 手上有券，基差翻正了：该收
   if (b > 3 && spot(g).held > 0) return `基差 +${yuan(b)} 元：你手里的现券浮盈了，卖掉现券买回期货就把这笔收进口袋`;
+  // 跨期：价差走到偏极端的位置
+  const sp = spread319(g);
+  const held = cal(g).qty;
+  if (Math.abs(sp) > 150) {
+    return `跨期价差 ${sp > 0 ? '+' : '−'}${yuan(sp)} 元：${sp > 0 ? '远月升水偏厚，做空价差等它收敛' : '远月贴水很深，做多价差等它回来'}`;
+  }
+  // 手里有 319，价差已经收窄到正常水平
+  if (held !== 0 && Math.abs(sp) < 40) return `价差回到 ${(sp / 100).toFixed(2)} 元，319 这一腿可以收了`;
   return null;
 }
 

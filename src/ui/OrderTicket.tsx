@@ -5,6 +5,7 @@ import { UNITS } from '../engine/exchange';
 import { cls, money, price, qty as fq } from './format';
 import { OptionsTicket } from './OptionsTicket';
 import { basis, daysToDelivery, FLOAT, fundingRate, spot, spotPrice, theoreticalBasis } from '../scenarios/s327/delivery';
+import { cal, calCards, price319, spread319 } from '../scenarios/s327/calendar';
 import { Term } from './Term';
 
 /** 下单面板：在提交之前就把规则检查、保证金占用与预计冲击算给玩家看 */
@@ -36,7 +37,8 @@ export function OrderTicket({
   const [washAt, setWashAt] = useState<'ask' | 'bid'>('ask');
   const hasOptions = layer >= 5 && !!game.scenario.options?.(game);
   const hasSpot = layer >= 5 && game.scenario.id === 's327' && !game.faction.observer;
-  const [tab, setTab] = useState<'stock' | 'options' | 'spot'>('stock');
+  const hasCalendar = layer >= 5 && game.scenario.id === 's327' && !game.faction.observer;
+  const [tab, setTab] = useState<'stock' | 'options' | 'spot' | 'calendar'>('stock');
 
   useEffect(() => {
     if (limitPrice != null) {
@@ -102,7 +104,7 @@ export function OrderTicket({
         </button>
       </div>
       <div className="drawer-body">
-        {(hasOptions || hasSpot) && (
+        {(hasOptions || hasSpot || hasCalendar) && (
           <div className="seg" style={{ marginBottom: 10 }}>
             <button className={cls(tab === 'stock' && 'on')} onClick={() => setTab('stock')}>
               {hasSpot ? '327 期货' : '股票'}
@@ -117,12 +119,19 @@ export function OrderTicket({
                 92(3) 现券
               </button>
             )}
+            {hasCalendar && (
+              <button className={cls(tab === 'calendar' && 'on')} onClick={() => setTab('calendar')}>
+                319 跨期
+              </button>
+            )}
           </div>
         )}
         {tab === 'options' ? (
           <OptionsTicket game={game} onDone={onClose} />
         ) : tab === 'spot' ? (
           <SpotTicket game={game} />
+        ) : tab === 'calendar' ? (
+          <CalendarTicket game={game} />
         ) : (
         <>
         <div className="field">
@@ -370,6 +379,75 @@ function SpotTicket({ game }: { game: Game }) {
       </div>
       {buy?.blocked && <p className="muted" style={{ fontSize: 12 }}>{buy.blocked}</p>}
       {arb?.blocked && <p className="muted" style={{ fontSize: 12 }}>{arb.blocked}</p>}
+    </div>
+  );
+}
+
+/** 319 跨期：远月合约与价差。做的是「两个月份之间的关系」，不是方向 */
+function CalendarTicket({ game }: { game: Game }) {
+  const [, redraw] = useState(0);
+  const act = (a: Parameters<Game['act']>[0]) => (game.act(a), redraw((n) => n + 1));
+  const cards = calCards(game);
+  const c = cal(game);
+  const px = price319(game);
+  const sp = spread319(game);
+  const buy = cards.find((x) => x.id === 'cal-buy');
+  const sell = cards.find((x) => x.id === 'cal-sell');
+  const long = cards.find((x) => x.id === 'cal-long-spread');
+  const short = cards.find((x) => x.id === 'cal-short-spread');
+  const flat = cards.find((x) => x.id === 'cal-flat');
+  return (
+    <div>
+      <div className="preview">
+        <dl className="kv" style={{ margin: 0 }}>
+          <dt>327（近月）</dt>
+          <dd className="num">{price(game.market.last)} 元</dd>
+          <dt>319（远月）</dt>
+          <dd className="num">{price(px)} 元</dd>
+          <dt title="319 − 327。两个交割月之间的持有成本：资金越紧，远月贴水越深">价差</dt>
+          <dd className={cls('num', sp >= 0 ? 'up' : 'down')}>
+            {sp >= 0 ? '+' : '−'}
+            {(Math.abs(sp) / 100).toFixed(2)} 元
+          </dd>
+          <dt>你持有 319</dt>
+          <dd className="num">
+            {c.qty === 0 ? '—' : `${fq(Math.abs(c.qty))} ${c.qty > 0 ? '多' : '空'}`}
+            {c.qty !== 0 && <span className="faint" style={{ fontSize: 11 }}> ｜均价 {price(c.avg)}</span>}
+          </dd>
+        </dl>
+      </div>
+      <p className="faint" style={{ fontSize: 12 }}>
+        做多价差是赌两个月份张开，做空价差是赌它收拢。跟 327 涨不涨没关系——只看资金松紧和贴息预期。
+      </p>
+      <div className="quick" style={{ marginTop: 6 }}>
+        {long?.targets?.map((t) => (
+          <button key={t.id} className="btn small" disabled={!!long.blocked} onClick={() => act({ type: 'card', id: 'cal-long-spread', target: t.id })}>
+            做多价差 {t.label}
+          </button>
+        ))}
+        {short?.targets?.map((t) => (
+          <button key={t.id} className="btn small" disabled={!!short.blocked} onClick={() => act({ type: 'card', id: 'cal-short-spread', target: t.id })}>
+            做空价差 {t.label}
+          </button>
+        ))}
+      </div>
+      <div className="quick" style={{ marginTop: 6 }}>
+        {buy?.targets?.map((t) => (
+          <button key={t.id} className="btn small" disabled={!!buy.blocked} onClick={() => act({ type: 'card', id: 'cal-buy', target: t.id })}>
+            {t.label}
+          </button>
+        ))}
+        {sell?.targets?.map((t) => (
+          <button key={t.id} className="btn small" disabled={!!sell.blocked} onClick={() => act({ type: 'card', id: 'cal-sell', target: t.id })}>
+            {t.label}
+          </button>
+        ))}
+        {flat && (
+          <button className="btn small" onClick={() => act({ type: 'card', id: 'cal-flat' })}>
+            平掉 319
+          </button>
+        )}
+      </div>
     </div>
   );
 }
