@@ -15,7 +15,7 @@ export function Title({
 }: {
   scenario: Scenario;
   save: SaveData | null;
-  onStart: (which: 's327' | 'tulip' | 'gme2021' | 'takeover2015') => void;
+  onStart: (which: 's327' | 'tulip' | 'gme2021' | 'takeover2015' | 'hk1998') => void;
   onContinue: () => void;
   onSettings: () => void;
   onCareer: () => void;
@@ -23,7 +23,7 @@ export function Title({
   careerLabel?: string;
 }) {
   const [archive, setArchive] = useState(false);
-  const [which, setWhich] = useState<'s327' | 'tulip' | 'gme2021' | 'takeover2015'>(save ? (save.scenario as 's327' | 'tulip' | 'gme2021' | 'takeover2015') : 'tulip');
+  const [which, setWhich] = useState<'s327' | 'tulip' | 'gme2021' | 'takeover2015' | 'hk1998'>(save ? (save.scenario as 's327' | 'tulip' | 'gme2021' | 'takeover2015' | 'hk1998') : 'tulip');
   return (
     <div className="title-screen paper">
       <div className="title-card">
@@ -32,6 +32,8 @@ export function Title({
             <PixelScene scene="tavern" state={{ who: ['jan', 'pieter', 'cornelis', 'maritje', 'dirck', 'hendrick'] }} label="1637 年，哈勒姆的金鹿酒馆" />
           ) : which === 's327' ? (
             <PixelScene scene="floor" state={{ heat: 0.7, dir: 1 }} label="1995 年，上海的交易大厅" />
+          ) : which === 'hk1998' ? (
+            <PixelScene scene="floor" state={{ heat: 0.9, dir: -1 }} label="1998 年，香港的交易室" />
           ) : which === 'takeover2015' ? (
             <PixelScene scene="board" state={{ heat: 0.5, dir: 1, who: ['ye', 'fu', 'wang', 'yu'] }} label="2015 年，深圳的一间会议室" />
           ) : (
@@ -64,6 +66,14 @@ export function Title({
               <div style={{ fontFamily: 'var(--serif)', fontWeight: 700, fontSize: 18 }}>门口的野蛮人</div>
               <div style={{ fontSize: 13, color: 'var(--ink-soft)' }}>2015—2016 · 深圳 · 险资举牌</div>
               <div style={{ fontSize: 13, marginTop: 4 }}>不比谁赚得多，比谁拿到公司：举牌、停牌、白衣骑士、股东大会的每一票。两个座位。</div>
+            </div>
+          </button>
+          <button className={cls('scenario-ticket', which === 'hk1998' && 'on')} role="radio" aria-checked={which === 'hk1998'} onClick={() => setWhich('hk1998')}>
+            <div className="seal" style={{ fontSize: 16 }}>1998</div>
+            <div>
+              <div style={{ fontFamily: 'var(--serif)', fontWeight: 700, fontSize: 18 }}>港元保卫战</div>
+              <div style={{ fontSize: 13, color: 'var(--ink-soft)' }}>1998 · 香港 · 联系汇率与期指</div>
+              <div style={{ fontSize: 13, marginTop: 4 }}>炒家不赌汇率会跌，赌的是你为了守汇率而加息。三个座位，十九个交易日。</div>
             </div>
           </button>
           <button className={cls('scenario-ticket', which === 'gme2021' && 'on')} role="radio" aria-checked={which === 'gme2021'} onClick={() => setWhich('gme2021')}>

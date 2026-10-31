@@ -547,8 +547,10 @@ function SceneStrip({ game, paused, redUp }: { game: Game; paused: boolean; redU
   const dir: SceneState['dir'] = Math.abs(move) < m.last * 0.0005 ? 0 : move > 0 ? 1 : -1;
   const gme = game.scenario.id === 'gme2021';
   const board = game.scenario.id === 'takeover2015';
-  // 做市商和做空基金坐在交易台前，散户和券商 CEO 在自己的房间里；举牌之争在会议室里
-  const desk = gme && (game.factionId === 'mm' || game.factionId === 'short');
+  const hk = game.scenario.id === 'hk1998';
+  // 做市商和做空基金坐在交易台前，散户和券商 CEO 在自己的房间里；举牌之争在会议室里；
+  // 金管局的交易室和炒家的交易台，都在“台前”
+  const desk = (gme && (game.factionId === 'mm' || game.factionId === 'short')) || hk;
   const scene: SceneId = board ? 'board' : desk ? 'desk' : gme ? 'room' : 'floor';
   // 走势的形状：只取 24 个点，不带数字
   const step = Math.max(1, Math.floor(bars.length / 24));
