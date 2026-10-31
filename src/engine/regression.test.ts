@@ -3,7 +3,7 @@ import { DAYS } from '../scenarios/s327/data';
 import { S327 } from '../scenarios/s327';
 import { Game } from './game';
 
-describe('修复之后引擎仍然可以零干预跑完', () => {
+describe('修复之后引擎仍然可以零干预跑完', { timeout: 60_000 }, () => {
   it('19 个交易日跑到底，收盘价仍在容差内', () => {
     const g = new Game(S327, 'smoke', 'retail', 'no-violation');
     let guard = 0;

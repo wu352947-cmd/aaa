@@ -46,6 +46,9 @@ describe('多轮谈判', { timeout: 120000 }, () => {
 
   it('出价太难看，第二轮以后他会直接走人，关系变差；天亮了没谈完的也作废', () => {
     const g = nightOf('short', 3);
+    // 魏国梁的底价是「兑付前景减去当前价」推出来的，会跟着当天的收盘价浮动。
+    // 把价格压低一点，让「一点溢价都不加」明确地难看到底，而不是卡在 150 分的判定线上。
+    g.market.ex.last -= 300;
     g.act({ type: 'card', id: 'mediate-req' });
     const n = g.negotiations[0];
     const rel = g.npc('wei')!.relation;
